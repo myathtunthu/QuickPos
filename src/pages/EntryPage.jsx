@@ -42,7 +42,7 @@ export default function EntryPage({ products = [] }) {
 
   // ✅ Price Type & Packing Unit
   const [priceType, setPriceType] = useState('retail');
-  const [packingUnit, setPackingUnit] = useState('pcs');
+  const [packingUnit, setPackingUnit] = useState('base');
 
   const playBeep = (type = 'success') => {
     try {
@@ -57,23 +57,35 @@ export default function EntryPage({ products = [] }) {
     } catch {}
   };
 
-  // ✅ Get selected product
   const selectedProduct = useMemo(() => products.find(p => p.id === selProdId), [products, selProdId]);
 
-  // ✅ Get Product Price
+  // ✅ Get Product Price with Multi-Level Packing
   const getProductPrice = (product) => {
     if (!product) return 0;
-    let basePrice = product.retailPrice || product.price || 0;
-    switch (priceType) {
-      case 'wholesale': basePrice = product.wholesalePrice || product.retailPrice || product.price || 0; break;
-      case 'staff': basePrice = product.staffPrice || product.retailPrice || product.price || 0; break;
-      case 'special': basePrice = product.specialPrice || product.retailPrice || product.price || 0; break;
+    
+    // Check if level has its own price
+    if (packingUnit === 'level1' && product.level1Qty > 0) {
+      if (priceType === 'retail' && product.level1Retail) return product.level1Retail;
+      if (priceType === 'wholesale' && product.level1Wholesale) return product.level1Wholesale;
+      const basePrice = getBasePrice(product);
+      return basePrice * (product.level1Qty || 1);
     }
-    switch (packingUnit) {
-      case 'pack': return basePrice * (product.packQty || 1);
-      case 'bundle': return basePrice * (product.bundleQty || 1);
-      case 'custom': return basePrice * (product.customQty || 1);
-      default: return basePrice;
+    if (packingUnit === 'level2' && product.level2Qty > 0) {
+      if (priceType === 'retail' && product.level2Retail) return product.level2Retail;
+      if (priceType === 'wholesale' && product.level2Wholesale) return product.level2Wholesale;
+      const basePrice = getBasePrice(product);
+      return basePrice * (product.level2Qty || 1);
+    }
+    return getBasePrice(product);
+  };
+
+  const getBasePrice = (product) => {
+    if (!product) return 0;
+    switch (priceType) {
+      case 'wholesale': return product.wholesalePrice || product.retailPrice || product.price || 0;
+      case 'staff': return product.staffPrice || product.retailPrice || product.price || 0;
+      case 'special': return product.specialPrice || product.retailPrice || product.price || 0;
+      default: return product.retailPrice || product.price || 0;
     }
   };
 
@@ -123,7 +135,6 @@ export default function EntryPage({ products = [] }) {
     setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setUnitPrice(''); setQuantity('1');
   };
 
-  // Scanner
   useEffect(() => {
     if (!showScanner) return;
     let html5QrCode;
@@ -131,8 +142,7 @@ export default function EntryPage({ products = [] }) {
       try {
         html5QrCode = new Html5Qrcode("barcode-reader"); scannerRef.current = html5QrCode;
         await html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
-          (text) => { handleBarcodeSubmit(text); if (scannerRef.current) { scannerRef.current.stop().catch(() => {}); scannerRef.current = null; } setShowScanner(false); },
-          () => {}
+          (text) => { handleBarcodeSubmit(text); if (scannerRef.current) { scannerRef.current.stop().catch(() => {}); scannerRef.current = null; } setShowScanner(false); }, () => {}
         );
       } catch (err) { console.error("Scanner error:", err); setShowScanner(false); }
     };
@@ -187,7 +197,7 @@ export default function EntryPage({ products = [] }) {
     <style>body{font-family:'Courier New',monospace;font-size:13px;width:340px;margin:10px auto;padding:15px;border:1px dashed #000;background:#fff;}.header{text-align:center;border-bottom:1px dashed #000;padding-bottom:10px;margin-bottom:10px;}.shop-name{font-size:18px;font-weight:bold;}.shop-info{font-size:11px;color:#555;margin:2px 0;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px;}th{border-bottom:1px solid #000;text-align:left;}td{text-align:right;}td:first-child{text-align:left;}.total-row{font-weight:bold;font-size:16px;border-top:1px solid #000;padding-top:8px;}.footer{text-align:center;margin-top:15px;font-size:11px;color:#555;}</style></head><body>
     <div class="header"><div class="shop-name">${shopName}</div><div class="shop-info">📞 ${shopPhone}</div><div class="shop-info">📍 ${shopAddress}</div><div class="shop-info">📅 ${record.date || ''}</div></div>
     <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>
-    ${items.map(i => `<tr><td>${i.name}${i.packingUnit&&i.packingUnit!=='pcs'?`<br><small>(${i.packingUnit})</small>`:''}${i.priceType&&i.priceType!=='retail'?`<br><small>${i.priceType}</small>`:''}</td><td>${i.quantity}</td><td>${fmt(i.unitPrice)}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}
+    ${items.map(i => `<tr><td>${i.name}${i.packingUnit&&i.packingUnit!=='base'?`<br><small>(${i.packingUnit})</small>`:''}</td><td>${i.quantity}</td><td>${fmt(i.unitPrice)}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}
     </tbody></table>
     ${record.globalDiscount>0?`<p style="text-align:right;font-size:12px;">Global Disc: -${fmt(record.globalDiscount)} Ks</p>`:''}
     <div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div>
@@ -206,24 +216,21 @@ export default function EntryPage({ products = [] }) {
         <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-4 py-2"><Calendar size={16}/><span className="text-sm font-bold text-cyan-300">{entryDate}</span></div>
       </div>
 
-      {/* ✅ Price Type Selector - 4 Types */}
+      {/* ✅ Price Type Selector */}
       <div className="flex bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden">
         {[{key:'retail',label:'လက်လီ'},{key:'wholesale',label:'လက်ကား'},{key:'staff',label:'Staff'},{key:'special',label:'အထူး'}].map(type => (
           <button key={type.key} onClick={()=>setPriceType(type.key)} className={`flex-1 py-2 text-xs font-bold transition-all ${priceType===type.key?'bg-cyan-600 text-white':'text-slate-400'}`}>{type.label}</button>
         ))}
       </div>
 
-      {/* ✅ Packing Unit Selector - Dynamic based on selected product */}
+      {/* ✅ Dynamic Packing Unit Selector */}
       <div className="flex bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden">
-        <button onClick={()=>setPackingUnit('pcs')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='pcs'?'bg-emerald-600 text-white':'text-slate-400'}`}>ခု</button>
-        {selectedProduct?.packQty > 0 && (
-          <button onClick={()=>setPackingUnit('pack')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='pack'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct.packUnitName||'ဗူး'} ({selectedProduct.packQty}ခု)</button>
+        <button onClick={()=>setPackingUnit('base')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='base'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct?.baseUnit || 'ခု'}</button>
+        {selectedProduct?.level1Qty > 0 && (
+          <button onClick={()=>setPackingUnit('level1')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='level1'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct?.level1Unit||'ကဒ်'} ({selectedProduct?.level1Qty}{selectedProduct?.baseUnit})</button>
         )}
-        {selectedProduct?.bundleQty > 0 && (
-          <button onClick={()=>setPackingUnit('bundle')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='bundle'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct.bundleUnitName||'တွဲ'} ({selectedProduct.bundleQty}ခု)</button>
-        )}
-        {selectedProduct?.customQty > 0 && selectedProduct?.customUnitName && (
-          <button onClick={()=>setPackingUnit('custom')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='custom'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct.customUnitName} ({selectedProduct.customQty}ခု)</button>
+        {selectedProduct?.level2Qty > 0 && (
+          <button onClick={()=>setPackingUnit('level2')} className={`flex-1 py-2 text-xs font-bold ${packingUnit==='level2'?'bg-emerald-600 text-white':'text-slate-400'}`}>{selectedProduct?.level2Unit||'ဖာ'} ({selectedProduct?.level2Qty}{selectedProduct?.baseUnit})</button>
         )}
       </div>
 
@@ -234,7 +241,6 @@ export default function EntryPage({ products = [] }) {
         ))}
       </div>
 
-      {/* Date */}
       <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Date</label><input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 outline-none text-white" /></div>
 
       {entryTab === 'Expense' ? (
@@ -245,27 +251,15 @@ export default function EntryPage({ products = [] }) {
         </div>
       ) : (
         <>
-          {/* Customer */}
           <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Customer</label><div className="relative"><User className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Name" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div></div>
-
-          {/* Barcode */}
           <div className="flex gap-3"><div className="relative flex-1"><ScanBarcode className="absolute left-4 top-3 text-blue-500" size={18}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Scan barcode..." className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div><button onClick={() => setShowScanner(true)} className="px-5 bg-blue-600 rounded-xl"><ScanBarcode size={20}/></button></div>
-
-          {/* Categories */}
           <div className="flex gap-2 overflow-x-auto">{categories.map(cat => (<button key={cat} onClick={() => setSelCategory(cat)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400'}`}>{cat}</button>))}</div>
-
-          {/* Search */}
           <div className="relative"><Search className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={prodSearch} onChange={e => { setProdSearch(e.target.value); setShowProdDropdown(true); }} onFocus={()=>setShowProdDropdown(true)} placeholder="Search product..." className="w-full bg-black border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" />
             {showProdDropdown && (<div className="absolute z-50 mt-2 w-full bg-[#111827] border border-cyan-500/30 rounded-xl max-h-72 overflow-y-auto">{filteredProducts.slice(0,20).map(prod => (<div key={prod.id} onClick={()=>{setSelProdId(prod.id);setProdSearch(prod.name);setUnitPrice(String(getProductPrice(prod)));setShowProdDropdown(false);}} className="p-4 border-b border-white/5 hover:bg-cyan-900/20 cursor-pointer flex justify-between"><div><p className="font-black">{prod.name}</p><p className="text-sm text-cyan-400">{fmt(getProductPrice(prod))} Ks</p></div><p className="text-sm text-slate-500">Stock: {prod.stock}</p></div>))}</div>)}
           </div>
-
-          {/* Price + Qty */}
           <div className="grid grid-cols-2 gap-4"><input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" /><input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" /></div>
-
-          {/* Add Button */}
           <button onClick={addToCart} className="w-full py-3 rounded-xl bg-cyan-600 font-black flex justify-center items-center gap-2"><PlusCircle size={20}/> Add To Cart</button>
 
-          {/* Cart */}
           {cart.length > 0 && (
             <div className="space-y-3">
               {cart.map(item => (
@@ -274,33 +268,39 @@ export default function EntryPage({ products = [] }) {
                     <div>
                       <p className="font-black">{item.name}</p>
                       <p className="text-cyan-400 text-sm mt-1">{fmt(item.unitPrice)} × {item.quantity} = {fmt(item.unitPrice*item.quantity)} Ks</p>
-                      {/* Show Packing + Price Type */}
                       <div className="flex gap-2 mt-1 text-xs">
-                        {item.packingUnit && item.packingUnit !== 'pcs' && <span className="text-slate-500">({item.packingUnit})</span>}
+                        {item.packingUnit && item.packingUnit !== 'base' && <span className="text-slate-500">({item.packingUnit})</span>}
                         {item.priceType && item.priceType !== 'retail' && <span className="text-amber-400">{item.priceType}</span>}
                       </div>
                     </div>
                     <button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={18}/></button>
                   </div>
 
-                  {/* ✅ Per-Item Packing & Price Changer */}
+                  {/* Per-Item Unit & Price Changer */}
                   <div className="mt-3 flex items-center gap-3 flex-wrap text-xs">
                     <div className="flex items-center gap-1">
                       <span className="text-slate-500">Unit:</span>
-                      <select value={item.packingUnit || 'pcs'} onChange={(e) => {
+                      <select value={item.packingUnit || 'base'} onChange={(e) => {
                         const newUnit = e.target.value;
                         setCart(prev => prev.map(c => {
                           if (c.id !== item.id) return c;
                           const p = products.find(x => x.id === c.productId);
-                          let basePrice = c.priceType === 'wholesale' ? (p?.wholesalePrice || p?.retailPrice || 0) : c.priceType === 'staff' ? (p?.staffPrice || p?.retailPrice || 0) : c.priceType === 'special' ? (p?.specialPrice || p?.retailPrice || 0) : (p?.retailPrice || p?.price || 0);
-                          switch (newUnit) { case 'pack': basePrice = basePrice * (p?.packQty || 1); break; case 'bundle': basePrice = basePrice * (p?.bundleQty || 1); break; case 'custom': basePrice = basePrice * (p?.customQty || 1); break; }
-                          return { ...c, packingUnit: newUnit, unitPrice: basePrice };
+                          let price = getBasePrice(p);
+                          if (newUnit === 'level1' && p?.level1Qty > 0) {
+                            if (c.priceType === 'retail' && p.level1Retail) price = p.level1Retail;
+                            else if (c.priceType === 'wholesale' && p.level1Wholesale) price = p.level1Wholesale;
+                            else price = price * p.level1Qty;
+                          } else if (newUnit === 'level2' && p?.level2Qty > 0) {
+                            if (c.priceType === 'retail' && p.level2Retail) price = p.level2Retail;
+                            else if (c.priceType === 'wholesale' && p.level2Wholesale) price = p.level2Wholesale;
+                            else price = price * p.level2Qty;
+                          }
+                          return { ...c, packingUnit: newUnit, unitPrice: price };
                         }));
                       }} className="bg-black border border-cyan-500/20 rounded-lg px-2 py-1 text-white">
-                        <option value="pcs">ခု</option>
-                        {(() => { const p = products.find(x=>x.id===item.productId); return p?.packQty > 0 ? <option value="pack">{p.packUnitName||'ဗူး'}</option> : null; })()}
-                        {(() => { const p = products.find(x=>x.id===item.productId); return p?.bundleQty > 0 ? <option value="bundle">{p.bundleUnitName||'တွဲ'}</option> : null; })()}
-                        {(() => { const p = products.find(x=>x.id===item.productId); return p?.customQty > 0 && p?.customUnitName ? <option value="custom">{p.customUnitName}</option> : null; })()}
+                        <option value="base">{(()=>{const p=products.find(x=>x.id===item.productId);return p?.baseUnit||'ခု';})()}</option>
+                        {(()=>{const p=products.find(x=>x.id===item.productId);return p?.level1Qty>0?<option value="level1">{p.level1Unit||'ကဒ်'}</option>:null;})()}
+                        {(()=>{const p=products.find(x=>x.id===item.productId);return p?.level2Qty>0?<option value="level2">{p.level2Unit||'ဖာ'}</option>:null;})()}
                       </select>
                     </div>
                     <div className="flex items-center gap-1">
@@ -310,9 +310,17 @@ export default function EntryPage({ products = [] }) {
                         setCart(prev => prev.map(c => {
                           if (c.id !== item.id) return c;
                           const p = products.find(x => x.id === c.productId);
-                          let basePrice = newType === 'wholesale' ? (p?.wholesalePrice || p?.retailPrice || 0) : newType === 'staff' ? (p?.staffPrice || p?.retailPrice || 0) : newType === 'special' ? (p?.specialPrice || p?.retailPrice || 0) : (p?.retailPrice || p?.price || 0);
-                          switch (c.packingUnit || 'pcs') { case 'pack': basePrice = basePrice * (p?.packQty || 1); break; case 'bundle': basePrice = basePrice * (p?.bundleQty || 1); break; case 'custom': basePrice = basePrice * (p?.customQty || 1); break; }
-                          return { ...c, priceType: newType, unitPrice: basePrice };
+                          let price = newType === 'wholesale' ? (p?.wholesalePrice||p?.retailPrice||0) : newType === 'staff' ? (p?.staffPrice||p?.retailPrice||0) : newType === 'special' ? (p?.specialPrice||p?.retailPrice||0) : (p?.retailPrice||p?.price||0);
+                          if (c.packingUnit === 'level1' && p?.level1Qty > 0) {
+                            if (newType === 'retail' && p.level1Retail) price = p.level1Retail;
+                            else if (newType === 'wholesale' && p.level1Wholesale) price = p.level1Wholesale;
+                            else price = price * p.level1Qty;
+                          } else if (c.packingUnit === 'level2' && p?.level2Qty > 0) {
+                            if (newType === 'retail' && p.level2Retail) price = p.level2Retail;
+                            else if (newType === 'wholesale' && p.level2Wholesale) price = p.level2Wholesale;
+                            else price = price * p.level2Qty;
+                          }
+                          return { ...c, priceType: newType, unitPrice: price };
                         }));
                       }} className="bg-black border border-cyan-500/20 rounded-lg px-2 py-1 text-white">
                         <option value="retail">လက်လီ</option>
@@ -323,24 +331,14 @@ export default function EntryPage({ products = [] }) {
                     </div>
                   </div>
 
-                  {/* Discount */}
-                  <div className="mt-3 flex items-center gap-2 text-amber-400 text-sm"><Tag size={14}/> Disc:<input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-24 bg-black border border-amber-500/20 rounded-lg px-3 py-1.5 text-white text-sm" /> Ks</div>
+                  <div className="mt-3 flex items-center gap-2 text-amber-400 text-sm"><Tag size={14}/> Disc:<input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-24 bg-black border border-amber-500/20 rounded-lg px-3 py-1.5 text-white text-sm"/> Ks</div>
                 </div>
               ))}
 
-              {/* Global Discount */}
-              <div className="flex gap-2 items-end"><div className="flex-1"><label className="text-xs text-slate-500">Global Discount</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-2 text-amber-400" /></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
-
-              {/* Totals */}
+              <div className="flex gap-2 items-end"><div className="flex-1"><label className="text-xs text-slate-500">Global Discount</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-2 text-amber-400"/></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
               <div className="bg-black/50 border border-cyan-500/20 rounded-xl p-4 space-y-2"><div className="flex justify-between text-sm"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>{(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-sm text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}<div className="flex justify-between text-xl font-black text-cyan-300 border-t border-cyan-500/20 pt-3"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div></div>
-
-              {/* Payment Method */}
               <div className="grid grid-cols-4 gap-2">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-2 rounded-xl text-xs font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
-
-              {/* Paid Amount */}
-              <div><label className="block mb-1 text-xs text-slate-500 font-bold">💵 Paid Amount {paidAmount==='' && <span className="text-emerald-400">(Full: {fmt(cartTotals.total)} Ks)</span>}</label><div className="relative"><Wallet className="absolute left-4 top-3 text-emerald-400" size={18}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Leave empty for full payment" className="w-full bg-black/40 border border-emerald-500/20 rounded-xl pl-12 pr-5 py-3 text-emerald-300" /></div></div>
-
-              {/* ✅ Submit Button - Centered Text */}
+              <div><label className="block mb-1 text-xs text-slate-500 font-bold">💵 Paid Amount {paidAmount==='' && <span className="text-emerald-400">(Full: {fmt(cartTotals.total)} Ks)</span>}</label><div className="relative"><Wallet className="absolute left-4 top-3 text-emerald-400" size={18}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Leave empty for full payment" className="w-full bg-black/40 border border-emerald-500/20 rounded-xl pl-12 pr-5 py-3 text-emerald-300"/></div></div>
               <button onClick={submitTransaction} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xl font-black flex items-center justify-center gap-2 text-center">
                 {loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={20}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}
               </button>
@@ -349,10 +347,7 @@ export default function EntryPage({ products = [] }) {
         </>
       )}
 
-      {/* Scanner Modal */}
       {showScanner && (<div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-lg bg-[#0d1120] border border-cyan-500/20 rounded-3xl p-6"><div className="flex justify-between mb-5"><h2 className="text-xl font-black"><ScanBarcode className="inline text-cyan-400"/> Scanner</h2><button onClick={()=>setShowScanner(false)}><X/></button></div><div id="barcode-reader" className="overflow-hidden rounded-2xl"/></div></div>)}
-
-      {/* Receipt Modal */}
       {receiptModal.show && (<div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 max-h-[90vh] overflow-y-auto"><div className="text-center border-b border-dashed pb-4"><h2 className="text-xl font-black">{shopName}</h2><p className="text-xs text-gray-500">📞 {shopPhone}</p><p className="text-xs text-gray-500">📍 {shopAddress}</p><p className="text-xs text-gray-500 mt-2">{receiptModal.record?.date}</p></div><div className="space-y-2 py-4 text-sm">{(receiptModal.record?.itemsDetail||[]).map((item,i)=>(<div key={i} className="flex justify-between"><span>{item.name} × {item.quantity}</span><span>{fmt((item.unitPrice*item.quantity)-(item.itemDiscountAmt||0))}</span></div>))}</div>{(receiptModal.record?.globalDiscount||0)>0 && <p className="text-right text-sm text-gray-500">Disc: -{fmt(receiptModal.record.globalDiscount)} Ks</p>}<div className="border-t pt-3 flex justify-between text-xl font-black"><span>TOTAL</span><span>{fmt(receiptModal.record?.amount)} Ks</span></div><p className="text-sm text-right mt-1">Paid: {fmt(receiptModal.record?.paidAmount||0)} Ks | Debt: {fmt(receiptModal.record?.remainingDebt||0)} Ks</p><div className="grid grid-cols-2 gap-3 mt-4"><button onClick={()=>doPrint(receiptModal.record)} className="py-3 rounded-2xl bg-cyan-600 text-white font-black flex items-center gap-2"><Printer size={18}/> Print</button><button onClick={()=>setReceiptModal({show:false,record:null})} className="py-3 rounded-2xl bg-gray-200 text-black font-black">Close</button></div></div></div>)}
     </div>
   );

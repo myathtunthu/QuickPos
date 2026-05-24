@@ -46,7 +46,6 @@ function AppContent() {
   useEffect(() => {
     if (!profile?.tenantId) return;
 
-    // ✅ Filter by tenantId
     const recordsQuery = query(
       collection(db, 'pos_records'),
       where('tenantId', '==', profile.tenantId)
@@ -72,16 +71,19 @@ function AppContent() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/mttadminacc" element={<SuperAdminPage />} />
 
-        <Route path="/dashboard" element={<ProtectedRoute><Layout><DashboardPage records={allRecords} /></Layout></ProtectedRoute>} />
-        <Route path="/entry" element={<ProtectedRoute><Layout><EntryPage products={allProducts} /></Layout></ProtectedRoute>} />
-        <Route path="/inventory" element={<ProtectedRoute><Layout><InventoryPage products={allProducts} /></Layout></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute><Layout><ReportsPage records={allRecords} /></Layout></ProtectedRoute>} />
-        <Route path="/ledger" element={<ProtectedRoute><Layout><LedgerPage records={allRecords} /></Layout></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute><Layout><AdminPage /></Layout></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
-        <Route path="/records" element={<ProtectedRoute><Layout><RecordsPage /></Layout></ProtectedRoute>} />
+        {/* ✅ Nested Routes with Layout + Outlet */}
+        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage records={allRecords} />} />
+          <Route path="entry" element={<EntryPage products={allProducts} />} />
+          <Route path="inventory" element={<InventoryPage products={allProducts} />} />
+          <Route path="reports" element={<ReportsPage records={allRecords} />} />
+          <Route path="ledger" element={<LedgerPage records={allRecords} />} />
+          <Route path="admin" element={<AdminPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="records" element={<RecordsPage />} />
+        </Route>
 
-        <Route path="/" element={<ProtectedRoute><Layout><DashboardPage records={allRecords} /></Layout></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

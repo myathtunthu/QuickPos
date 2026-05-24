@@ -25,11 +25,15 @@ export default function InventoryPage({ products = [] }) {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // Unit Breakdown Helper
+  // Unit Breakdown Helper (e.g., 240 bottles = 10 Cases, 0 Cards, 0 Bottles)
   const getUnitBreakdown = (stock, packageUnits) => {
+    if (!packageUnits || packageUnits.length === 0) return [];
     const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
     let remain = stock;
-    return sorted.map(unit => ({ unit: unit.name, qty: Math.floor(remain / unit.multiplier), remain: remain %= unit.multiplier }));
+    return sorted.map(unit => ({
+      unit: unit.name,
+      qty: Math.floor(remain / unit.multiplier),
+    }));
   };
 
   const playBeep = (type = 'success') => {
@@ -53,8 +57,7 @@ export default function InventoryPage({ products = [] }) {
         if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; }
         html5QrCode = new window.Html5Qrcode("product-barcode-reader"); scannerRef.current = html5QrCode;
         await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: { width: 250, height: 250 } },
-          (decodedText) => { 
-            // Find which unit has this barcode
+          (decodedText) => {
             setForm(prev => {
               const newUnits = prev.packageUnits.map(u => ({ ...u, barcodes: { ...u.barcodes, retail: u.barcodes.retail || decodedText } }));
               return { ...prev, packageUnits: newUnits };
@@ -236,7 +239,7 @@ export default function InventoryPage({ products = [] }) {
               <div className="flex flex-col md:flex-row justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3"><p className="font-black text-white text-xl">{p.name}</p><span className="text-xs bg-slate-800 px-2 py-1 rounded">{p.category||'General'}</span></div>
-                  {/* Unit Breakdown Display */}
+                  {/* Stock Breakdown */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
                     <span className="text-white font-bold">Stock: {p.stock || 0} {p.baseUnit}</span>
                     {breakdown.filter(b => b.qty > 0).map((b, i) => (

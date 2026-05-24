@@ -2,15 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
-// 🔥 QuickPOS - Firebase Config (posify-9da39)
 const firebaseConfig = {
-  apiKey: "AIzaSyDA9pH289l016fOwDL02C89r0Nm8ir9px0",
-  authDomain: "posify-9da39.firebaseapp.com",
-  projectId: "posify-9da39",
-  storageBucket: "posify-9da39.firebasestorage.app",
-  messagingSenderId: "1018270993805",
-  appId: "1:1018270993805:web:80bc741c8f22d547c881c4",
-  measurementId: "G-P9VQNRJHDZ"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);

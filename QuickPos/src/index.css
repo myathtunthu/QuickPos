@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile Responsive Optimization */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: #020617; /* Dashboard ရဲ့ နောက်ခံအရောင် */
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ခလုတ်များ Touch လုပ်ရတာ Smooth ဖြစ်စေရန် */
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* Scroll bar ပုံစံမလှတာတွေကို ဖျောက်ရန် */
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Safe Area (Android/iOS ပိုင်းအတွက်) */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}

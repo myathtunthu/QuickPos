@@ -17,15 +17,13 @@ export default function InventoryPage({ products = [] }) {
     name: '', category: '', baseUnit: 'Bottle',
     packageUnits: [
       { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-      { name: 'Card', multiplier: 4, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-      { name: 'Case', multiplier: 24, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
     ],
     minStock: '5',
   });
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // Unit Breakdown Helper (e.g., 240 bottles = 10 Cases, 0 Cards, 0 Bottles)
+  // Unit Breakdown Helper
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
     const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
@@ -73,12 +71,25 @@ export default function InventoryPage({ products = [] }) {
     return () => { isStopping.current = true; if (scannerRef.current) scannerRef.current.stop().catch(()=>{}); };
   }, [showScanner]);
 
+  // ✅ Dynamic Unit Functions
+  const addPackageUnit = () => {
+    setForm(prev => ({
+      ...prev,
+      packageUnits: [...prev.packageUnits, { name: '', multiplier: '', barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' }]
+    }));
+  };
+
+  const removePackageUnit = (index) => {
+    setForm(prev => ({
+      ...prev,
+      packageUnits: prev.packageUnits.filter((_, i) => i !== index)
+    }));
+  };
+
   const resetForm = () => setForm({
     name: '', category: '', baseUnit: 'Bottle',
     packageUnits: [
       { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-      { name: 'Card', multiplier: 4, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-      { name: 'Case', multiplier: 24, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
     ],
     minStock: '5',
   });
@@ -104,11 +115,14 @@ export default function InventoryPage({ products = [] }) {
     if (!form.name) return alert("Product Name ထည့်ပါ");
     if (!profile?.tenantId) { alert("No tenant ID found."); return; }
 
+    // Filter out empty units
+    const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
+
     const payload = {
       name: form.name,
       category: form.category || 'General',
       baseUnit: form.baseUnit,
-      packageUnits: form.packageUnits.map(u => ({
+      packageUnits: validUnits.map(u => ({
         name: u.name,
         multiplier: Number(u.multiplier) || 1,
         barcodes: { retail: u.barcodes.retail || '' },
@@ -134,9 +148,7 @@ export default function InventoryPage({ products = [] }) {
     setEditing(p); setAdding(false);
     setForm({
       name: p.name || '', category: p.category || '', baseUnit: p.baseUnit || 'Bottle',
-      packageUnits: (p.packageUnits || [
-        { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-      ]).map(u => ({
+      packageUnits: (p.packageUnits || [{ name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' }]).map(u => ({
         name: u.name, multiplier: String(u.multiplier || 1),
         barcodes: { retail: u.barcodes?.retail || '' },
         prices: { retail: String(u.prices?.retail || ''), wholesaleA: String(u.prices?.wholesaleA || ''), wholesaleB: String(u.prices?.wholesaleB || ''), wholesaleC: String(u.prices?.wholesaleC || '') },
@@ -171,21 +183,25 @@ export default function InventoryPage({ products = [] }) {
         <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-6 sm:p-8 rounded-3xl border-2 border-cyan-500/20 shadow-xl space-y-5">
           <p className="text-sm font-black text-cyan-400 uppercase">{editing ? 'Edit Product' : 'New Product'}</p>
 
-          {/* Basic Info */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
             <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit (Bottle)" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
           </div>
 
-          {/* Package Table */}
+          {/* ✅ Dynamic Package Table */}
           <div className="border-t border-white/5 pt-4">
-            <p className="text-xs text-slate-500 mb-3 font-bold uppercase">📦 Package Units Table</p>
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units Table</p>
+              <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1">
+                <Plus size={14}/> Add Unit
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-slate-500 text-xs uppercase">
-                    <th className="p-2 text-left">Unit</th>
+                    <th className="p-2 text-left">Unit Name</th>
                     <th className="p-2">Qty (×Base)</th>
                     <th className="p-2">Barcode</th>
                     <th className="p-2">Retail</th>
@@ -193,28 +209,30 @@ export default function InventoryPage({ products = [] }) {
                     <th className="p-2">Whole B</th>
                     <th className="p-2">Whole C</th>
                     <th className="p-2">Cost</th>
+                    <th className="p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {form.packageUnits.map((unit, idx) => (
                     <tr key={idx} className="border-t border-white/5">
-                      <td className="p-2">
-                        <input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
-                      </td>
-                      <td className="p-2">
-                        <input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/>
-                      </td>
+                      <td className="p-2"><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Bottle" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="1" className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/></td>
                       <td className="p-2">
                         <div className="flex gap-1">
                           <input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
                           <button type="button" onClick={()=>setShowScanner(true)} className="px-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
                         </div>
                       </td>
-                      <td className="p-2"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="Retail" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="A" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="B" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="C" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="Cost" className="w-20 bg-black border border-blue-500/15 p-2 rounded text-blue-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-18 bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-18 bg-black border border-blue-500/15 p-2 rounded text-blue-300 text-xs outline-none"/></td>
+                      <td className="p-2">
+                        {form.packageUnits.length > 1 && (
+                          <button type="button" onClick={()=>removePackageUnit(idx)} className="p-1.5 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/30"><Trash2 size={14}/></button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -239,14 +257,12 @@ export default function InventoryPage({ products = [] }) {
               <div className="flex flex-col md:flex-row justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3"><p className="font-black text-white text-xl">{p.name}</p><span className="text-xs bg-slate-800 px-2 py-1 rounded">{p.category||'General'}</span></div>
-                  {/* Stock Breakdown */}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
                     <span className="text-white font-bold">Stock: {p.stock || 0} {p.baseUnit}</span>
                     {breakdown.filter(b => b.qty > 0).map((b, i) => (
                       <span key={i}>• {b.qty} {b.unit}</span>
                     ))}
                   </div>
-                  {/* Prices */}
                   {(p.packageUnits || []).length > 0 && (
                     <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-500">
                       {p.packageUnits.map((u, i) => (

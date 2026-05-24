@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isTenantAdmin(tenantId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.tenantId == tenantId &&
+             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isTenantStaff(tenantId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.tenantId == tenantId;
+    }
+
+    // Users Collection
+    match /pos_users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isTenantAdmin(resource.data.tenantId));
+      allow write: if isTenantAdmin(request.resource.data.tenantId);
+    }
+
+    // Products, Records, Customers, Suppliers (Tenant Isolated)
+    match /{collection}/{docId} {
+      allow read: if isTenantStaff(resource.data.tenantId);
+      allow create: if isTenantStaff(request.resource.data.tenantId);
+      allow update: if isTenantStaff(resource.data.tenantId) && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if isTenantAdmin(resource.data.tenantId);
+    }
+  }
+}

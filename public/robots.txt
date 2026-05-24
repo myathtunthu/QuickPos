@@ -1,0 +1,5 @@
+# CyberPOS is a private SaaS application.
+# We do not want search engines to crawl the dashboard or POS entry pages.
+
+User-agent: *
+Disallow: /

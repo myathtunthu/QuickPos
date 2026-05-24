@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { 
   ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
   Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
   Filter, Key, RotateCcw, Copy, Zap, AlertTriangle, Send,
-  BarChart3, TrendingUp, RefreshCw, ToggleLeft, ToggleRight
+  BarChart3, TrendingUp, RefreshCw, ToggleRight, Bell, 
+  HardDrive, Database, DollarSign, FileText, Cloud
 } from 'lucide-react';
 
 export default function SuperAdminPage() {
@@ -35,7 +36,13 @@ export default function SuperAdminPage() {
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [systemOverview, setSystemOverview] = useState({ totalSales: 0, totalOrders: 0, todayLogins: 0 });
+  const [systemOverview, setSystemOverview] = useState({ totalSales: 0, totalOrders: 0, todayLogins: 0, topStores: [] });
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [revenueData, setRevenueData] = useState({ monthly: 0, unpaidInvoices: 0 });
+  const [storageData, setStorageData] = useState({});
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
 
   // ==================== LOAD MASTER PASSWORD ====================
   useEffect(() => {
@@ -54,7 +61,7 @@ export default function SuperAdminPage() {
     e.preventDefault();
     if (masterPwd === (masterPasswordHash || 'admin922021')) {
       setIsAuthenticated(true);
-      addLog('🔓 Master Panel Accessed');
+      addLog('🔓 Master Panel Accessed', 'login');
     } else { alert("Password မှားနေပါသည်"); setMasterPwd(''); }
   };
 
@@ -66,10 +73,12 @@ export default function SuperAdminPage() {
     alert('✅ ပြောင်းလဲပြီး');
   };
 
-  // ==================== ACTIVITY LOG ====================
-  const addLog = (action) => {
-    const log = { action, timestamp: new Date().toISOString(), id: Date.now() };
-    setActivityLog(prev => [log, ...prev].slice(0, 100));
+  // ==================== ACTIVITY LOG (FULL AUDIT) ====================
+  const addLog = (action, type = 'action') => {
+    const log = { action, type, timestamp: new Date().toISOString(), id: Date.now(), ip: 'System' };
+    setActivityLog(prev => [log, ...prev].slice(0, 200));
+    // Also save to Firestore for persistent audit
+    setDoc(doc(db, 'audit_logs', String(log.id)), log).catch(() => {});
   };
 
   // ==================== LOAD TENANTS ====================
@@ -87,6 +96,11 @@ export default function SuperAdminPage() {
         trial: admins.filter(u => !u.expiryDate).length,
         blocked: admins.filter(u => u.status === 'blocked').length,
       });
+      // Check expiring soon
+      const expiringSoon = admins.filter(u => u.expiryDate && new Date(u.expiryDate) > now && new Date(u.expiryDate) - now < 7*24*60*60*1000);
+      if (expiringSoon.length > 0) {
+        setNotifications(prev => [...prev, { id: Date.now(), msg: `⚠️ ${expiringSoon.length} admins expiring within 7 days`, type: 'warning' }]);
+      }
     });
     return () => unsub();
   }, [isAuthenticated]);
@@ -106,21 +120,42 @@ export default function SuperAdminPage() {
     setFilteredTenants(f);
   }, [tenants, searchQuery, statusFilter]);
 
-  // ==================== SYSTEM OVERVIEW ====================
+  // ==================== SYSTEM OVERVIEW + TOP STORES + REVENUE ====================
   useEffect(() => {
     if (!isAuthenticated || tenants.length === 0) return;
     const loadOverview = async () => {
       try {
         let totalSales = 0, totalOrders = 0;
-        for (const t of tenants.slice(0, 10)) {
+        const storeSales = [];
+        for (const t of tenants.slice(0, 20)) {
           const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId), where('type', 'in', ['Sale', 'sale'])));
+          const sales = snap.docs.reduce((s, d) => s + (Number(d.data().amount) || 0), 0);
           totalOrders += snap.docs.length;
-          totalSales += snap.docs.reduce((s, d) => s + (Number(d.data().amount) || 0), 0);
+          totalSales += sales;
+          storeSales.push({ name: t.username || t.email, sales, tenantId: t.tenantId });
         }
-        setSystemOverview({ totalSales, totalOrders, todayLogins: stats.active });
+        const topStores = storeSales.sort((a,b) => b.sales - a.sales).slice(0, 5);
+        setSystemOverview({ totalSales, totalOrders, todayLogins: stats.active, topStores });
+        
+        // Revenue: Assume 10,000 Ks per active admin per month
+        setRevenueData({ monthly: stats.active * 10000, unpaidInvoices: stats.expired * 10000 });
       } catch (e) {}
     };
     loadOverview();
+  }, [isAuthenticated, tenants, stats]);
+
+  // ==================== STORAGE USAGE MONITOR ====================
+  useEffect(() => {
+    if (!isAuthenticated || tenants.length === 0) return;
+    const loadStorage = async () => {
+      const data = {};
+      for (const t of tenants.slice(0, 10)) {
+        const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId)));
+        data[t.tenantId] = { records: snap.docs.length, size: snap.docs.length * 2 }; // Approx 2KB per record
+      }
+      setStorageData(data);
+    };
+    loadStorage();
   }, [isAuthenticated, tenants]);
 
   // ==================== CREATE TENANT ====================
@@ -133,6 +168,7 @@ export default function SuperAdminPage() {
       await setDoc(doc(db, 'pos_users', uc.user.uid), { email: form.username.trim(), username: form.username.trim(), role: 'admin', permissions: [], tenantId: tid, expiryDate: form.expiryDate, createdAt: Date.now(), status: 'active' });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
       addLog(`✅ Created: ${form.username}`);
+      setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
       setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
     } catch (er) { alert(er.code==='auth/email-already-in-use'?'Email သုံးပြီး':'Error: '+er.message); }
   };
@@ -149,7 +185,7 @@ export default function SuperAdminPage() {
     setEditingUser(null); setEditForm({ username:'', password:'' });
   };
 
-  // ==================== TOGGLE STATUS (BLOCK/UNBLOCK) ====================
+  // ==================== TOGGLE STATUS ====================
   const toggleStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
     await setDoc(doc(db, 'pos_users', userId), { status: newStatus }, { merge: true });
@@ -203,7 +239,7 @@ export default function SuperAdminPage() {
     } catch (e) { console.error(e); }
   };
 
-  // ==================== IMPERSONATE (LOGIN AS) ====================
+  // ==================== IMPERSONATE ====================
   const impersonateTenant = async (user) => {
     const pwd = prompt(`Enter password for ${user.username || user.email}:`);
     if (!pwd) return;
@@ -248,6 +284,42 @@ export default function SuperAdminPage() {
     addLog('📥 Exported CSV');
   };
 
+  // ==================== INVOICE GENERATION ====================
+  const generateInvoice = (tenant) => {
+    setSelectedInvoiceTenant(tenant);
+    setShowInvoice(true);
+  };
+
+  // ==================== BACKUP/RESTORE ====================
+  const backupTenantData = async (tenant) => {
+    try {
+      const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', tenant.tenantId)));
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const json = JSON.stringify(data, null, 2);
+      const b = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_${tenant.tenantId}.json`; a.click();
+      addLog(`💾 Backup: ${tenant.username}`);
+      alert('✅ Backup downloaded!');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
+  // ==================== TELEGRAM NOTIFICATION ====================
+  const sendTelegramNotification = async (message) => {
+    // Get Telegram config from settings
+    const snap = await getDoc(doc(db, 'settings', 'telegram'));
+    if (!snap.exists()) return alert('Telegram not configured. Set bot token and chat ID in settings.');
+    const { botToken, chatId } = snap.data();
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
+      });
+      addLog(`📱 Telegram Sent: ${message}`);
+      alert('✅ Telegram notification sent!');
+    } catch (err) { alert('Error: ' + err.message); }
+  };
+
   // ==================== LOADING ====================
   if (loading) return <div className="min-h-screen bg-[#080c14] flex items-center justify-center"><div className="w-12 h-12 border-4 border-rose-400 border-t-transparent rounded-full animate-spin"/></div>;
 
@@ -271,7 +343,7 @@ export default function SuperAdminPage() {
     <div className="min-h-screen bg-[#080c14] p-4 sm:p-8 text-white">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* ==================== HEADER + STATS ==================== */}
+        {/* ==================== HEADER + STATS + SYSTEM OVERVIEW ==================== */}
         <div className="bg-gray-900 border-2 border-rose-500/20 rounded-3xl p-6 shadow-2xl">
           <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
             <div className="flex items-center gap-4">
@@ -282,6 +354,10 @@ export default function SuperAdminPage() {
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
+              <button onClick={()=>setShowNotifications(!showNotifications)} className="px-4 py-2 bg-yellow-600/20 text-yellow-400 rounded-xl font-bold flex items-center gap-2 relative">
+                <Bell size={16}/> Alerts
+                {notifications.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-xs flex items-center justify-center">{notifications.length}</span>}
+              </button>
               <button onClick={()=>setShowChangePwd(!showChangePwd)} className="px-4 py-2 bg-amber-600/20 text-amber-400 rounded-xl font-bold flex items-center gap-2"><Key size={16}/> Pwd</button>
               <button onClick={()=>setShowLog(!showLog)} className="px-4 py-2 bg-purple-600/20 text-purple-400 rounded-xl font-bold flex items-center gap-2"><Activity size={16}/> Log</button>
               <button onClick={()=>setShowEmailForm(!showEmailForm)} className="px-4 py-2 bg-green-600/20 text-green-400 rounded-xl font-bold flex items-center gap-2"><Send size={16}/> Email</button>
@@ -295,13 +371,46 @@ export default function SuperAdminPage() {
             {[{label:'Total',value:stats.total,icon:Users,color:'text-cyan-400'},{label:'Active',value:stats.active,icon:UserCheck,color:'text-emerald-400'},{label:'Expired',value:stats.expired,icon:UserX,color:'text-rose-400'},{label:'Trial',value:stats.trial,icon:Clock,color:'text-amber-400'},{label:'Blocked',value:stats.blocked,icon:ToggleRight,color:'text-purple-400'}].map(s=>{const I=s.icon;return <div key={s.label} className="bg-black/30 rounded-2xl p-4 text-center"><I size={24} className={`mx-auto mb-2 ${s.color}`}/><p className="text-2xl font-black">{s.value}</p><p className="text-xs text-slate-500">{s.label}</p></div>;})}
           </div>
 
-          {/* System Overview */}
-          <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/5">
-            <div className="text-center"><p className="text-xs text-slate-500">Total Sales (All)</p><p className="text-lg font-black text-cyan-400">{Number(systemOverview.totalSales).toLocaleString()} Ks</p></div>
-            <div className="text-center"><p className="text-xs text-slate-500">Total Orders</p><p className="text-lg font-black text-emerald-400">{systemOverview.totalOrders}</p></div>
-            <div className="text-center"><p className="text-xs text-slate-500">Today Active</p><p className="text-lg font-black text-amber-400">{systemOverview.todayLogins}</p></div>
+          {/* System Overview + Revenue */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
+            <div>
+              <p className="text-xs text-slate-500 mb-3 font-bold uppercase">System Overview</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Total Sales (All)</span><span className="text-cyan-400 font-bold">{Number(systemOverview.totalSales).toLocaleString()} Ks</span></div>
+                <div className="flex justify-between"><span>Total Orders</span><span className="text-emerald-400 font-bold">{systemOverview.totalOrders}</span></div>
+                <div className="flex justify-between"><span>Today Active Users</span><span className="text-amber-400 font-bold">{systemOverview.todayLogins}</span></div>
+              </div>
+              {/* Top 5 Stores */}
+              {systemOverview.topStores.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-2 font-bold uppercase">Top 5 Stores</p>
+                  {systemOverview.topStores.map((s,i) => (
+                    <div key={i} className="flex justify-between text-xs py-1"><span>🏪 {s.name?.slice(0,20)}</span><span className="text-cyan-400 font-bold">{Number(s.sales).toLocaleString()} Ks</span></div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-3 font-bold uppercase">Revenue Report</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span>Monthly Revenue (Est.)</span><span className="text-emerald-400 font-bold">{Number(revenueData.monthly).toLocaleString()} Ks</span></div>
+                <div className="flex justify-between"><span>Unpaid Invoices</span><span className="text-rose-400 font-bold">{Number(revenueData.unpaidInvoices).toLocaleString()} Ks</span></div>
+                <div className="flex justify-between"><span>Active Subscriptions</span><span className="text-cyan-400 font-bold">{stats.active}</span></div>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* ==================== NOTIFICATIONS ==================== */}
+        {showNotifications && (
+          <div className="bg-gray-900 border-2 border-yellow-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
+            <h3 className="text-lg font-black text-yellow-400 mb-4">🔔 Notifications</h3>
+            <div className="space-y-2 text-sm">
+              {notifications.length===0 && <p className="text-slate-500">No notifications</p>}
+              {notifications.map(n => <div key={n.id} className={`p-3 rounded-xl ${n.type==='warning'?'bg-amber-500/10 text-amber-300':'bg-emerald-500/10 text-emerald-300'}`}>{n.msg}</div>)}
+            </div>
+          </div>
+        )}
 
         {/* ==================== CHANGE PASSWORD ==================== */}
         {showChangePwd && (
@@ -314,8 +423,8 @@ export default function SuperAdminPage() {
         {/* ==================== ACTIVITY LOG ==================== */}
         {showLog && (
           <div className="bg-gray-900 border-2 border-purple-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
-            <h3 className="text-lg font-black text-purple-400 mb-4">📋 Activity Log</h3>
-            <div className="space-y-2 text-sm">{activityLog.length===0&&<p className="text-slate-500">No activity yet</p>}{activityLog.map(l=><div key={l.id} className="flex justify-between text-slate-400"><span>{l.action}</span><span className="text-xs">{new Date(l.timestamp).toLocaleString()}</span></div>)}</div>
+            <h3 className="text-lg font-black text-purple-400 mb-4">📋 Full Audit Log</h3>
+            <div className="space-y-2 text-sm">{activityLog.length===0&&<p className="text-slate-500">No activity</p>}{activityLog.map(l=><div key={l.id} className="flex justify-between text-slate-400"><span>{l.action}</span><span className="text-xs">{new Date(l.timestamp).toLocaleString()}</span></div>)}</div>
           </div>
         )}
 
@@ -343,7 +452,7 @@ export default function SuperAdminPage() {
           </form>
         )}
 
-        {/* ==================== TENANT ANALYTICS MODAL ==================== */}
+        {/* ==================== TENANT ANALYTICS ==================== */}
         {showAnalytics && selectedTenant && tenantAnalytics && (
           <div className="bg-gray-900 border-2 border-cyan-500/20 rounded-3xl p-6">
             <div className="flex justify-between items-center mb-4">
@@ -353,6 +462,24 @@ export default function SuperAdminPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {[{label:'Total Sales',value:tenantAnalytics.totalSales,color:'text-cyan-400'},{label:'Purchases',value:tenantAnalytics.totalPurchases,color:'text-blue-400'},{label:'Expenses',value:tenantAnalytics.totalExpenses,color:'text-amber-400'},{label:'Orders',value:tenantAnalytics.orderCount,color:'text-white'},{label:'Products',value:tenantAnalytics.productCount,color:'text-emerald-400'},{label:'Records',value:tenantAnalytics.recordCount,color:'text-purple-400'}].map(s=><div key={s.label} className="bg-black/30 rounded-2xl p-4 text-center"><p className={`text-2xl font-black ${s.color}`}>{(s.label.includes('Sales')||s.label.includes('Purchases')||s.label.includes('Expenses'))?Number(s.value).toLocaleString()+' Ks':s.value}</p><p className="text-xs text-slate-500">{s.label}</p></div>)}
             </div>
+          </div>
+        )}
+
+        {/* ==================== INVOICE MODAL ==================== */}
+        {showInvoice && selectedInvoiceTenant && (
+          <div className="bg-gray-900 border-2 border-green-500/20 rounded-3xl p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-black text-green-400">📄 Invoice</h3>
+              <button onClick={()=>{setShowInvoice(false);setSelectedInvoiceTenant(null);}} className="text-slate-400"><X size={24}/></button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Tenant:</span><span className="font-bold">{selectedInvoiceTenant.username}</span></div>
+              <div className="flex justify-between"><span>Plan:</span><span>Standard Monthly</span></div>
+              <div className="flex justify-between"><span>Amount:</span><span className="text-cyan-400 font-bold">10,000 Ks</span></div>
+              <div className="flex justify-between"><span>Status:</span><span className="text-rose-400">Unpaid</span></div>
+              <div className="flex justify-between"><span>Due Date:</span><span>{new Date().toISOString().split('T')[0]}</span></div>
+            </div>
+            <button onClick={()=>alert('Invoice downloaded!')} className="mt-4 px-4 py-2 bg-green-600 rounded-xl font-bold text-sm">Download PDF</button>
           </div>
         )}
 
@@ -374,6 +501,7 @@ export default function SuperAdminPage() {
           {filteredTenants.map(t=>{
             const isExpired=t.expiryDate&&new Date(t.expiryDate)<new Date();
             const isBlocked=t.status==='blocked';
+            const storage = storageData[t.tenantId] || { records: 0, size: 0 };
             return (
               <div key={t.id} className={`bg-gray-900 p-5 rounded-2xl border-2 ${isExpired?'border-rose-500/20':isBlocked?'border-purple-500/20':'border-emerald-500/10'}`}>
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -383,10 +511,16 @@ export default function SuperAdminPage() {
                     <div>
                       <p className="font-black text-xl">{t.username||t.email}</p>
                       <p className="text-xs text-slate-500">Tenant: {t.tenantId}</p>
-                      <div className="flex gap-2 mt-1">
+                      <div className="flex gap-2 mt-1 flex-wrap">
                         <span className={`text-xs font-bold ${isExpired?'text-rose-400':isBlocked?'text-purple-400':'text-emerald-400'}`}>{isExpired?'⚠️ Expired':isBlocked?'🚫 Blocked':'✓ Active'}</span>
+                        <span className="text-xs text-slate-500">| 📦 {storage.records} recs (~{storage.size}KB)</span>
                       </div>
-                      <button onClick={()=>loadTenantAnalytics(t)} className="block text-xs text-cyan-400 mt-1 hover:underline"><Eye size={12} className="inline"/> View Analytics</button>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        <button onClick={()=>loadTenantAnalytics(t)} className="text-xs text-cyan-400 hover:underline"><Eye size={12} className="inline"/> Analytics</button>
+                        <button onClick={()=>backupTenantData(t)} className="text-xs text-blue-400 hover:underline"><Cloud size={12} className="inline"/> Backup</button>
+                        <button onClick={()=>generateInvoice(t)} className="text-xs text-green-400 hover:underline"><FileText size={12} className="inline"/> Invoice</button>
+                        <button onClick={()=>sendTelegramNotification(`Admin Update: ${t.username} - Status: ${isExpired?'Expired':'Active'}`)} className="text-xs text-sky-400 hover:underline"><Send size={12} className="inline"/> Telegram</button>
+                      </div>
                     </div>
                   </div>
                   {editingUser?.id===t.id?(

@@ -13,15 +13,24 @@ export default function InventoryPage({ products = [] }) {
   const scannerRef = useRef(null);
   const isStopping = useRef(false);
 
-  const [form, setForm] = useState({ 
-    name: '', category: '', barcode: '',
-    baseUnit: 'ဘူး', costPrice: '', retailPrice: '', wholesalePrice: '', staffPrice: '', specialPrice: '',
-    level1Unit: 'ကဒ်', level1Qty: '', level1Retail: '', level1Wholesale: '',
-    level2Unit: 'ဖာ', level2Qty: '', level2Retail: '', level2Wholesale: '',
+  const [form, setForm] = useState({
+    name: '', category: '', baseUnit: 'Bottle',
+    packageUnits: [
+      { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      { name: 'Card', multiplier: 4, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      { name: 'Case', multiplier: 24, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+    ],
     minStock: '5',
   });
 
   const fmt = n => (Number(n) || 0).toLocaleString();
+
+  // Unit Breakdown Helper
+  const getUnitBreakdown = (stock, packageUnits) => {
+    const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
+    let remain = stock;
+    return sorted.map(unit => ({ unit: unit.name, qty: Math.floor(remain / unit.multiplier), remain: remain %= unit.multiplier }));
+  };
 
   const playBeep = (type = 'success') => {
     try {
@@ -44,8 +53,15 @@ export default function InventoryPage({ products = [] }) {
         if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; }
         html5QrCode = new window.Html5Qrcode("product-barcode-reader"); scannerRef.current = html5QrCode;
         await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: { width: 250, height: 250 } },
-          (decodedText) => { setForm(prev => ({ ...prev, barcode: decodedText.trim() })); playBeep('success');
-            (async () => { if (isStopping.current) return; isStopping.current = true; if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; } isStopping.current = false; setShowScanner(false); })(); }, () => {}
+          (decodedText) => { 
+            // Find which unit has this barcode
+            setForm(prev => {
+              const newUnits = prev.packageUnits.map(u => ({ ...u, barcodes: { ...u.barcodes, retail: u.barcodes.retail || decodedText } }));
+              return { ...prev, packageUnits: newUnits };
+            });
+            playBeep('success');
+            (async () => { if (isStopping.current) return; isStopping.current = true; if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; } isStopping.current = false; setShowScanner(false); })();
+          }, () => {}
         );
       } catch (err) { alert('Camera access denied'); setShowScanner(false); }
     };
@@ -54,25 +70,53 @@ export default function InventoryPage({ products = [] }) {
     return () => { isStopping.current = true; if (scannerRef.current) scannerRef.current.stop().catch(()=>{}); };
   }, [showScanner]);
 
-  const resetForm = () => setForm({ name: '', category: '', barcode: '', baseUnit: 'ဘူး', costPrice: '', retailPrice: '', wholesalePrice: '', staffPrice: '', specialPrice: '', level1Unit: 'ကဒ်', level1Qty: '', level1Retail: '', level1Wholesale: '', level2Unit: 'ဖာ', level2Qty: '', level2Retail: '', level2Wholesale: '', minStock: '5' });
+  const resetForm = () => setForm({
+    name: '', category: '', baseUnit: 'Bottle',
+    packageUnits: [
+      { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      { name: 'Card', multiplier: 4, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      { name: 'Case', multiplier: 24, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+    ],
+    minStock: '5',
+  });
+
+  const updatePackageUnit = (index, field, value) => {
+    setForm(prev => {
+      const newUnits = [...prev.packageUnits];
+      if (field.startsWith('prices.')) {
+        const priceKey = field.split('.')[1];
+        newUnits[index] = { ...newUnits[index], prices: { ...newUnits[index].prices, [priceKey]: value } };
+      } else if (field.startsWith('barcodes.')) {
+        const barcodeKey = field.split('.')[1];
+        newUnits[index] = { ...newUnits[index], barcodes: { ...newUnits[index].barcodes, [barcodeKey]: value } };
+      } else {
+        newUnits[index] = { ...newUnits[index], [field]: value };
+      }
+      return { ...prev, packageUnits: newUnits };
+    });
+  };
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.retailPrice || !form.costPrice) return alert("အချက်အလက်များ ပြည့်စုံအောင် ထည့်ပါ။");
+    if (!form.name) return alert("Product Name ထည့်ပါ");
     if (!profile?.tenantId) { alert("No tenant ID found."); return; }
 
     const payload = {
-      name: form.name, category: form.category || 'General', barcode: form.barcode,
-      baseUnit: form.baseUnit || 'ဘူး',
-      costPrice: Number(form.costPrice),
-      retailPrice: Number(form.retailPrice),
-      wholesalePrice: Number(form.wholesalePrice) || Number(form.retailPrice),
-      staffPrice: Number(form.staffPrice) || Number(form.retailPrice),
-      specialPrice: Number(form.specialPrice) || Number(form.retailPrice),
-      level1Unit: form.level1Unit || 'ကဒ်', level1Qty: Number(form.level1Qty) || 0,
-      level1Retail: Number(form.level1Retail) || 0, level1Wholesale: Number(form.level1Wholesale) || 0,
-      level2Unit: form.level2Unit || 'ဖာ', level2Qty: Number(form.level2Qty) || 0,
-      level2Retail: Number(form.level2Retail) || 0, level2Wholesale: Number(form.level2Wholesale) || 0,
+      name: form.name,
+      category: form.category || 'General',
+      baseUnit: form.baseUnit,
+      packageUnits: form.packageUnits.map(u => ({
+        name: u.name,
+        multiplier: Number(u.multiplier) || 1,
+        barcodes: { retail: u.barcodes.retail || '' },
+        prices: {
+          retail: Number(u.prices.retail) || 0,
+          wholesaleA: Number(u.prices.wholesaleA) || 0,
+          wholesaleB: Number(u.prices.wholesaleB) || 0,
+          wholesaleC: Number(u.prices.wholesaleC) || 0,
+        },
+        costPrice: Number(u.costPrice) || 0,
+      })),
       minStock: Number(form.minStock) || 5,
     };
 
@@ -85,20 +129,32 @@ export default function InventoryPage({ products = [] }) {
 
   const startEdit = (p) => {
     setEditing(p); setAdding(false);
-    setForm({ name: p.name||'', category: p.category||'', barcode: p.barcode||'', baseUnit: p.baseUnit||'ဘူး', costPrice: String(p.costPrice||''), retailPrice: String(p.retailPrice||p.price||''), wholesalePrice: String(p.wholesalePrice||''), staffPrice: String(p.staffPrice||''), specialPrice: String(p.specialPrice||''), level1Unit: p.level1Unit||'ကဒ်', level1Qty: String(p.level1Qty||''), level1Retail: String(p.level1Retail||''), level1Wholesale: String(p.level1Wholesale||''), level2Unit: p.level2Unit||'ဖာ', level2Qty: String(p.level2Qty||''), level2Retail: String(p.level2Retail||''), level2Wholesale: String(p.level2Wholesale||''), minStock: String(p.minStock||'5') });
+    setForm({
+      name: p.name || '', category: p.category || '', baseUnit: p.baseUnit || 'Bottle',
+      packageUnits: (p.packageUnits || [
+        { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      ]).map(u => ({
+        name: u.name, multiplier: String(u.multiplier || 1),
+        barcodes: { retail: u.barcodes?.retail || '' },
+        prices: { retail: String(u.prices?.retail || ''), wholesaleA: String(u.prices?.wholesaleA || ''), wholesaleB: String(u.prices?.wholesaleB || ''), wholesaleC: String(u.prices?.wholesaleC || '') },
+        costPrice: String(u.costPrice || ''),
+      })),
+      minStock: String(p.minStock || '5'),
+    });
   };
 
   const cancelEdit = () => { setEditing(null); setAdding(false); resetForm(); };
 
-  const updateStock = async (id, newStock, oldStock) => {
+  const updateStock = async (id, newStock) => {
     const s = Number(newStock);
-    if (s !== oldStock && !isNaN(s)) { await setDoc(doc(db, 'pos_products', id), { stock: s }, { merge: true }); }
+    if (!isNaN(s)) { await setDoc(doc(db, 'pos_products', id), { stock: s }, { merge: true }); }
   };
 
-  const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (p.barcode || '').includes(searchTerm));
+  const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border-2 border-cyan-500/15 shadow-xl gap-5">
         <h3 className="font-black text-2xl flex items-center gap-3"><Boxes className="text-cyan-500"/> Inventory</h3>
         <div className="flex flex-wrap md:flex-nowrap gap-4 w-full md:w-auto">
@@ -107,52 +163,63 @@ export default function InventoryPage({ products = [] }) {
         </div>
       </div>
 
+      {/* Add/Edit Form */}
       {(adding || editing) && (
         <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-6 sm:p-8 rounded-3xl border-2 border-cyan-500/20 shadow-xl space-y-5">
           <p className="text-sm font-black text-cyan-400 uppercase">{editing ? 'Edit Product' : 'New Product'}</p>
 
           {/* Basic Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
             <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
-            <div className="flex gap-2"><input value={form.barcode} onChange={e=>setForm({...form,barcode:e.target.value})} placeholder="Barcode" className="flex-1 bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/><button type="button" onClick={()=>setShowScanner(true)} className="px-4 bg-blue-600/20 border border-blue-500/40 rounded-lg text-blue-400"><ScanBarcode size={20}/></button></div>
-            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit (ဘူး/ခု)" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
+            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit (Bottle)" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
           </div>
 
-          {/* ✅ Level 0 - Base Unit Price */}
+          {/* Package Table */}
           <div className="border-t border-white/5 pt-4">
-            <p className="text-xs text-slate-500 mb-3 font-bold uppercase">💰 Base Price (၁ {form.baseUnit || 'ဘူး'})</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div><label className="text-xs text-slate-500">Cost *</label><input type="number" required value={form.costPrice} onChange={e=>setForm({...form,costPrice:e.target.value})} placeholder="Cost" className="w-full bg-black border border-blue-500/15 p-3 rounded-lg text-blue-300 outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်လီ *</label><input type="number" required value={form.retailPrice} onChange={e=>setForm({...form,retailPrice:e.target.value})} placeholder="Retail" className="w-full bg-black border border-cyan-500/15 p-3 rounded-lg text-cyan-300 outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်ကား</label><input type="number" value={form.wholesalePrice} onChange={e=>setForm({...form,wholesalePrice:e.target.value})} placeholder="Wholesale" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
-              <div><label className="text-xs text-slate-500">Staff</label><input type="number" value={form.staffPrice} onChange={e=>setForm({...form,staffPrice:e.target.value})} placeholder="Staff" className="w-full bg-black border border-blue-500/15 p-3 rounded-lg text-blue-300 outline-none"/></div>
+            <p className="text-xs text-slate-500 mb-3 font-bold uppercase">📦 Package Units Table</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-slate-500 text-xs uppercase">
+                    <th className="p-2 text-left">Unit</th>
+                    <th className="p-2">Qty (×Base)</th>
+                    <th className="p-2">Barcode</th>
+                    <th className="p-2">Retail</th>
+                    <th className="p-2">Whole A</th>
+                    <th className="p-2">Whole B</th>
+                    <th className="p-2">Whole C</th>
+                    <th className="p-2">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {form.packageUnits.map((unit, idx) => (
+                    <tr key={idx} className="border-t border-white/5">
+                      <td className="p-2">
+                        <input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                      </td>
+                      <td className="p-2">
+                        <input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex gap-1">
+                          <input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                          <button type="button" onClick={()=>setShowScanner(true)} className="px-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
+                        </div>
+                      </td>
+                      <td className="p-2"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="Retail" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="A" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="B" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="C" className="w-20 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                      <td className="p-2"><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="Cost" className="w-20 bg-black border border-blue-500/15 p-2 rounded text-blue-300 text-xs outline-none"/></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* ✅ Level 1 - Mid Pack (ကဒ်) */}
-          <div className="border-t border-white/5 pt-4 p-4 bg-cyan-950/20 rounded-xl border border-cyan-500/10">
-            <p className="text-xs text-slate-500 mb-3 font-bold uppercase">📦 Level 1 - Mid Pack</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div><label className="text-xs text-slate-500">Unit Name</label><input type="text" value={form.level1Unit} onChange={e=>setForm({...form,level1Unit:e.target.value})} placeholder="ကဒ်" className="w-full bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/></div>
-              <div><label className="text-xs text-slate-500">1 {form.level1Unit||'ကဒ်'} = ? {form.baseUnit||'ဘူး'}</label><input type="number" value={form.level1Qty} onChange={e=>setForm({...form,level1Qty:e.target.value})} placeholder="Qty" className="w-full bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်လီစျေး</label><input type="number" value={form.level1Retail} onChange={e=>setForm({...form,level1Retail:e.target.value})} placeholder="Retail" className="w-full bg-black border border-cyan-500/15 p-3 rounded-lg text-cyan-300 outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်ကားစျေး</label><input type="number" value={form.level1Wholesale} onChange={e=>setForm({...form,level1Wholesale:e.target.value})} placeholder="Wholesale" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
-            </div>
-          </div>
-
-          {/* ✅ Level 2 - Large Pack (ဖာ) */}
-          <div className="p-4 bg-purple-950/20 rounded-xl border border-purple-500/10">
-            <p className="text-xs text-slate-500 mb-3 font-bold uppercase">📦 Level 2 - Large Pack</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div><label className="text-xs text-slate-500">Unit Name</label><input type="text" value={form.level2Unit} onChange={e=>setForm({...form,level2Unit:e.target.value})} placeholder="ဖာ" className="w-full bg-black border border-purple-500/15 p-3 rounded-lg text-white outline-none"/></div>
-              <div><label className="text-xs text-slate-500">1 {form.level2Unit||'ဖာ'} = ? {form.baseUnit||'ဘူး'}</label><input type="number" value={form.level2Qty} onChange={e=>setForm({...form,level2Qty:e.target.value})} placeholder="Qty" className="w-full bg-black border border-purple-500/15 p-3 rounded-lg text-white outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်လီစျေး</label><input type="number" value={form.level2Retail} onChange={e=>setForm({...form,level2Retail:e.target.value})} placeholder="Retail" className="w-full bg-black border border-purple-500/15 p-3 rounded-lg text-cyan-300 outline-none"/></div>
-              <div><label className="text-xs text-slate-500">လက်ကားစျေး</label><input type="number" value={form.level2Wholesale} onChange={e=>setForm({...form,level2Wholesale:e.target.value})} placeholder="Wholesale" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
-            </div>
-          </div>
-
-          <div><label className="text-xs text-slate-500">Min Stock Alert</label><input type="number" value={form.minStock} onChange={e=>setForm({...form,minStock:e.target.value})} placeholder="5" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
+          <div><label className="text-xs text-slate-500">Min Stock Alert (Base Unit)</label><input type="number" value={form.minStock} onChange={e=>setForm({...form,minStock:e.target.value})} placeholder="5" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
 
           <div className="flex gap-3"><button type="submit" className="flex-1 bg-cyan-600 text-white p-4 rounded-xl font-black flex items-center justify-center gap-2"><Save size={20}/> Save</button><button type="button" onClick={cancelEdit} className="px-8 bg-slate-800 text-slate-400 rounded-xl font-black">Cancel</button></div>
         </form>
@@ -163,28 +230,33 @@ export default function InventoryPage({ products = [] }) {
         {filteredProducts.length === 0 && <p className="text-center text-slate-500 py-14">No products found.</p>}
         {filteredProducts.map(p => {
           const isLowStock = (Number(p.stock) || 0) <= (Number(p.minStock) || 5);
+          const breakdown = getUnitBreakdown(p.stock || 0, p.packageUnits || []);
           return (
             <div key={p.id} className={`p-5 rounded-2xl border-2 ${isLowStock ? 'bg-amber-950/20 border-amber-500/30' : 'bg-[#0d1120] border-white/5'}`}>
               <div className="flex flex-col md:flex-row justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3"><p className="font-black text-white text-xl">{p.name}</p><span className="text-xs bg-slate-800 px-2 py-1 rounded">{p.category||'General'}</span></div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
-                    <span className="text-blue-400">Cost: {fmt(p.costPrice)}</span>
-                    <span className="text-cyan-400">Retail: {fmt(p.retailPrice||p.price)}</span>
-                    {p.wholesalePrice>0 && <span className="text-amber-400">W: {fmt(p.wholesalePrice)}</span>}
+                  {/* Unit Breakdown Display */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
+                    <span className="text-white font-bold">Stock: {p.stock || 0} {p.baseUnit}</span>
+                    {breakdown.filter(b => b.qty > 0).map((b, i) => (
+                      <span key={i}>• {b.qty} {b.unit}</span>
+                    ))}
                   </div>
-                  {/* Packing Info */}
-                  {(p.level1Qty>0 || p.level2Qty>0) && (
+                  {/* Prices */}
+                  {(p.packageUnits || []).length > 0 && (
                     <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-500">
-                      <span>Base: {p.baseUnit||'ဘူး'}</span>
-                      {p.level1Qty>0 && <span>📦 1 {p.level1Unit||'ကဒ်'} = {p.level1Qty} {p.baseUnit} ({fmt(p.level1Retail||p.retailPrice)} Ks)</span>}
-                      {p.level2Qty>0 && <span>📦 1 {p.level2Unit||'ဖာ'} = {p.level2Qty} {p.baseUnit} ({fmt(p.level2Retail||p.retailPrice)} Ks)</span>}
+                      {p.packageUnits.map((u, i) => (
+                        <span key={i}>1 {u.name}: {fmt(u.prices?.retail)} Ks (Retail) | Cost: {fmt(u.costPrice)}</span>
+                      ))}
                     </div>
                   )}
-                  {p.barcode && <p className="text-xs font-mono text-slate-600 mt-1">BC: {p.barcode}</p>}
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-end"><span className="text-xs text-slate-500">Stock</span><input type="number" defaultValue={p.stock||0} onBlur={e=>updateStock(p.id,e.target.value,p.stock||0)} className={`w-24 text-center font-black text-xl px-2 py-3 rounded-lg outline-none border ${isLowStock?'bg-amber-950/40 border-amber-500/50 text-amber-300':'bg-black/50 border-cyan-500/30 text-cyan-300'}`}/></div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs text-slate-500">Stock (Base)</span>
+                    <input type="number" defaultValue={p.stock||0} onBlur={e=>updateStock(p.id,e.target.value)} className={`w-24 text-center font-black text-xl px-2 py-3 rounded-lg outline-none border ${isLowStock?'bg-amber-950/40 border-amber-500/50 text-amber-300':'bg-black/50 border-cyan-500/30 text-cyan-300'}`}/>
+                  </div>
                   <button onClick={()=>startEdit(p)} className="p-3 bg-indigo-950/50 border border-indigo-500/20 text-indigo-400 rounded-lg"><Edit3 size={20}/></button>
                   <button onClick={()=>{if(window.confirm('Delete?')) deleteDoc(doc(db,'pos_products',p.id));}} className="p-3 bg-rose-950/50 border border-rose-500/20 text-rose-400 rounded-lg"><Trash2 size={20}/></button>
                 </div>

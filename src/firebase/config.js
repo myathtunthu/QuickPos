@@ -1,20 +1,19 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth"; // 🌟 Auth ကို Import လုပ်ပါသည်
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
+// 🔥 QuickPOS - Firebase Config (posify-9da39)
 const firebaseConfig = {
-  apiKey: "AIzaSyAb8_JVi4jxnbBwu854XCkuNlm7CDVmLyY",
-  authDomain: "posify-d62a1.firebaseapp.com",
-  projectId: "posify-d62a1",
-  storageBucket: "posify-d62a1.firebasestorage.app",
-  messagingSenderId: "508633323720",
-  appId: "1:508633323720:web:6ae6bf76e7ce574435edfd",
-  measurementId: "G-11HFJJWSXW"
+  apiKey: "AIzaSyDA9pH289l016fOwDL02C89r0Nm8ir9px0",
+  authDomain: "posify-9da39.firebaseapp.com",
+  projectId: "posify-9da39",
+  storageBucket: "posify-9da39.firebasestorage.app",
+  messagingSenderId: "1018270993805",
+  appId: "1:1018270993805:web:80bc741c8f22d547c881c4",
+  measurementId: "G-P9VQNRJHDZ"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Database နှင့် Auth ကို အခြားဖိုင်များမှ လှမ်းသုံးနိုင်ရန် Export လုပ်ပေးခြင်း
 export const db = getFirestore(app);
-export const auth = getAuth(app); // 🌟 ဒီနေရာမှာ auth ကို Export ထုတ်ပေးလိုက်ပါပြီ
+export const auth = getAuth(app);

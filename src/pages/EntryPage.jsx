@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   ShoppingCart, PlusCircle, Trash2, Search, ScanBarcode,
-  Wallet, X, Printer, Tag, User, Calendar, Loader2
+  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle
 } from 'lucide-react';
 
 export default function EntryPage({ products = [] }) {
@@ -40,9 +40,10 @@ export default function EntryPage({ products = [] }) {
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const scannerRef = useRef(null);
 
-  // ✅ NEW: Selected Unit & Price Type
+  // ✅ Unit & Price Type
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [priceType, setPriceType] = useState('retail');
+  const [stockWarning, setStockWarning] = useState('');
 
   const playBeep = (type = 'success') => {
     try {
@@ -72,7 +73,7 @@ export default function EntryPage({ products = [] }) {
     return { subtotal: s, itemDiscounts: d, globalDisc: g, total: Math.max(s - d - g, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
-  // ✅ Product Select → Auto-set Unit & Price
+  // ✅ Product Select
   const selectProduct = (prod) => {
     setSelProdId(prod.id);
     setProdSearch(prod.name);
@@ -82,10 +83,11 @@ export default function EntryPage({ products = [] }) {
       if (entryTab === 'Sale') setUnitPrice(String(defaultUnit.prices?.retail || 0));
       else setUnitPrice(String(defaultUnit.costPrice || 0));
     }
+    setStockWarning('');
     setShowProdDropdown(false);
   };
 
-  // ✅ Unit Change → Update Price
+  // ✅ Unit Change
   const handleUnitChange = (unitName) => {
     const prod = products.find(p => p.id === selProdId);
     const unit = prod?.packageUnits?.find(u => u.name === unitName);
@@ -94,9 +96,10 @@ export default function EntryPage({ products = [] }) {
       if (entryTab === 'Sale') setUnitPrice(String(unit.prices?.[priceType] || 0));
       else setUnitPrice(String(unit.costPrice || 0));
     }
+    setStockWarning('');
   };
 
-  // ✅ Price Type Change → Update Price
+  // ✅ Price Type Change
   const handlePriceTypeChange = (type) => {
     setPriceType(type);
     if (selectedUnit) {
@@ -104,16 +107,16 @@ export default function EntryPage({ products = [] }) {
     }
   };
 
+  // ✅ Barcode Submit
   const handleBarcodeSubmit = (value) => {
     const code = value.trim(); if (!code) return;
-    // Search all products for matching barcode
     for (const p of products) {
       for (const unit of (p.packageUnits || [])) {
         if (unit.barcodes?.retail === code) {
           setSelProdId(p.id); setProdSearch(p.name); setSelectedUnit(unit);
           if (entryTab === 'Sale') setUnitPrice(String(unit.prices?.retail || 0));
           else setUnitPrice(String(unit.costPrice || 0));
-          playBeep('success'); setBarcodeInput('');
+          playBeep('success'); setBarcodeInput(''); setStockWarning('');
           return;
         }
       }
@@ -121,10 +124,22 @@ export default function EntryPage({ products = [] }) {
     playBeep('error');
   };
 
-  // ✅ Add To Cart with Multiplier
+  // ✅ Add To Cart with Stock Check
   const addToCart = () => {
     if (!selProdId || !selectedUnit || !unitPrice || !quantity) return;
     const prod = products.find(x => x.id === selProdId); if (!prod) return;
+
+    // ✅ Stock Check for Sale
+    if (entryTab === 'Sale') {
+      const stockNeeded = Number(quantity) * (selectedUnit.multiplier || 1);
+      const currentStock = Number(prod.stock) || 0;
+      if (currentStock < stockNeeded) {
+        setStockWarning(`❌ Stock မလုံလောက်ပါ! လိုအပ်: ${stockNeeded} ${prod.baseUnit}, ရှိ: ${currentStock} ${prod.baseUnit}`);
+        playBeep('error');
+        return;
+      }
+    }
+
     const pr = Number(unitPrice);
     const q = Number(quantity);
 
@@ -144,14 +159,14 @@ export default function EntryPage({ products = [] }) {
         itemDiscountAmt: 0,
       }];
     });
-    setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setShowProdDropdown(false);
+    setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setShowProdDropdown(false); setStockWarning('');
   };
 
   const removeFromCart = (id) => setCart(prev => prev.filter(c => c.id !== id));
   const updateItemDiscount = (id, amt) => setCart(prev => prev.map(c => c.id === id ? { ...c, itemDiscountAmt: Number(amt) || 0 } : c));
   const clearCart = () => {
     setCart([]); setPersonName(''); setGlobalDiscountAmt(''); setPaidAmount('');
-    setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1');
+    setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setStockWarning('');
   };
 
   // Scanner
@@ -183,6 +198,23 @@ export default function EntryPage({ products = [] }) {
   // ✅ Submit Transaction with Multiplier Stock Update
   const submitTransaction = async () => {
     if (cart.length === 0) return; if (!tenantId) return;
+    
+    // ✅ Final Stock Check before submit
+    if (entryTab === 'Sale') {
+      for (const item of cart) {
+        const p = products.find(x => x.id === item.productId);
+        if (p) {
+          const stockNeeded = item.quantity * (item.multiplier || 1);
+          const currentStock = Number(p.stock) || 0;
+          if (currentStock < stockNeeded) {
+            alert(`❌ "${item.name}" အတွက် Stock မလုံလောက်ပါ!\nလိုအပ်: ${stockNeeded} ${p.baseUnit}, ရှိ: ${currentStock} ${p.baseUnit}`);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    }
+
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -203,7 +235,7 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, rec);
 
-      // ✅ Stock Update with Multiplier
+      // Stock Update with Multiplier
       cart.forEach(item => {
         const p = products.find(x => x.id === item.productId);
         if (p) {
@@ -240,6 +272,7 @@ export default function EntryPage({ products = [] }) {
 
   return (
     <div className="p-4 pb-28 text-white max-w-5xl mx-auto space-y-5 bg-[#080c14] min-h-screen">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black text-cyan-400"><ShoppingCart size={24} className="inline mr-1"/>POS ENTRY</h1>
         <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-4 py-2"><Calendar size={16}/><span className="text-sm font-bold text-cyan-300">{entryDate}</span></div>
@@ -255,6 +288,13 @@ export default function EntryPage({ products = [] }) {
 
       <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Date</label><input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 outline-none text-white" /></div>
 
+      {/* ✅ Stock Warning */}
+      {stockWarning && (
+        <div className="bg-rose-950/20 border border-rose-500/20 rounded-xl p-3 flex items-center gap-2 text-rose-400 text-sm">
+          <AlertTriangle size={18}/> {stockWarning}
+        </div>
+      )}
+
       {entryTab === 'Expense' ? (
         <div className="space-y-4">
           <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Title" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-3 text-white" />
@@ -264,7 +304,11 @@ export default function EntryPage({ products = [] }) {
       ) : (
         <>
           <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Customer</label><div className="relative"><User className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Name" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div></div>
+          
+          {/* Barcode */}
           <div className="flex gap-3"><div className="relative flex-1"><ScanBarcode className="absolute left-4 top-3 text-blue-500" size={18}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Scan barcode..." className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div><button onClick={() => setShowScanner(true)} className="px-5 bg-blue-600 rounded-xl"><ScanBarcode size={20}/></button></div>
+          
+          {/* Categories */}
           <div className="flex gap-2 overflow-x-auto">{categories.map(cat => (<button key={cat} onClick={() => setSelCategory(cat)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400'}`}>{cat}</button>))}</div>
 
           {/* Product Search */}
@@ -304,9 +348,11 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 text-center">
               <span className="text-xs text-slate-400">{entryTab === 'Purchase' ? 'Auto Cost' : 'Auto Price'}: {selectedUnit.name} {entryTab === 'Sale' ? priceType : ''}</span>
               <p className="text-xl font-black text-emerald-400">{fmt(Number(unitPrice) || (entryTab === 'Sale' ? selectedUnit.prices?.[priceType] || 0 : selectedUnit.costPrice || 0))} Ks</p>
+              <p className="text-xs text-slate-500 mt-1">(You can edit below)</p>
             </div>
           )}
 
+          {/* Price + Qty */}
           <div className="grid grid-cols-2 gap-4">
             <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price (editable)" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />
             <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />

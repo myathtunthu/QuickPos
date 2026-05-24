@@ -40,8 +40,8 @@ export default function EntryPage({ products = [] }) {
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const scannerRef = useRef(null);
 
-  // ✅ Unit & Price Type
-  const [selectedUnitIndex, setSelectedUnitIndex] = useState(0);
+  // ✅ NEW: Selected Unit & Price Type
+  const [selectedUnit, setSelectedUnit] = useState(null);
   const [priceType, setPriceType] = useState('retail');
 
   const playBeep = (type = 'success') => {
@@ -56,51 +56,6 @@ export default function EntryPage({ products = [] }) {
       osc.start(); osc.stop(ctx.currentTime + 0.3);
     } catch {}
   };
-
-  const selectedProduct = useMemo(() => products.find(p => p.id === selProdId), [products, selProdId]);
-  
-  // ✅ Selected Unit Object
-  const selectedUnit = useMemo(() => {
-    if (!selectedProduct?.packageUnits) return null;
-    return selectedProduct.packageUnits[selectedUnitIndex] || selectedProduct.packageUnits[0];
-  }, [selectedProduct, selectedUnitIndex]);
-
-  // ✅ Auto Price based on Unit + Price Type
-  const autoPrice = useMemo(() => {
-    if (!selectedUnit) return 0;
-    const priceMap = {
-      retail: selectedUnit.prices?.retail,
-      wholesaleA: selectedUnit.prices?.wholesaleA,
-      wholesaleB: selectedUnit.prices?.wholesaleB,
-      wholesaleC: selectedUnit.prices?.wholesaleC,
-    };
-    return Number(priceMap[priceType]) || 0;
-  }, [selectedUnit, priceType]);
-
-  // ✅ Auto Cost for Purchase
-  const autoCost = useMemo(() => {
-    if (!selectedUnit) return 0;
-    return Number(selectedUnit.costPrice) || 0;
-  }, [selectedUnit]);
-
-  // ✅ When product selected, auto-set price
-  useEffect(() => {
-    if (autoPrice > 0) setUnitPrice(String(autoPrice));
-  }, [autoPrice]);
-
-  // ✅ When unit changes, update price
-  useEffect(() => {
-    if (selectedProduct) {
-      setSelectedUnitIndex(0);
-      if (entryTab === 'Purchase') setUnitPrice(String(autoCost));
-      else setUnitPrice(String(autoPrice));
-    }
-  }, [selectedProduct]);
-
-  useEffect(() => {
-    if (entryTab === 'Purchase') setUnitPrice(String(autoCost));
-    else setUnitPrice(String(autoPrice));
-  }, [selectedUnitIndex, priceType, entryTab]);
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
   const filteredProducts = useMemo(() => {
@@ -117,67 +72,89 @@ export default function EntryPage({ products = [] }) {
     return { subtotal: s, itemDiscounts: d, globalDisc: g, total: Math.max(s - d - g, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
-  const handleBarcodeSubmit = (value) => {
-    const code = value.trim(); if (!code) return;
-    // Search all products, all units for matching barcode
-    let foundProduct = null, foundUnitIndex = 0;
-    for (const p of products) {
-      for (let i = 0; i < (p.packageUnits || []).length; i++) {
-        if (p.packageUnits[i].barcodes?.retail === code) {
-          foundProduct = p; foundUnitIndex = i; break;
-        }
-      }
-      if (foundProduct) break;
+  // ✅ Product Select → Auto-set Unit & Price
+  const selectProduct = (prod) => {
+    setSelProdId(prod.id);
+    setProdSearch(prod.name);
+    const defaultUnit = prod.packageUnits?.[0] || null;
+    setSelectedUnit(defaultUnit);
+    if (defaultUnit) {
+      if (entryTab === 'Sale') setUnitPrice(String(defaultUnit.prices?.retail || 0));
+      else setUnitPrice(String(defaultUnit.costPrice || 0));
     }
-    if (!foundProduct) { playBeep('error'); return; }
-    
-    setSelProdId(foundProduct.id);
-    setProdSearch(foundProduct.name);
-    setSelectedUnitIndex(foundUnitIndex);
-    const unit = foundProduct.packageUnits[foundUnitIndex];
-    const pr = Number(unit.prices?.[priceType] || unit.prices?.retail || 0);
-    setUnitPrice(String(pr));
-    
-    setCart(prev => {
-      const ex = prev.find(x => x.productId === foundProduct.id && x.unitIndex === foundUnitIndex && x.priceType === priceType);
-      if (ex) return prev.map(x => x.id === ex.id ? { ...x, quantity: x.quantity + 1 } : x);
-      return [...prev, {
-        id: Date.now(), productId: foundProduct.id, name: foundProduct.name,
-        quantity: 1, unitPrice: pr, costPrice: Number(unit.costPrice || 0),
-        itemDiscountAmt: 0, unitIndex: foundUnitIndex, unitName: unit.name,
-        multiplier: unit.multiplier, priceType,
-      }];
-    });
-    playBeep('success'); setBarcodeInput('');
+    setShowProdDropdown(false);
   };
 
+  // ✅ Unit Change → Update Price
+  const handleUnitChange = (unitName) => {
+    const prod = products.find(p => p.id === selProdId);
+    const unit = prod?.packageUnits?.find(u => u.name === unitName);
+    setSelectedUnit(unit);
+    if (unit) {
+      if (entryTab === 'Sale') setUnitPrice(String(unit.prices?.[priceType] || 0));
+      else setUnitPrice(String(unit.costPrice || 0));
+    }
+  };
+
+  // ✅ Price Type Change → Update Price
+  const handlePriceTypeChange = (type) => {
+    setPriceType(type);
+    if (selectedUnit) {
+      setUnitPrice(String(selectedUnit.prices?.[type] || 0));
+    }
+  };
+
+  const handleBarcodeSubmit = (value) => {
+    const code = value.trim(); if (!code) return;
+    // Search all products for matching barcode
+    for (const p of products) {
+      for (const unit of (p.packageUnits || [])) {
+        if (unit.barcodes?.retail === code) {
+          setSelProdId(p.id); setProdSearch(p.name); setSelectedUnit(unit);
+          if (entryTab === 'Sale') setUnitPrice(String(unit.prices?.retail || 0));
+          else setUnitPrice(String(unit.costPrice || 0));
+          playBeep('success'); setBarcodeInput('');
+          return;
+        }
+      }
+    }
+    playBeep('error');
+  };
+
+  // ✅ Add To Cart with Multiplier
   const addToCart = () => {
-    if (!selProdId || !unitPrice || !quantity) return;
-    const p = products.find(x => x.id === selProdId); if (!p) return;
-    const unit = selectedUnit; if (!unit) return;
+    if (!selProdId || !selectedUnit || !unitPrice || !quantity) return;
+    const prod = products.find(x => x.id === selProdId); if (!prod) return;
     const pr = Number(unitPrice);
     const q = Number(quantity);
 
     setCart(prev => {
-      const ex = prev.find(x => x.productId === p.id && x.unitIndex === selectedUnitIndex && x.priceType === priceType);
+      const ex = prev.find(x => x.productId === prod.id && x.unitName === selectedUnit.name && x.priceType === priceType);
       if (ex) return prev.map(x => x.id === ex.id ? { ...x, quantity: x.quantity + q } : x);
       return [...prev, {
-        id: Date.now(), productId: p.id, name: p.name,
-        quantity: q, unitPrice: pr, costPrice: Number(unit.costPrice || 0),
-        itemDiscountAmt: 0, unitIndex: selectedUnitIndex, unitName: unit.name,
-        multiplier: unit.multiplier, priceType,
+        id: Date.now(),
+        productId: prod.id,
+        name: prod.name,
+        unitName: selectedUnit.name,
+        multiplier: selectedUnit.multiplier || 1,
+        quantity: q,
+        priceType,
+        unitPrice: pr,
+        costPrice: entryTab === 'Sale' ? (selectedUnit.costPrice || 0) : pr,
+        itemDiscountAmt: 0,
       }];
     });
-    setProdSearch(''); setSelProdId(''); setUnitPrice(''); setQuantity('1'); setShowProdDropdown(false);
+    setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setShowProdDropdown(false);
   };
 
   const removeFromCart = (id) => setCart(prev => prev.filter(c => c.id !== id));
   const updateItemDiscount = (id, amt) => setCart(prev => prev.map(c => c.id === id ? { ...c, itemDiscountAmt: Number(amt) || 0 } : c));
   const clearCart = () => {
     setCart([]); setPersonName(''); setGlobalDiscountAmt(''); setPaidAmount('');
-    setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setUnitPrice(''); setQuantity('1');
+    setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1');
   };
 
+  // Scanner
   useEffect(() => {
     if (!showScanner) return;
     let html5QrCode;
@@ -203,6 +180,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
+  // ✅ Submit Transaction with Multiplier Stock Update
   const submitTransaction = async () => {
     if (cart.length === 0) return; if (!tenantId) return;
     setLoading(true);
@@ -225,13 +203,13 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, rec);
 
-      // ✅ Stock Update: Reduce by quantity × multiplier
+      // ✅ Stock Update with Multiplier
       cart.forEach(item => {
         const p = products.find(x => x.id === item.productId);
         if (p) {
-          const stockReduce = item.quantity * (item.multiplier || 1);
+          const stockChange = item.quantity * (item.multiplier || 1);
           const cs = Number(p.stock || 0);
-          const newStock = entryTab === 'Sale' ? Math.max(0, cs - stockReduce) : cs + stockReduce;
+          const newStock = entryTab === 'Sale' ? Math.max(0, cs - stockChange) : cs + stockChange;
           batch.update(doc(db, 'pos_products', item.productId), { stock: newStock });
         }
       });
@@ -262,44 +240,10 @@ export default function EntryPage({ products = [] }) {
 
   return (
     <div className="p-4 pb-28 text-white max-w-5xl mx-auto space-y-5 bg-[#080c14] min-h-screen">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black text-cyan-400"><ShoppingCart size={24} className="inline mr-1"/>POS ENTRY</h1>
         <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-4 py-2"><Calendar size={16}/><span className="text-sm font-bold text-cyan-300">{entryDate}</span></div>
       </div>
-
-      {/* ✅ Unit Selector */}
-      {selectedProduct && (
-        <div className="flex bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden">
-          {(selectedProduct.packageUnits || []).map((unit, idx) => (
-            <button key={idx} onClick={() => { setSelectedUnitIndex(idx); }}
-              className={`flex-1 py-2 text-xs font-bold transition-all ${selectedUnitIndex === idx ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}>
-              {unit.name} ({unit.multiplier} {selectedProduct.baseUnit})
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ✅ Price Type Selector */}
-      <div className="flex bg-black/40 border border-cyan-500/20 rounded-xl overflow-hidden">
-        {['retail','wholesaleA','wholesaleB','wholesaleC'].map(type => (
-          <button key={type} onClick={()=>setPriceType(type)}
-            className={`flex-1 py-2 text-xs font-bold transition-all ${priceType===type?'bg-cyan-600 text-white':'text-slate-400'}`}>
-            {type === 'retail' ? 'Retail' : type === 'wholesaleA' ? 'Whole A' : type === 'wholesaleB' ? 'Whole B' : 'Whole C'}
-          </button>
-        ))}
-      </div>
-
-      {/* ✅ Auto Price Display */}
-      {selectedUnit && (
-        <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 text-center">
-          <span className="text-xs text-slate-400">
-            {entryTab === 'Purchase' ? 'Auto Cost' : 'Auto Price'}: {selectedUnit.name} {priceType}
-          </span>
-          <p className="text-2xl font-black text-emerald-400">{fmt(entryTab === 'Purchase' ? autoCost : autoPrice)} Ks</p>
-          <p className="text-xs text-slate-500 mt-1">(You can edit below)</p>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="grid grid-cols-3 gap-3">
@@ -322,13 +266,47 @@ export default function EntryPage({ products = [] }) {
           <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Customer</label><div className="relative"><User className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Name" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div></div>
           <div className="flex gap-3"><div className="relative flex-1"><ScanBarcode className="absolute left-4 top-3 text-blue-500" size={18}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Scan barcode..." className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div><button onClick={() => setShowScanner(true)} className="px-5 bg-blue-600 rounded-xl"><ScanBarcode size={20}/></button></div>
           <div className="flex gap-2 overflow-x-auto">{categories.map(cat => (<button key={cat} onClick={() => setSelCategory(cat)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400'}`}>{cat}</button>))}</div>
-          
-          {/* Search */}
+
+          {/* Product Search */}
           <div className="relative"><Search className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={prodSearch} onChange={e => { setProdSearch(e.target.value); setShowProdDropdown(true); }} onFocus={()=>setShowProdDropdown(true)} placeholder="Search product..." className="w-full bg-black border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" />
-            {showProdDropdown && (<div className="absolute z-50 mt-2 w-full bg-[#111827] border border-cyan-500/30 rounded-xl max-h-72 overflow-y-auto">{filteredProducts.slice(0,20).map(prod => (<div key={prod.id} onClick={()=>{setSelProdId(prod.id);setProdSearch(prod.name);setSelectedUnitIndex(0);setShowProdDropdown(false);}} className="p-4 border-b border-white/5 hover:bg-cyan-900/20 cursor-pointer flex justify-between"><div><p className="font-black">{prod.name}</p><p className="text-sm text-cyan-400">{(prod.packageUnits||[])[0]?.prices?.retail || 0} Ks</p></div><p className="text-sm text-slate-500">Stock: {prod.stock} {prod.baseUnit}</p></div>))}</div>)}
+            {showProdDropdown && (<div className="absolute z-50 mt-2 w-full bg-[#111827] border border-cyan-500/30 rounded-xl max-h-72 overflow-y-auto">{filteredProducts.slice(0,20).map(prod => (<div key={prod.id} onClick={()=>selectProduct(prod)} className="p-4 border-b border-white/5 hover:bg-cyan-900/20 cursor-pointer flex justify-between"><div><p className="font-black">{prod.name}</p><p className="text-sm text-cyan-400">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p></div><p className="text-sm text-slate-500">Stock: {prod.stock} {prod.baseUnit}</p></div>))}</div>)}
           </div>
 
-          {/* Price + Qty (Editable) */}
+          {/* ✅ Unit Dropdown */}
+          {selProdId && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
+              <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)}
+                className="w-full bg-black border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none">
+                {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (
+                  <option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier} {products.find(p=>p.id===selProdId)?.baseUnit})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* ✅ Price Type Dropdown (Sale Only) */}
+          {entryTab === 'Sale' && selectedUnit && (
+            <div>
+              <label className="text-xs font-bold text-slate-500 block mb-1">Price Type</label>
+              <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)}
+                className="w-full bg-black border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none">
+                <option value="retail">Retail</option>
+                <option value="wholesaleA">Wholesale A</option>
+                <option value="wholesaleB">Wholesale B</option>
+                <option value="wholesaleC">Wholesale C</option>
+              </select>
+            </div>
+          )}
+
+          {/* Auto Price Display */}
+          {selectedUnit && (
+            <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 text-center">
+              <span className="text-xs text-slate-400">{entryTab === 'Purchase' ? 'Auto Cost' : 'Auto Price'}: {selectedUnit.name} {entryTab === 'Sale' ? priceType : ''}</span>
+              <p className="text-xl font-black text-emerald-400">{fmt(Number(unitPrice) || (entryTab === 'Sale' ? selectedUnit.prices?.[priceType] || 0 : selectedUnit.costPrice || 0))} Ks</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price (editable)" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />
             <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />
@@ -343,12 +321,8 @@ export default function EntryPage({ products = [] }) {
                   <div className="flex justify-between">
                     <div>
                       <p className="font-black">{item.name}</p>
-                      <p className="text-cyan-400 text-sm mt-1">
-                        {fmt(item.unitPrice)} × {item.quantity} = {fmt(item.unitPrice*item.quantity)} Ks
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {item.unitName} ({item.multiplier} base) | {item.priceType}
-                      </p>
+                      <p className="text-cyan-400 text-sm mt-1">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p>
+                      <p className="text-xs text-slate-500">{item.priceType} | ×{item.multiplier} base</p>
                     </div>
                     <button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={18}/></button>
                   </div>

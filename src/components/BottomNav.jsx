@@ -20,9 +20,8 @@ export default function BottomNav() {
       className="fixed bottom-0 left-0 w-full bg-[#0d1120]/95 backdrop-blur border-t-2 border-cyan-500/10 z-40"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}
     >
-      <div className="flex justify-around items-end px-2 pt-2 pb-2 max-w-6xl mx-auto">
+      <div className="flex justify-around items-end px-2 pt-2 pb-2">
         {navItems.map(item => {
-          // Admin tab requires permission
           if (item.path === '/admin' && !hasPermission('manage_users') && !hasPermission('manage_products') && !hasPermission('manage_inventory')) {
             return null;
           }
@@ -45,9 +44,6 @@ export default function BottomNav() {
               }`}>
                 {item.label}
               </span>
-              {active && (
-                <div className="w-1 h-1 rounded-full bg-cyan-400 mt-0.5" />
-              )}
             </button>
           );
         })}

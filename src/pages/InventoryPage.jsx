@@ -115,23 +115,14 @@ export default function InventoryPage({ products = [] }) {
     if (!form.name) return alert("Product Name ထည့်ပါ");
     if (!profile?.tenantId) { alert("No tenant ID found."); return; }
 
-    // Filter out empty units
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
 
     const payload = {
-      name: form.name,
-      category: form.category || 'General',
-      baseUnit: form.baseUnit,
+      name: form.name, category: form.category || 'General', baseUnit: form.baseUnit,
       packageUnits: validUnits.map(u => ({
-        name: u.name,
-        multiplier: Number(u.multiplier) || 1,
+        name: u.name, multiplier: Number(u.multiplier) || 1,
         barcodes: { retail: u.barcodes.retail || '' },
-        prices: {
-          retail: Number(u.prices.retail) || 0,
-          wholesaleA: Number(u.prices.wholesaleA) || 0,
-          wholesaleB: Number(u.prices.wholesaleB) || 0,
-          wholesaleC: Number(u.prices.wholesaleC) || 0,
-        },
+        prices: { retail: Number(u.prices.retail) || 0, wholesaleA: Number(u.prices.wholesaleA) || 0, wholesaleB: Number(u.prices.wholesaleB) || 0, wholesaleC: Number(u.prices.wholesaleC) || 0 },
         costPrice: Number(u.costPrice) || 0,
       })),
       minStock: Number(form.minStock) || 5,
@@ -186,57 +177,82 @@ export default function InventoryPage({ products = [] }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
             <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
-            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit (Bottle)" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
+            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
           </div>
 
-          {/* ✅ Dynamic Package Table */}
+          {/* ✅ Responsive Package Table */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
-              <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units Table</p>
-              <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1">
-                <Plus size={14}/> Add Unit
-              </button>
+              <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
+              <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> Add Unit</button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-slate-500 text-xs uppercase">
-                    <th className="p-2 text-left">Unit Name</th>
-                    <th className="p-2">Qty (×Base)</th>
-                    <th className="p-2">Barcode</th>
-                    <th className="p-2">Retail</th>
-                    <th className="p-2">Whole A</th>
-                    <th className="p-2">Whole B</th>
-                    <th className="p-2">Whole C</th>
-                    <th className="p-2">Cost</th>
-                    <th className="p-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.packageUnits.map((unit, idx) => (
-                    <tr key={idx} className="border-t border-white/5">
-                      <td className="p-2"><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Bottle" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="1" className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/></td>
-                      <td className="p-2">
-                        <div className="flex gap-1">
-                          <input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="w-20 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
-                          <button type="button" onClick={()=>setShowScanner(true)} className="px-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
-                        </div>
-                      </td>
-                      <td className="p-2"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-18 bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="0" className="w-18 bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
-                      <td className="p-2"><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-18 bg-black border border-blue-500/15 p-2 rounded text-blue-300 text-xs outline-none"/></td>
-                      <td className="p-2">
-                        {form.packageUnits.length > 1 && (
-                          <button type="button" onClick={()=>removePackageUnit(idx)} className="p-1.5 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/30"><Trash2 size={14}/></button>
-                        )}
-                      </td>
+
+            {/* Mobile: Card Style */}
+            <div className="block sm:hidden space-y-3">
+              {form.packageUnits.map((unit, idx) => (
+                <div key={idx} className="bg-black/30 border border-cyan-500/10 rounded-xl p-3 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="Unit Name" className="w-24 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">×</span>
+                      <input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="1" className="w-16 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/>
+                      <span className="text-xs text-slate-500">Base</span>
+                    </div>
+                    {form.packageUnits.length > 1 && (
+                      <button type="button" onClick={()=>removePackageUnit(idx)} className="p-1.5 bg-rose-600/20 text-rose-400 rounded-lg"><Trash2 size={14}/></button>
+                    )}
+                  </div>
+                  <div className="flex gap-1 items-center">
+                    <input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="Barcode" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                    <button type="button" onClick={()=>setShowScanner(true)} className="px-2 py-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    <div><label className="text-[10px] text-slate-500">Retail</label><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black border border-cyan-500/15 p-1.5 rounded text-cyan-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-slate-500">Wh A</label><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-1.5 rounded text-amber-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-slate-500">Wh B</label><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-1.5 rounded text-amber-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-slate-500">Wh C</label><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-1.5 rounded text-amber-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-slate-500">Cost</label><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-full bg-black border border-blue-500/15 p-1.5 rounded text-blue-300 text-xs outline-none"/></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: Horizontal Scroll Table */}
+            <div className="hidden sm:block overflow-x-auto -mx-2 px-2">
+              <div className="min-w-[700px]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-slate-500 text-xs uppercase">
+                      <th className="p-2 text-left w-[100px]">Unit Name</th>
+                      <th className="p-2 w-[70px]">Qty (×Base)</th>
+                      <th className="p-2 w-[120px]">Barcode</th>
+                      <th className="p-2 w-[80px]">Retail</th>
+                      <th className="p-2 w-[80px]">Whole A</th>
+                      <th className="p-2 w-[80px]">Whole B</th>
+                      <th className="p-2 w-[80px]">Whole C</th>
+                      <th className="p-2 w-[80px]">Cost</th>
+                      <th className="p-2 w-[40px]"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {form.packageUnits.map((unit, idx) => (
+                      <tr key={idx} className="border-t border-white/5">
+                        <td className="p-1.5"><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Bottle" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/></td>
+                        <td className="p-1.5"><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="1" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/></td>
+                        <td className="p-1.5">
+                          <div className="flex gap-1"><input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/><button type="button" onClick={()=>setShowScanner(true)} className="px-2 bg-blue-600/20 rounded text-blue-400 flex-shrink-0"><ScanBarcode size={14}/></button></div>
+                        </td>
+                        <td className="p-1.5"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
+                        <td className="p-1.5"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                        <td className="p-1.5"><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                        <td className="p-1.5"><input type="number" value={unit.prices.wholesaleC} onChange={e=>updatePackageUnit(idx,'prices.wholesaleC',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
+                        <td className="p-1.5"><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-full bg-black border border-blue-500/15 p-2 rounded text-blue-300 text-xs outline-none"/></td>
+                        <td className="p-1.5">{form.packageUnits.length > 1 && (<button type="button" onClick={()=>removePackageUnit(idx)} className="p-1.5 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/30"><Trash2 size={14}/></button>)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -259,23 +275,16 @@ export default function InventoryPage({ products = [] }) {
                   <div className="flex items-center gap-3"><p className="font-black text-white text-xl">{p.name}</p><span className="text-xs bg-slate-800 px-2 py-1 rounded">{p.category||'General'}</span></div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
                     <span className="text-white font-bold">Stock: {p.stock || 0} {p.baseUnit}</span>
-                    {breakdown.filter(b => b.qty > 0).map((b, i) => (
-                      <span key={i}>• {b.qty} {b.unit}</span>
-                    ))}
+                    {breakdown.filter(b => b.qty > 0).map((b, i) => (<span key={i}>• {b.qty} {b.unit}</span>))}
                   </div>
                   {(p.packageUnits || []).length > 0 && (
                     <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-500">
-                      {p.packageUnits.map((u, i) => (
-                        <span key={i}>1 {u.name}: {fmt(u.prices?.retail)} Ks (Retail) | Cost: {fmt(u.costPrice)}</span>
-                      ))}
+                      {p.packageUnits.map((u, i) => (<span key={i}>1 {u.name}: {fmt(u.prices?.retail)} Ks (Retail) | Cost: {fmt(u.costPrice)}</span>))}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-end">
-                    <span className="text-xs text-slate-500">Stock (Base)</span>
-                    <input type="number" defaultValue={p.stock||0} onBlur={e=>updateStock(p.id,e.target.value)} className={`w-24 text-center font-black text-xl px-2 py-3 rounded-lg outline-none border ${isLowStock?'bg-amber-950/40 border-amber-500/50 text-amber-300':'bg-black/50 border-cyan-500/30 text-cyan-300'}`}/>
-                  </div>
+                  <div className="flex flex-col items-end"><span className="text-xs text-slate-500">Stock (Base)</span><input type="number" defaultValue={p.stock||0} onBlur={e=>updateStock(p.id,e.target.value)} className={`w-24 text-center font-black text-xl px-2 py-3 rounded-lg outline-none border ${isLowStock?'bg-amber-950/40 border-amber-500/50 text-amber-300':'bg-black/50 border-cyan-500/30 text-cyan-300'}`}/></div>
                   <button onClick={()=>startEdit(p)} className="p-3 bg-indigo-950/50 border border-indigo-500/20 text-indigo-400 rounded-lg"><Edit3 size={20}/></button>
                   <button onClick={()=>{if(window.confirm('Delete?')) deleteDoc(doc(db,'pos_products',p.id));}} className="p-3 bg-rose-950/50 border border-rose-500/20 text-rose-400 rounded-lg"><Trash2 size={20}/></button>
                 </div>

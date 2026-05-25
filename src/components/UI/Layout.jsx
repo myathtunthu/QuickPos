@@ -34,15 +34,15 @@ export default function Layout() {
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         
         {/* Mobile Top Header */}
-        <header className="flex md:hidden items-center justify-between px-4 py-3 bg-[#0d1120] border-b border-cyan-500/10 flex-shrink-0">
-          <h1 className="text-lg font-black text-cyan-400 tracking-wider">QuickPOS</h1>
+        <header className="flex md:hidden items-center justify-between px-3 py-2 bg-[#0d1120] border-b border-cyan-500/10 flex-shrink-0">
+          <h1 className="text-base font-black text-cyan-400 tracking-wider">QuickPOS</h1>
           <button onClick={() => setIsMobileOpen(true)} className="text-slate-400 hover:text-white p-2">
-            <Menu size={24} />
+            <Menu size={22} />
           </button>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
+        {/* Main Content - Reduced padding on mobile */}
+        <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 pb-20 md:pb-6">
           <Outlet />
         </main>
         

@@ -57,7 +57,7 @@ export default function LoginPage() {
       <div className="bg-gray-900 p-10 sm:p-12 rounded-3xl border-2 border-cyan-500/25 shadow-[0_0_50px_rgba(6,182,212,0.2)] w-full max-w-lg animate-fade-in">
         <div className="text-center mb-10">
           <MonitorPlay size={64} className="mx-auto text-cyan-500 mb-6"/>
-          <h2 className="text-4xl font-black text-white tracking-wider">Posify</h2>
+          <h2 className="text-4xl font-black text-white tracking-wider">QuickPos</h2>
           <p className="text-lg text-cyan-400 font-bold mt-3 uppercase tracking-widest">Enterprise POS</p>
         </div>
         

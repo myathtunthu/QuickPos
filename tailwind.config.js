@@ -6,6 +6,13 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '480px',
+        'sm': '640px',
+        'md': '768px',
+        'lg': '1024px',
+        'xl': '1280px',
+      },
       colors: {
         glass: 'rgba(17, 25, 40, 0.75)',
         neon: {
@@ -20,4 +27,4 @@ export default {
     },
   },
   plugins: [],
-}
+};

@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   ShoppingCart, PlusCircle, Trash2, Search, ScanBarcode,
-  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle
+  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle, Grid3X3
 } from 'lucide-react';
 
 export default function EntryPage({ products = [] }) {
@@ -58,12 +58,18 @@ export default function EntryPage({ products = [] }) {
     } catch {}
   };
 
+  // ✅ Categories
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+
+  // ✅ Filtered Products (for grid & search)
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const ms = (p.name || '').toLowerCase().includes(prodSearch.toLowerCase()) || (p.barcode || '').includes(prodSearch);
-      return (selCategory === 'All' || p.category === selCategory) && ms;
-    });
+    let result = products;
+    if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
+    if (prodSearch.trim()) {
+      const q = prodSearch.toLowerCase();
+      result = result.filter(p => (p.name || '').toLowerCase().includes(q) || (p.barcode || '').includes(q));
+    }
+    return result;
   }, [products, prodSearch, selCategory]);
 
   const cartTotals = useMemo(() => {
@@ -73,7 +79,7 @@ export default function EntryPage({ products = [] }) {
     return { subtotal: s, itemDiscounts: d, globalDisc: g, total: Math.max(s - d - g, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
-  // ✅ Product Select
+  // ✅ Select Product
   const selectProduct = (prod) => {
     setSelProdId(prod.id);
     setProdSearch(prod.name);
@@ -84,7 +90,6 @@ export default function EntryPage({ products = [] }) {
       else setUnitPrice(String(defaultUnit.costPrice || 0));
     }
     setStockWarning('');
-    setShowProdDropdown(false);
   };
 
   // ✅ Unit Change
@@ -107,7 +112,7 @@ export default function EntryPage({ products = [] }) {
     }
   };
 
-  // ✅ Barcode Submit
+  // ✅ Barcode
   const handleBarcodeSubmit = (value) => {
     const code = value.trim(); if (!code) return;
     for (const p of products) {
@@ -129,7 +134,6 @@ export default function EntryPage({ products = [] }) {
     if (!selProdId || !selectedUnit || !unitPrice || !quantity) return;
     const prod = products.find(x => x.id === selProdId); if (!prod) return;
 
-    // ✅ Stock Check for Sale
     if (entryTab === 'Sale') {
       const stockNeeded = Number(quantity) * (selectedUnit.multiplier || 1);
       const currentStock = Number(prod.stock) || 0;
@@ -147,19 +151,13 @@ export default function EntryPage({ products = [] }) {
       const ex = prev.find(x => x.productId === prod.id && x.unitName === selectedUnit.name && x.priceType === priceType);
       if (ex) return prev.map(x => x.id === ex.id ? { ...x, quantity: x.quantity + q } : x);
       return [...prev, {
-        id: Date.now(),
-        productId: prod.id,
-        name: prod.name,
-        unitName: selectedUnit.name,
-        multiplier: selectedUnit.multiplier || 1,
-        quantity: q,
-        priceType,
-        unitPrice: pr,
-        costPrice: entryTab === 'Sale' ? (selectedUnit.costPrice || 0) : pr,
-        itemDiscountAmt: 0,
+        id: Date.now(), productId: prod.id, name: prod.name,
+        unitName: selectedUnit.name, multiplier: selectedUnit.multiplier || 1,
+        quantity: q, priceType, unitPrice: pr,
+        costPrice: entryTab === 'Sale' ? (selectedUnit.costPrice || 0) : pr, itemDiscountAmt: 0,
       }];
     });
-    setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setShowProdDropdown(false); setStockWarning('');
+    setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setStockWarning('');
   };
 
   const removeFromCart = (id) => setCart(prev => prev.filter(c => c.id !== id));
@@ -169,7 +167,6 @@ export default function EntryPage({ products = [] }) {
     setPaymentMethod('Cash'); setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setStockWarning('');
   };
 
-  // Scanner
   useEffect(() => {
     if (!showScanner) return;
     let html5QrCode;
@@ -195,26 +192,19 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ✅ Submit Transaction with Multiplier Stock Update
   const submitTransaction = async () => {
     if (cart.length === 0) return; if (!tenantId) return;
-    
-    // ✅ Final Stock Check before submit
     if (entryTab === 'Sale') {
       for (const item of cart) {
         const p = products.find(x => x.id === item.productId);
         if (p) {
           const stockNeeded = item.quantity * (item.multiplier || 1);
-          const currentStock = Number(p.stock) || 0;
-          if (currentStock < stockNeeded) {
-            alert(`❌ "${item.name}" အတွက် Stock မလုံလောက်ပါ!\nလိုအပ်: ${stockNeeded} ${p.baseUnit}, ရှိ: ${currentStock} ${p.baseUnit}`);
-            setLoading(false);
-            return;
+          if ((Number(p.stock) || 0) < stockNeeded) {
+            alert(`❌ "${item.name}" Stock မလုံလောက်ပါ!`); setLoading(false); return;
           }
         }
       }
     }
-
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -222,27 +212,19 @@ export default function EntryPage({ products = [] }) {
       const total = cartTotals.total;
       const paid = paidAmount === '' ? total : Number(paidAmount || 0);
       const debt = Math.max(0, total - paid);
-
       const rec = {
         type: entryTab, tenantId, personName: personName || 'Walk-in',
-        itemsDetail: cart.map(i => ({
-          name: i.name, quantity: i.quantity, unitPrice: i.unitPrice,
-          costPrice: i.costPrice, itemDiscountAmt: i.itemDiscountAmt,
-          unitName: i.unitName, multiplier: i.multiplier, priceType: i.priceType,
-        })),
+        itemsDetail: cart.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, costPrice: i.costPrice, itemDiscountAmt: i.itemDiscountAmt, unitName: i.unitName, multiplier: i.multiplier, priceType: i.priceType })),
         amount: total, subtotal: cartTotals.subtotal, itemDiscount: cartTotals.itemDiscounts, globalDiscount: cartTotals.globalDisc,
         paymentMethod, paidAmount: paid, remainingDebt: debt, date: entryDate, createdAt: serverTimestamp(),
       };
       batch.set(ref, rec);
-
-      // Stock Update with Multiplier
       cart.forEach(item => {
         const p = products.find(x => x.id === item.productId);
         if (p) {
           const stockChange = item.quantity * (item.multiplier || 1);
           const cs = Number(p.stock || 0);
-          const newStock = entryTab === 'Sale' ? Math.max(0, cs - stockChange) : cs + stockChange;
-          batch.update(doc(db, 'pos_products', item.productId), { stock: newStock });
+          batch.update(doc(db, 'pos_products', item.productId), { stock: Math.max(0, entryTab === 'Sale' ? cs - stockChange : cs + stockChange) });
         }
       });
       await batch.commit();
@@ -271,117 +253,146 @@ export default function EntryPage({ products = [] }) {
   };
 
   return (
-    <div className="p-4 pb-28 text-white max-w-5xl mx-auto space-y-5 bg-[#080c14] min-h-screen">
+    <div className="p-2 sm:p-4 pb-28 text-white max-w-6xl mx-auto space-y-4 bg-[#080c14] min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black text-cyan-400"><ShoppingCart size={24} className="inline mr-1"/>POS ENTRY</h1>
-        <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-4 py-2"><Calendar size={16}/><span className="text-sm font-bold text-cyan-300">{entryDate}</span></div>
+        <h1 className="text-xl sm:text-2xl font-black text-cyan-400"><ShoppingCart size={22} className="inline mr-1"/>POS ENTRY</h1>
+        <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-1.5"><Calendar size={14}/><span className="text-xs font-bold text-cyan-300">{entryDate}</span></div>
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         {['Sale','Purchase','Expense'].map(tab => (
           <button key={tab} onClick={() => { setEntryTab(tab); clearCart(); }}
-            className={`py-3 rounded-2xl font-black border ${entryTab===tab?'bg-cyan-600 border-cyan-400 text-white':'bg-[#0d1120] border-white/5 text-slate-500'}`}>{tab}</button>
+            className={`py-2 rounded-xl font-black text-sm border ${entryTab===tab?'bg-cyan-600 border-cyan-400 text-white':'bg-[#0d1120] border-white/5 text-slate-500'}`}>{tab}</button>
         ))}
       </div>
 
-      <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Date</label><input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 outline-none text-white" /></div>
-
-      {/* ✅ Stock Warning */}
+      {/* Stock Warning */}
       {stockWarning && (
-        <div className="bg-rose-950/20 border border-rose-500/20 rounded-xl p-3 flex items-center gap-2 text-rose-400 text-sm">
-          <AlertTriangle size={18}/> {stockWarning}
+        <div className="bg-rose-950/20 border border-rose-500/20 rounded-xl p-2 flex items-center gap-2 text-rose-400 text-xs">
+          <AlertTriangle size={16}/> {stockWarning}
         </div>
       )}
 
       {entryTab === 'Expense' ? (
-        <div className="space-y-4">
-          <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Title" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-3 text-white" />
-          <input value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-3 text-white" />
-          <button onClick={submitExpense} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 font-black">{loading?'Saving...':'Save Expense'}</button>
+        <div className="space-y-3">
+          <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Title" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-3 py-2.5 text-sm text-white" />
+          <input value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-3 py-2.5 text-sm text-white" />
+          <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm">{loading?'Saving...':'Save Expense'}</button>
         </div>
       ) : (
         <>
-          <div><label className="block mb-1 text-xs uppercase text-slate-500 font-bold">Customer</label><div className="relative"><User className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Name" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div></div>
-          
-          {/* Barcode */}
-          <div className="flex gap-3"><div className="relative flex-1"><ScanBarcode className="absolute left-4 top-3 text-blue-500" size={18}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Scan barcode..." className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-12 pr-5 py-3 text-white" /></div><button onClick={() => setShowScanner(true)} className="px-5 bg-blue-600 rounded-xl"><ScanBarcode size={20}/></button></div>
-          
-          {/* Categories */}
-          <div className="flex gap-2 overflow-x-auto">{categories.map(cat => (<button key={cat} onClick={() => setSelCategory(cat)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400'}`}>{cat}</button>))}</div>
-
-          {/* Product Search */}
-          <div className="relative"><Search className="absolute left-4 top-3 text-cyan-500" size={18}/><input value={prodSearch} onChange={e => { setProdSearch(e.target.value); setShowProdDropdown(true); }} onFocus={()=>setShowProdDropdown(true)} placeholder="Search product..." className="w-full bg-black border border-cyan-500/20 rounded-xl pl-12 pr-5 py-3 text-white" />
-            {showProdDropdown && (<div className="absolute z-50 mt-2 w-full bg-[#111827] border border-cyan-500/30 rounded-xl max-h-72 overflow-y-auto">{filteredProducts.slice(0,20).map(prod => (<div key={prod.id} onClick={()=>selectProduct(prod)} className="p-4 border-b border-white/5 hover:bg-cyan-900/20 cursor-pointer flex justify-between"><div><p className="font-black">{prod.name}</p><p className="text-sm text-cyan-400">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p></div><p className="text-sm text-slate-500">Stock: {prod.stock} {prod.baseUnit}</p></div>))}</div>)}
+          {/* Customer & Barcode Row */}
+          <div className="flex gap-2">
+            <div className="relative flex-1"><User className="absolute left-3 top-2.5 text-cyan-500" size={16}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Customer" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white" /></div>
+            <div className="relative flex-1"><ScanBarcode className="absolute left-3 top-2.5 text-blue-500" size={16}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Barcode" className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white" /></div>
+            <button onClick={() => setShowScanner(true)} className="px-3 bg-blue-600 rounded-xl"><ScanBarcode size={18}/></button>
           </div>
 
-          {/* ✅ Unit Dropdown */}
-          {selProdId && (
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
-              <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)}
-                className="w-full bg-black border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none">
-                {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (
-                  <option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier} {products.find(p=>p.id===selProdId)?.baseUnit})</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* ✅ Price Type Dropdown (Sale Only) */}
-          {entryTab === 'Sale' && selectedUnit && (
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1">Price Type</label>
-              <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)}
-                className="w-full bg-black border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none">
-                <option value="retail">Retail</option>
-                <option value="wholesaleA">Wholesale A</option>
-                <option value="wholesaleB">Wholesale B</option>
-                <option value="wholesaleC">Wholesale C</option>
-              </select>
-            </div>
-          )}
-
-          {/* Auto Price Display */}
-          {selectedUnit && (
-            <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 text-center">
-              <span className="text-xs text-slate-400">{entryTab === 'Purchase' ? 'Auto Cost' : 'Auto Price'}: {selectedUnit.name} {entryTab === 'Sale' ? priceType : ''}</span>
-              <p className="text-xl font-black text-emerald-400">{fmt(Number(unitPrice) || (entryTab === 'Sale' ? selectedUnit.prices?.[priceType] || 0 : selectedUnit.costPrice || 0))} Ks</p>
-              <p className="text-xs text-slate-500 mt-1">(You can edit below)</p>
-            </div>
-          )}
-
-          {/* Price + Qty */}
-          <div className="grid grid-cols-2 gap-4">
-            <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price (editable)" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />
-            <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-3 text-white" />
+          {/* ✅ Categories as Buttons */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {categories.map(cat => (
+              <button key={cat} onClick={() => setSelCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400 border border-white/5'}`}>
+                {cat}
+              </button>
+            ))}
           </div>
-          <button onClick={addToCart} className="w-full py-3 rounded-xl bg-cyan-600 font-black flex justify-center items-center gap-2"><PlusCircle size={20}/> Add To Cart</button>
+
+          {/* ✅ Search + Product Grid */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-cyan-500" size={16}/>
+            <input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Search product..."
+              className="w-full bg-black border border-cyan-500/20 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white" />
+          </div>
+
+          {/* ✅ Product Grid (လေးထောင့်ကွက်များ) */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-64 overflow-y-auto">
+            {filteredProducts.slice(0, 30).map(prod => (
+              <button
+                key={prod.id}
+                onClick={() => selectProduct(prod)}
+                className={`bg-[#0d1120] border-2 rounded-xl p-2 text-center transition-all hover:border-cyan-500/30 active:scale-95 ${
+                  selProdId === prod.id ? 'border-cyan-400 bg-cyan-900/20' : 'border-white/5'
+                }`}
+              >
+                <div className="w-10 h-10 mx-auto bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1">
+                  <Package size={18} className="text-cyan-400" />
+                </div>
+                <p className="text-xs font-bold text-white truncate">{prod.name}</p>
+                <p className="text-[10px] text-cyan-400 font-bold mt-0.5">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p>
+                <p className="text-[10px] text-slate-500">Stock: {prod.stock}</p>
+              </button>
+            ))}
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full text-center text-slate-500 text-xs py-8">No products found</div>
+            )}
+          </div>
+
+          {/* ✅ Selected Product Detail (Unit + Price Type) */}
+          {selProdId && selectedUnit && (
+            <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-3 space-y-2">
+              <p className="text-sm font-black text-cyan-400">{products.find(p=>p.id===selProdId)?.name}</p>
+              <div className="flex gap-2">
+                <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)}
+                  className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
+                  {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (
+                    <option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier})</option>
+                  ))}
+                </select>
+                {entryTab === 'Sale' && (
+                  <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)}
+                    className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
+                    <option value="retail">Retail</option>
+                    <option value="wholesaleA">Wholesale A</option>
+                    <option value="wholesaleB">Wholesale B</option>
+                    <option value="wholesaleC">Wholesale C</option>
+                  </select>
+                )}
+              </div>
+              <div className="flex gap-2 items-center">
+                <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price" className="flex-1 bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-1.5 text-sm text-white" />
+                <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="w-16 bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-1.5 text-sm text-white text-center" />
+                <button onClick={addToCart} className="px-4 py-1.5 bg-cyan-600 rounded-lg font-bold text-sm flex items-center gap-1"><PlusCircle size={14}/> Add</button>
+              </div>
+            </div>
+          )}
 
           {/* Cart */}
           {cart.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {cart.map(item => (
-                <div key={item.id} className="bg-black/40 border border-cyan-500/10 rounded-xl p-4">
-                  <div className="flex justify-between">
+                <div key={item.id} className="bg-black/40 border border-cyan-500/10 rounded-lg p-3">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-black">{item.name}</p>
-                      <p className="text-cyan-400 text-sm mt-1">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p>
-                      <p className="text-xs text-slate-500">{item.priceType} | ×{item.multiplier} base</p>
+                      <p className="font-bold text-sm">{item.name}</p>
+                      <p className="text-cyan-400 text-xs mt-0.5">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p>
+                      <p className="text-[10px] text-slate-500">{item.priceType} | ×{item.multiplier}</p>
                     </div>
-                    <button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={18}/></button>
+                    <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 text-amber-400 text-xs"><Tag size={12}/> <input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-16 bg-black border border-amber-500/20 rounded px-2 py-1 text-xs text-white"/> Ks</div>
+                      <button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={16}/></button>
+                    </div>
                   </div>
-                  <div className="mt-3 flex items-center gap-2 text-amber-400 text-sm"><Tag size={14}/> Disc:<input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-24 bg-black border border-amber-500/20 rounded-lg px-3 py-1.5 text-white text-sm"/> Ks</div>
                 </div>
               ))}
 
-              <div className="flex gap-2 items-end"><div className="flex-1"><label className="text-xs text-slate-500">Global Discount</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-xl px-4 py-2 text-amber-400"/></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-4 py-2 rounded-lg text-sm font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
-              <div className="bg-black/50 border border-cyan-500/20 rounded-xl p-4 space-y-2"><div className="flex justify-between text-sm"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>{(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-sm text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}<div className="flex justify-between text-xl font-black text-cyan-300 border-t border-cyan-500/20 pt-3"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div></div>
-              <div className="grid grid-cols-4 gap-2">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-2 rounded-xl text-xs font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
-              <div><label className="block mb-1 text-xs text-slate-500 font-bold">💵 Paid Amount {paidAmount==='' && <span className="text-emerald-400">(Full: {fmt(cartTotals.total)} Ks)</span>}</label><div className="relative"><Wallet className="absolute left-4 top-3 text-emerald-400" size={18}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Leave empty for full payment" className="w-full bg-black/40 border border-emerald-500/20 rounded-xl pl-12 pr-5 py-3 text-emerald-300"/></div></div>
-              <button onClick={submitTransaction} disabled={loading} className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xl font-black flex items-center justify-center gap-2 text-center">
-                {loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={20}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}
+              {/* Totals + Payment */}
+              <div className="flex gap-2 items-end text-xs">
+                <div className="flex-1"><label className="text-[10px] text-slate-500">Global Disc</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-lg px-2 py-1.5 text-amber-400"/></div>
+                <button onClick={()=>setGlobalDiscountType('%')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button>
+                <button onClick={()=>setGlobalDiscountType('flat')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button>
+              </div>
+              <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-3 space-y-1 text-xs">
+                <div className="flex justify-between"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>
+                {(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}
+                <div className="flex justify-between text-base font-black text-cyan-300 border-t border-cyan-500/20 pt-2"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-1.5 rounded-lg text-[10px] font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
+              <div className="relative"><Wallet className="absolute left-3 top-2 text-emerald-400" size={14}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Paid (empty=full)" className="w-full bg-black/40 border border-emerald-500/20 rounded-lg pl-9 pr-3 py-2 text-xs text-emerald-300"/></div>
+              <button onClick={submitTransaction} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-black flex items-center justify-center gap-2">
+                {loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={16}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}
               </button>
             </div>
           )}

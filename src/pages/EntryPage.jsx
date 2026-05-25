@@ -291,51 +291,43 @@ export default function EntryPage({ products = [] }) {
 )}
 
           {/* Selected Product Detail */}
-          {selProdId && selectedUnit && (
-            <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-3 space-y-2">
-              <p className="text-sm font-black text-cyan-400">{products.find(p=>p.id===selProdId)?.name}</p>
-              <div className="flex gap-2">
-                <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)} className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
-                  {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (<option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier})</option>))}
-                </select>
-                {entryTab === 'Sale' && (
-                  <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)} className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
-                    <option value="retail">Retail</option>
-                    <option value="wholesaleA">Wholesale A</option>
-                    <option value="wholesaleB">Wholesale B</option>
-                    <option value="wholesaleC">Wholesale C</option>
-                  </select>
-                )}
-              </div>
-              <div className="flex gap-2 items-center">
-                <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price" className="flex-1 bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-1.5 text-sm text-white" />
-                <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qty" className="w-16 bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-1.5 text-sm text-white text-center" />
-                <button onClick={addToCart} className="px-4 py-1.5 bg-cyan-600 rounded-lg font-bold text-sm flex items-center gap-1"><PlusCircle size={14}/> Add</button>
-              </div>
-            </div>
-          )}
-
-          {/* Cart */}
-          {cart.length > 0 && (
-            <div className="space-y-2">
-              {cart.map(item => (
-                <div key={item.id} className="bg-black/40 border border-cyan-500/10 rounded-lg p-3">
-                  <div className="flex justify-between items-start">
-                    <div><p className="font-bold text-sm">{item.name}</p><p className="text-cyan-400 text-xs mt-0.5">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p><p className="text-[10px] text-slate-500">{item.priceType} | ×{item.multiplier}</p></div>
-                    <div className="flex items-center gap-1"><div className="flex items-center gap-1 text-amber-400 text-xs"><Tag size={12}/> <input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-16 bg-black border border-amber-500/20 rounded px-2 py-1 text-xs text-white"/> Ks</div><button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={16}/></button></div>
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex gap-2 items-end text-xs"><div className="flex-1"><label className="text-[10px] text-slate-500">Global Disc</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-lg px-2 py-1.5 text-amber-400"/></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
-              <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-3 space-y-1 text-xs"><div className="flex justify-between"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>{(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}<div className="flex justify-between text-base font-black text-cyan-300 border-t border-cyan-500/20 pt-2"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div></div>
-              <div className="grid grid-cols-4 gap-1.5">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-1.5 rounded-lg text-[10px] font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
-              <div className="relative"><Wallet className="absolute left-3 top-2 text-emerald-400" size={14}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Paid (empty=full)" className="w-full bg-black/40 border border-emerald-500/20 rounded-lg pl-9 pr-3 py-2 text-xs text-emerald-300"/></div>
-              <button onClick={submitTransaction} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-black flex items-center justify-center gap-2 text-center">{loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={16}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}</button>
-            </div>
-          )}
-        </>
+{selProdId && selectedUnit && (
+  <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2.5 space-y-2">
+    <p className="text-xs font-black text-cyan-400">{products.find(p=>p.id===selProdId)?.name}</p>
+    
+    {/* Unit + Price Type Row */}
+    <div className="flex gap-1.5">
+      <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)}
+        className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-[11px] text-white outline-none">
+        {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (
+          <option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier})</option>
+        ))}
+      </select>
+      {entryTab === 'Sale' && (
+        <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)}
+          className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-[11px] text-white outline-none">
+          <option value="retail">Retail</option>
+          <option value="wholesaleA">Wholesale A</option>
+          <option value="wholesaleB">Wholesale B</option>
+          <option value="wholesaleC">Wholesale C</option>
+        </select>
       )}
+    </div>
+
+    {/* Price + Qty + Add Button - All in one row */}
+    <div className="flex gap-1.5 items-center">
+      <input value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="Price" 
+        className="w-20 bg-black/40 border border-cyan-500/20 rounded-lg px-2 py-1.5 text-[11px] text-white text-center" />
+      <span className="text-slate-500 text-[10px]">×</span>
+      <input value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="1" 
+        className="w-12 bg-black/40 border border-cyan-500/20 rounded-lg px-2 py-1.5 text-[11px] text-white text-center" />
+      <button onClick={addToCart} 
+        className="flex-1 py-1.5 bg-cyan-600 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all">
+        <PlusCircle size={12}/> Add
+      </button>
+    </div>
+  </div>
+)}
 
       {showScanner && (<div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-lg bg-[#0d1120] border border-cyan-500/20 rounded-3xl p-6"><div className="flex justify-between mb-5"><h2 className="text-xl font-black"><ScanBarcode className="inline text-cyan-400"/> Scanner</h2><button onClick={()=>setShowScanner(false)}><X/></button></div><div id="barcode-reader" className="overflow-hidden rounded-2xl"/></div></div>)}
       {receiptModal.show && (<div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 max-h-[90vh] overflow-y-auto"><div className="text-center border-b border-dashed pb-4"><h2 className="text-xl font-black">{shopName}</h2><p className="text-xs text-gray-500">📞 {shopPhone}</p><p className="text-xs text-gray-500">📍 {shopAddress}</p><p className="text-xs text-gray-500 mt-2">{receiptModal.record?.date}</p></div><div className="space-y-2 py-4 text-sm">{(receiptModal.record?.itemsDetail||[]).map((item,i)=>(<div key={i} className="flex justify-between"><span>{item.name} × {item.quantity} ({item.unitName})</span><span>{fmt((item.unitPrice*item.quantity)-(item.itemDiscountAmt||0))}</span></div>))}</div>{(receiptModal.record?.globalDiscount||0)>0 && <p className="text-right text-sm text-gray-500">Disc: -{fmt(receiptModal.record.globalDiscount)} Ks</p>}<div className="border-t pt-3 flex justify-between text-xl font-black"><span>TOTAL</span><span>{fmt(receiptModal.record?.amount)} Ks</span></div><p className="text-sm text-right mt-1">Paid: {fmt(receiptModal.record?.paidAmount||0)} Ks | Debt: {fmt(receiptModal.record?.remainingDebt||0)} Ks</p><div className="grid grid-cols-2 gap-3 mt-4"><button onClick={()=>doPrint(receiptModal.record)} className="py-3 rounded-2xl bg-cyan-600 text-white font-black flex items-center gap-2"><Printer size={18}/> Print</button><button onClick={()=>setReceiptModal({show:false,record:null})} className="py-3 rounded-2xl bg-gray-200 text-black font-black">Close</button></div></div></div>)}

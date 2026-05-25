@@ -15,37 +15,9 @@ body {
   overflow-x: hidden;
 }
 
-/* Mobile View - Show more content like Desktop */
+/* Mobile View - Normal Mobile Display */
 @media (max-width: 768px) {
   html {
-    font-size: 12px;
-  }
-  
-  body {
-    -webkit-text-size-adjust: none;
-  }
-  
-  .max-w-5xl, .max-w-6xl, .max-w-7xl {
-    padding-left: 0.5rem !important;
-    padding-right: 0.5rem !important;
-  }
-  
-  input, select, textarea, button {
-    font-size: 0.85rem !important;
-  }
-  
-  .p-4, .p-5, .p-6 {
-    padding: 0.75rem !important;
-  }
-  
-  .space-y-3 > * + *,
-  .space-y-4 > * + *,
-  .space-y-5 > * + *,
-  .space-y-6 > * + * {
-    margin-top: 0.5rem !important;
-  }
-  
-  .grid-cols-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    font-size: 14px;
   }
 }

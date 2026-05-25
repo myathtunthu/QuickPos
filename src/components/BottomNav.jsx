@@ -18,9 +18,9 @@ export default function BottomNav() {
   return (
     <nav 
       className="fixed bottom-0 left-0 w-full bg-[#0d1120]/95 backdrop-blur border-t-2 border-cyan-500/10 z-40"
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.25rem)' }}
     >
-      <div className="flex justify-around items-end px-2 pt-2 pb-2">
+      <div className="flex justify-around items-end px-1 pt-1 pb-1">
         {navItems.map(item => {
           if (item.path === '/admin' && !hasPermission('manage_users') && !hasPermission('manage_products') && !hasPermission('manage_inventory')) {
             return null;
@@ -32,14 +32,14 @@ export default function BottomNav() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-all active:scale-95 min-w-[56px] ${
+              className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-lg transition-all active:scale-95 min-w-[48px] ${
                 active 
-                  ? 'text-cyan-400 scale-110' 
+                  ? 'text-cyan-400 scale-105' 
                   : 'text-slate-600 hover:text-slate-400'
               }`}
             >
-              <item.icon size={22} strokeWidth={active ? 2.5 : 1.5} />
-              <span className={`text-[10px] font-bold uppercase mt-1 tracking-wider ${
+              <item.icon size={20} strokeWidth={active ? 2.5 : 1.5} />
+              <span className={`text-[9px] font-bold uppercase mt-0.5 tracking-wider ${
                 active ? 'text-cyan-400' : 'text-slate-600'
               }`}>
                 {item.label}

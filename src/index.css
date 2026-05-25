@@ -2,38 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Mobile Responsive Optimization */
-html,
-body,
-#root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  background-color: #020617; /* Dashboard ရဲ့ နောက်ခံအရောင် */
-  -webkit-text-size-adjust: 100%;
-}
-
-* {
-  box-sizing: border-box;
+html {
+  font-family: 'Inter', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ခလုတ်များ Touch လုပ်ရတာ Smooth ဖြစ်စေရန် */
-button,
-input,
-select,
-textarea {
-  touch-action: manipulation;
-}
-
-/* Scroll bar ပုံစံမလှတာတွေကို ဖျောက်ရန် */
-::-webkit-scrollbar {
-  display: none;
-}
-
-/* Safe Area (Android/iOS ပိုင်းအတွက်) */
 body {
-  padding-bottom: env(safe-area-inset-bottom);
+  background-color: #080c14;
+  color: #e2e8f0;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Mobile View - Show more content like Desktop */
+@media (max-width: 768px) {
+  html {
+    font-size: 12px;
+  }
+  
+  body {
+    -webkit-text-size-adjust: none;
+  }
+  
+  .max-w-5xl, .max-w-6xl, .max-w-7xl {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+  
+  input, select, textarea, button {
+    font-size: 0.85rem !important;
+  }
+  
+  .p-4, .p-5, .p-6 {
+    padding: 0.75rem !important;
+  }
+  
+  .space-y-3 > * + *,
+  .space-y-4 > * + *,
+  .space-y-5 > * + *,
+  .space-y-6 > * + * {
+    margin-top: 0.5rem !important;
+  }
+  
+  .grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
 }

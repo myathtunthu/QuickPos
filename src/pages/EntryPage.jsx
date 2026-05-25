@@ -246,27 +246,49 @@ export default function EntryPage({ products = [] }) {
           </div>
 
           {/* Categories */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {categories.map(cat => (
-              <button key={cat} onClick={() => setSelCategory(cat)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400 border border-white/5'}`}>{cat}</button>
-            ))}
-          </div>
+<div className="flex gap-1.5 overflow-x-auto pb-1">
+  {categories.map(cat => (
+    <button key={cat} onClick={() => setSelCategory(cat)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400 border border-white/5'}`}>
+      {cat}
+    </button>
+  ))}
+</div>
 
-          {/* Search */}
-          <div className="relative"><Search className="absolute left-3 top-2.5 text-cyan-500" size={16}/><input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Search product..." className="w-full bg-black border border-cyan-500/20 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white" /></div>
+{/* Compact Search Bar */}
+<div className="relative">
+  <Search className="absolute left-2.5 top-2 text-cyan-500" size={14}/>
+  <input 
+    value={prodSearch} 
+    onChange={e => setProdSearch(e.target.value)} 
+    placeholder="Search..." 
+    className="w-full bg-black border border-cyan-500/20 rounded-lg pl-8 pr-3 py-2 text-xs text-white outline-none focus:border-cyan-400"
+  />
+  {prodSearch && (
+    <button onClick={() => setProdSearch('')} className="absolute right-2 top-1.5 text-slate-500 hover:text-white">
+      <X size={14}/>
+    </button>
+  )}
+</div>
 
-          {/* Product Grid */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-64 overflow-y-auto">
-            {filteredProducts.slice(0, 30).map(prod => (
-              <button key={prod.id} onClick={() => selectProduct(prod)} className={`bg-[#0d1120] border-2 rounded-xl p-2 text-center transition-all hover:border-cyan-500/30 active:scale-95 ${selProdId===prod.id?'border-cyan-400 bg-cyan-900/20':'border-white/5'}`}>
-                <div className="w-10 h-10 mx-auto bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1"><Package size={18} className="text-cyan-400"/></div>
-                <p className="text-xs font-bold text-white truncate">{prod.name}</p>
-                <p className="text-[10px] text-cyan-400 font-bold mt-0.5">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p>
-                <p className="text-[10px] text-slate-500">Stock: {prod.stock}</p>
-              </button>
-            ))}
-            {filteredProducts.length === 0 && <div className="col-span-full text-center text-slate-500 text-xs py-8">No products found</div>}
-          </div>
+{/* Product Grid - Show only when searching or category selected */}
+{(prodSearch.trim() || selCategory !== 'All') ? (
+  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-56 overflow-y-auto">
+    {filteredProducts.slice(0, 25).map(prod => (
+      <button key={prod.id} onClick={() => selectProduct(prod)} className={`bg-[#0d1120] border-2 rounded-xl p-2 text-center transition-all hover:border-cyan-500/30 active:scale-95 ${selProdId===prod.id?'border-cyan-400 bg-cyan-900/20':'border-white/5'}`}>
+        <div className="w-8 h-8 mx-auto bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1"><Package size={14} className="text-cyan-400"/></div>
+        <p className="text-[10px] font-bold text-white truncate">{prod.name}</p>
+        <p className="text-[10px] text-cyan-400 font-bold">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p>
+        <p className="text-[10px] text-slate-500">({prod.stock})</p>
+      </button>
+    ))}
+    {filteredProducts.length === 0 && <div className="col-span-full text-center text-slate-500 text-xs py-8">No products</div>}
+  </div>
+) : (
+  <div className="text-center text-slate-600 text-xs py-6 border border-dashed border-slate-800 rounded-xl">
+    🔍 Search or select category to browse products
+  </div>
+)}
 
           {/* Selected Product Detail */}
           {selProdId && selectedUnit && (

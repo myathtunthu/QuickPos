@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   ShoppingCart, PlusCircle, Trash2, Search, ScanBarcode,
-  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle, Grid3X3
+  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle, Package
 } from 'lucide-react';
 
 export default function EntryPage({ products = [] }) {
@@ -25,7 +25,6 @@ export default function EntryPage({ products = [] }) {
   const [cart, setCart] = useState([]);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [prodSearch, setProdSearch] = useState('');
-  const [showProdDropdown, setShowProdDropdown] = useState(false);
   const [selCategory, setSelCategory] = useState('All');
   const [selProdId, setSelProdId] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
@@ -40,7 +39,6 @@ export default function EntryPage({ products = [] }) {
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const scannerRef = useRef(null);
 
-  // ✅ Unit & Price Type
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [priceType, setPriceType] = useState('retail');
   const [stockWarning, setStockWarning] = useState('');
@@ -58,10 +56,8 @@ export default function EntryPage({ products = [] }) {
     } catch {}
   };
 
-  // ✅ Categories
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
 
-  // ✅ Filtered Products (for grid & search)
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
@@ -79,7 +75,6 @@ export default function EntryPage({ products = [] }) {
     return { subtotal: s, itemDiscounts: d, globalDisc: g, total: Math.max(s - d - g, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
-  // ✅ Select Product
   const selectProduct = (prod) => {
     setSelProdId(prod.id);
     setProdSearch(prod.name);
@@ -92,7 +87,6 @@ export default function EntryPage({ products = [] }) {
     setStockWarning('');
   };
 
-  // ✅ Unit Change
   const handleUnitChange = (unitName) => {
     const prod = products.find(p => p.id === selProdId);
     const unit = prod?.packageUnits?.find(u => u.name === unitName);
@@ -104,15 +98,11 @@ export default function EntryPage({ products = [] }) {
     setStockWarning('');
   };
 
-  // ✅ Price Type Change
   const handlePriceTypeChange = (type) => {
     setPriceType(type);
-    if (selectedUnit) {
-      setUnitPrice(String(selectedUnit.prices?.[type] || 0));
-    }
+    if (selectedUnit) setUnitPrice(String(selectedUnit.prices?.[type] || 0));
   };
 
-  // ✅ Barcode
   const handleBarcodeSubmit = (value) => {
     const code = value.trim(); if (!code) return;
     for (const p of products) {
@@ -129,7 +119,6 @@ export default function EntryPage({ products = [] }) {
     playBeep('error');
   };
 
-  // ✅ Add To Cart with Stock Check
   const addToCart = () => {
     if (!selProdId || !selectedUnit || !unitPrice || !quantity) return;
     const prod = products.find(x => x.id === selProdId); if (!prod) return;
@@ -138,7 +127,7 @@ export default function EntryPage({ products = [] }) {
       const stockNeeded = Number(quantity) * (selectedUnit.multiplier || 1);
       const currentStock = Number(prod.stock) || 0;
       if (currentStock < stockNeeded) {
-        setStockWarning(`❌ Stock မလုံလောက်ပါ! လိုအပ်: ${stockNeeded} ${prod.baseUnit}, ရှိ: ${currentStock} ${prod.baseUnit}`);
+        setStockWarning(`Stock မလုံလောက်ပါ`);
         playBeep('error');
         return;
       }
@@ -150,12 +139,7 @@ export default function EntryPage({ products = [] }) {
     setCart(prev => {
       const ex = prev.find(x => x.productId === prod.id && x.unitName === selectedUnit.name && x.priceType === priceType);
       if (ex) return prev.map(x => x.id === ex.id ? { ...x, quantity: x.quantity + q } : x);
-      return [...prev, {
-        id: Date.now(), productId: prod.id, name: prod.name,
-        unitName: selectedUnit.name, multiplier: selectedUnit.multiplier || 1,
-        quantity: q, priceType, unitPrice: pr,
-        costPrice: entryTab === 'Sale' ? (selectedUnit.costPrice || 0) : pr, itemDiscountAmt: 0,
-      }];
+      return [...prev, { id: Date.now(), productId: prod.id, name: prod.name, unitName: selectedUnit.name, multiplier: selectedUnit.multiplier || 1, quantity: q, priceType, unitPrice: pr, costPrice: entryTab === 'Sale' ? (selectedUnit.costPrice || 0) : pr, itemDiscountAmt: 0 }];
     });
     setProdSearch(''); setSelProdId(''); setSelectedUnit(null); setUnitPrice(''); setQuantity('1'); setStockWarning('');
   };
@@ -176,7 +160,7 @@ export default function EntryPage({ products = [] }) {
         await html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } },
           (text) => { handleBarcodeSubmit(text); if (scannerRef.current) { scannerRef.current.stop().catch(() => {}); scannerRef.current = null; } setShowScanner(false); }, () => {}
         );
-      } catch (err) { console.error("Scanner error:", err); setShowScanner(false); }
+      } catch (err) { setShowScanner(false); }
     };
     start();
     return () => { if (scannerRef.current) { scannerRef.current.stop().catch(() => {}); scannerRef.current = null; } };
@@ -197,11 +181,8 @@ export default function EntryPage({ products = [] }) {
     if (entryTab === 'Sale') {
       for (const item of cart) {
         const p = products.find(x => x.id === item.productId);
-        if (p) {
-          const stockNeeded = item.quantity * (item.multiplier || 1);
-          if ((Number(p.stock) || 0) < stockNeeded) {
-            alert(`❌ "${item.name}" Stock မလုံလောက်ပါ!`); setLoading(false); return;
-          }
+        if (p && (Number(p.stock) || 0) < item.quantity * (item.multiplier || 1)) {
+          alert(`Stock မလုံလောက်ပါ: ${item.name}`); setLoading(false); return;
         }
       }
     }
@@ -212,19 +193,13 @@ export default function EntryPage({ products = [] }) {
       const total = cartTotals.total;
       const paid = paidAmount === '' ? total : Number(paidAmount || 0);
       const debt = Math.max(0, total - paid);
-      const rec = {
-        type: entryTab, tenantId, personName: personName || 'Walk-in',
-        itemsDetail: cart.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, costPrice: i.costPrice, itemDiscountAmt: i.itemDiscountAmt, unitName: i.unitName, multiplier: i.multiplier, priceType: i.priceType })),
-        amount: total, subtotal: cartTotals.subtotal, itemDiscount: cartTotals.itemDiscounts, globalDiscount: cartTotals.globalDisc,
-        paymentMethod, paidAmount: paid, remainingDebt: debt, date: entryDate, createdAt: serverTimestamp(),
-      };
+      const rec = { type: entryTab, tenantId, personName: personName || 'Walk-in', itemsDetail: cart.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice, costPrice: i.costPrice, itemDiscountAmt: i.itemDiscountAmt, unitName: i.unitName, multiplier: i.multiplier, priceType: i.priceType })), amount: total, subtotal: cartTotals.subtotal, itemDiscount: cartTotals.itemDiscounts, globalDiscount: cartTotals.globalDisc, paymentMethod, paidAmount: paid, remainingDebt: debt, date: entryDate, createdAt: serverTimestamp() };
       batch.set(ref, rec);
       cart.forEach(item => {
         const p = products.find(x => x.id === item.productId);
         if (p) {
-          const stockChange = item.quantity * (item.multiplier || 1);
-          const cs = Number(p.stock || 0);
-          batch.update(doc(db, 'pos_products', item.productId), { stock: Math.max(0, entryTab === 'Sale' ? cs - stockChange : cs + stockChange) });
+          const sc = item.quantity * (item.multiplier || 1);
+          batch.update(doc(db, 'pos_products', item.productId), { stock: Math.max(0, entryTab === 'Sale' ? (Number(p.stock)||0) - sc : (Number(p.stock)||0) + sc) });
         }
       });
       await batch.commit();
@@ -237,43 +212,24 @@ export default function EntryPage({ products = [] }) {
   const doPrint = (record) => {
     const items = record.itemsDetail || [];
     const w = window.open('', '_blank', 'width=380,height=600');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
-    <style>body{font-family:'Courier New',monospace;font-size:13px;width:340px;margin:10px auto;padding:15px;border:1px dashed #000;background:#fff;}.header{text-align:center;border-bottom:1px dashed #000;padding-bottom:10px;margin-bottom:10px;}.shop-name{font-size:18px;font-weight:bold;}.shop-info{font-size:11px;color:#555;margin:2px 0;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px;}th{border-bottom:1px solid #000;text-align:left;}td{text-align:right;}td:first-child{text-align:left;}.total-row{font-weight:bold;font-size:16px;border-top:1px solid #000;padding-top:8px;}.footer{text-align:center;margin-top:15px;font-size:11px;color:#555;}</style></head><body>
-    <div class="header"><div class="shop-name">${shopName}</div><div class="shop-info">📞 ${shopPhone}</div><div class="shop-info">📍 ${shopAddress}</div><div class="shop-info">📅 ${record.date || ''}</div></div>
-    <table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Total</th></tr></thead><tbody>
-    ${items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>${i.unitName||'-'}</td><td>${fmt(i.unitPrice)}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}
-    </tbody></table>
-    ${record.globalDiscount>0?`<p style="text-align:right;font-size:12px;">Global Disc: -${fmt(record.globalDiscount)} Ks</p>`:''}
-    <div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div>
-    <p style="text-align:right;font-size:12px;">Method: ${record.paymentMethod}</p>
-    <p style="text-align:right;font-size:12px;">Paid: ${fmt(record.paidAmount||0)} Ks | Debt: ${fmt(record.remainingDebt||0)} Ks</p>
-    <div class="footer">ဝယ်ယူအားပေးမှုကို ကျေးဇူးတင်ပါသည်<br>Thank you!</div>
-    <script>window.onload=()=>{window.print();window.close();}</script></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title><style>body{font-family:'Courier New',monospace;font-size:13px;width:340px;margin:10px auto;padding:15px;border:1px dashed #000;background:#fff;}.header{text-align:center;border-bottom:1px dashed #000;padding-bottom:10px;margin-bottom:10px;}.shop-name{font-size:18px;font-weight:bold;}.shop-info{font-size:11px;color:#555;margin:2px 0;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px;}th{border-bottom:1px solid #000;text-align:left;}td{text-align:right;}td:first-child{text-align:left;}.total-row{font-weight:bold;font-size:16px;border-top:1px solid #000;padding-top:8px;}.footer{text-align:center;margin-top:15px;font-size:11px;color:#555;}</style></head><body><div class="header"><div class="shop-name">${shopName}</div><div class="shop-info">📞 ${shopPhone}</div><div class="shop-info">📍 ${shopAddress}</div><div class="shop-info">📅 ${record.date || ''}</div></div><table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Total</th></tr></thead><tbody>${items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>${i.unitName||'-'}</td><td>${fmt(i.unitPrice)}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}</tbody></table>${record.globalDiscount>0?`<p style="text-align:right;font-size:12px;">Global Disc: -${fmt(record.globalDiscount)} Ks</p>`:''}<div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div><p style="text-align:right;font-size:12px;">Method: ${record.paymentMethod}</p><p style="text-align:right;font-size:12px;">Paid: ${fmt(record.paidAmount||0)} Ks | Debt: ${fmt(record.remainingDebt||0)} Ks</p><div class="footer">ဝယ်ယူအားပေးမှုကို ကျေးဇူးတင်ပါသည်<br>Thank you!</div><script>window.onload=()=>{window.print();window.close();}</script></body></html>`);
     w.document.close();
   };
 
   return (
     <div className="p-2 sm:p-4 pb-28 text-white max-w-6xl mx-auto space-y-4 bg-[#080c14] min-h-screen">
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-black text-cyan-400"><ShoppingCart size={22} className="inline mr-1"/>POS ENTRY</h1>
+        <h1 className="text-xl font-black text-cyan-400"><ShoppingCart size={22} className="inline mr-1"/>POS ENTRY</h1>
         <div className="flex items-center gap-2 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-1.5"><Calendar size={14}/><span className="text-xs font-bold text-cyan-300">{entryDate}</span></div>
       </div>
 
-      {/* Tabs */}
       <div className="grid grid-cols-3 gap-2">
         {['Sale','Purchase','Expense'].map(tab => (
-          <button key={tab} onClick={() => { setEntryTab(tab); clearCart(); }}
-            className={`py-2 rounded-xl font-black text-sm border ${entryTab===tab?'bg-cyan-600 border-cyan-400 text-white':'bg-[#0d1120] border-white/5 text-slate-500'}`}>{tab}</button>
+          <button key={tab} onClick={() => { setEntryTab(tab); clearCart(); }} className={`py-2 rounded-xl font-black text-sm border ${entryTab===tab?'bg-cyan-600 border-cyan-400 text-white':'bg-[#0d1120] border-white/5 text-slate-500'}`}>{tab}</button>
         ))}
       </div>
 
-      {/* Stock Warning */}
-      {stockWarning && (
-        <div className="bg-rose-950/20 border border-rose-500/20 rounded-xl p-2 flex items-center gap-2 text-rose-400 text-xs">
-          <AlertTriangle size={16}/> {stockWarning}
-        </div>
-      )}
+      {stockWarning && <div className="bg-rose-950/20 border border-rose-500/20 rounded-xl p-2 flex items-center gap-2 text-rose-400 text-xs"><AlertTriangle size={16}/> {stockWarning}</div>}
 
       {entryTab === 'Expense' ? (
         <div className="space-y-3">
@@ -283,67 +239,45 @@ export default function EntryPage({ products = [] }) {
         </div>
       ) : (
         <>
-          {/* Customer & Barcode Row */}
           <div className="flex gap-2">
             <div className="relative flex-1"><User className="absolute left-3 top-2.5 text-cyan-500" size={16}/><input value={personName} onChange={e => setPersonName(e.target.value)} placeholder="Customer" className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white" /></div>
             <div className="relative flex-1"><ScanBarcode className="absolute left-3 top-2.5 text-blue-500" size={16}/><input value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleBarcodeSubmit(barcodeInput); }} placeholder="Barcode" className="w-full bg-black/40 border border-blue-500/20 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white" /></div>
             <button onClick={() => setShowScanner(true)} className="px-3 bg-blue-600 rounded-xl"><ScanBarcode size={18}/></button>
           </div>
 
-          {/* ✅ Categories as Buttons */}
+          {/* Categories */}
           <div className="flex gap-1.5 overflow-x-auto pb-1">
             {categories.map(cat => (
-              <button key={cat} onClick={() => setSelCategory(cat)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400 border border-white/5'}`}>
-                {cat}
-              </button>
+              <button key={cat} onClick={() => setSelCategory(cat)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${selCategory===cat?'bg-cyan-600 text-white':'bg-black/40 text-slate-400 border border-white/5'}`}>{cat}</button>
             ))}
           </div>
 
-          {/* ✅ Search + Product Grid */}
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 text-cyan-500" size={16}/>
-            <input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Search product..."
-              className="w-full bg-black border border-cyan-500/20 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white" />
-          </div>
+          {/* Search */}
+          <div className="relative"><Search className="absolute left-3 top-2.5 text-cyan-500" size={16}/><input value={prodSearch} onChange={e => setProdSearch(e.target.value)} placeholder="Search product..." className="w-full bg-black border border-cyan-500/20 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white" /></div>
 
-          {/* ✅ Product Grid (လေးထောင့်ကွက်များ) */}
+          {/* Product Grid */}
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-64 overflow-y-auto">
             {filteredProducts.slice(0, 30).map(prod => (
-              <button
-                key={prod.id}
-                onClick={() => selectProduct(prod)}
-                className={`bg-[#0d1120] border-2 rounded-xl p-2 text-center transition-all hover:border-cyan-500/30 active:scale-95 ${
-                  selProdId === prod.id ? 'border-cyan-400 bg-cyan-900/20' : 'border-white/5'
-                }`}
-              >
-                <div className="w-10 h-10 mx-auto bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1">
-                  <Package size={18} className="text-cyan-400" />
-                </div>
+              <button key={prod.id} onClick={() => selectProduct(prod)} className={`bg-[#0d1120] border-2 rounded-xl p-2 text-center transition-all hover:border-cyan-500/30 active:scale-95 ${selProdId===prod.id?'border-cyan-400 bg-cyan-900/20':'border-white/5'}`}>
+                <div className="w-10 h-10 mx-auto bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1"><Package size={18} className="text-cyan-400"/></div>
                 <p className="text-xs font-bold text-white truncate">{prod.name}</p>
                 <p className="text-[10px] text-cyan-400 font-bold mt-0.5">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)} Ks</p>
                 <p className="text-[10px] text-slate-500">Stock: {prod.stock}</p>
               </button>
             ))}
-            {filteredProducts.length === 0 && (
-              <div className="col-span-full text-center text-slate-500 text-xs py-8">No products found</div>
-            )}
+            {filteredProducts.length === 0 && <div className="col-span-full text-center text-slate-500 text-xs py-8">No products found</div>}
           </div>
 
-          {/* ✅ Selected Product Detail (Unit + Price Type) */}
+          {/* Selected Product Detail */}
           {selProdId && selectedUnit && (
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-3 space-y-2">
               <p className="text-sm font-black text-cyan-400">{products.find(p=>p.id===selProdId)?.name}</p>
               <div className="flex gap-2">
-                <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)}
-                  className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
-                  {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (
-                    <option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier})</option>
-                  ))}
+                <select value={selectedUnit?.name || ''} onChange={(e) => handleUnitChange(e.target.value)} className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
+                  {products.find(p => p.id === selProdId)?.packageUnits?.map(unit => (<option key={unit.name} value={unit.name}>{unit.name} (×{unit.multiplier})</option>))}
                 </select>
                 {entryTab === 'Sale' && (
-                  <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)}
-                    className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
+                  <select value={priceType} onChange={(e) => handlePriceTypeChange(e.target.value)} className="flex-1 bg-black border border-cyan-500/20 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
                     <option value="retail">Retail</option>
                     <option value="wholesaleA">Wholesale A</option>
                     <option value="wholesaleB">Wholesale B</option>
@@ -365,35 +299,17 @@ export default function EntryPage({ products = [] }) {
               {cart.map(item => (
                 <div key={item.id} className="bg-black/40 border border-cyan-500/10 rounded-lg p-3">
                   <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-bold text-sm">{item.name}</p>
-                      <p className="text-cyan-400 text-xs mt-0.5">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p>
-                      <p className="text-[10px] text-slate-500">{item.priceType} | ×{item.multiplier}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="flex items-center gap-1 text-amber-400 text-xs"><Tag size={12}/> <input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-16 bg-black border border-amber-500/20 rounded px-2 py-1 text-xs text-white"/> Ks</div>
-                      <button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={16}/></button>
-                    </div>
+                    <div><p className="font-bold text-sm">{item.name}</p><p className="text-cyan-400 text-xs mt-0.5">{fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice*item.quantity)} Ks</p><p className="text-[10px] text-slate-500">{item.priceType} | ×{item.multiplier}</p></div>
+                    <div className="flex items-center gap-1"><div className="flex items-center gap-1 text-amber-400 text-xs"><Tag size={12}/> <input value={item.itemDiscountAmt||''} onChange={e=>updateItemDiscount(item.id,e.target.value)} placeholder="0" className="w-16 bg-black border border-amber-500/20 rounded px-2 py-1 text-xs text-white"/> Ks</div><button onClick={()=>removeFromCart(item.id)} className="text-rose-400"><Trash2 size={16}/></button></div>
                   </div>
                 </div>
               ))}
 
-              {/* Totals + Payment */}
-              <div className="flex gap-2 items-end text-xs">
-                <div className="flex-1"><label className="text-[10px] text-slate-500">Global Disc</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-lg px-2 py-1.5 text-amber-400"/></div>
-                <button onClick={()=>setGlobalDiscountType('%')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button>
-                <button onClick={()=>setGlobalDiscountType('flat')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button>
-              </div>
-              <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-3 space-y-1 text-xs">
-                <div className="flex justify-between"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>
-                {(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}
-                <div className="flex justify-between text-base font-black text-cyan-300 border-t border-cyan-500/20 pt-2"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div>
-              </div>
+              <div className="flex gap-2 items-end text-xs"><div className="flex-1"><label className="text-[10px] text-slate-500">Global Disc</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-lg px-2 py-1.5 text-amber-400"/></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
+              <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-3 space-y-1 text-xs"><div className="flex justify-between"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>{(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}<div className="flex justify-between text-base font-black text-cyan-300 border-t border-cyan-500/20 pt-2"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div></div>
               <div className="grid grid-cols-4 gap-1.5">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-1.5 rounded-lg text-[10px] font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
               <div className="relative"><Wallet className="absolute left-3 top-2 text-emerald-400" size={14}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Paid (empty=full)" className="w-full bg-black/40 border border-emerald-500/20 rounded-lg pl-9 pr-3 py-2 text-xs text-emerald-300"/></div>
-              <button onClick={submitTransaction} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-black flex items-center justify-center gap-2">
-                {loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={16}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}
-              </button>
+              <button onClick={submitTransaction} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-black flex items-center justify-center gap-2 text-center">{loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={16}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}</button>
             </div>
           )}
         </>

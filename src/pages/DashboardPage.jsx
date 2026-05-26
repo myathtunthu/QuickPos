@@ -1,161 +1,249 @@
-import { useState } from 'react';
-import { Send, Bot, X, Loader2, Zap, Package, TrendingUp, AlertTriangle, DollarSign } from 'lucide-react';
-import { useStore } from '../store/useStore';
+import { useState, useEffect, useMemo } from 'react';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { useAuth } from '../context/AuthContext';
+import {
+  Zap, ShoppingCart, DollarSign, CreditCard, MinusCircle,
+  AlertTriangle, TrendingUp, Clock3
+} from 'lucide-react';
+import {
+  AreaChart, Area, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid
+} from 'recharts';
+import AIChat from '../components/AIChat';
 
-export default function AIChat() {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: '👋 မင်္ဂလာပါ! QuickPOS AI Assistant ပါ။\n\nအောက်ပါမေးခွန်းများ မေးနိုင်ပါတယ် -\n• ဒီနေ့အရောင်းဘယ်လောက်လဲ\n• ဘယ်ပစ္စည်းရောင်းအားကောင်းလဲ\n• Stock နည်းတဲ့ပစ္စည်းတွေက ဘာတွေလဲ\n• ဒီနေ့အကြွေးဘယ်လောက်ရှိလဲ\n• ဒီနေ့အမြတ်ဘယ်လောက်လဲ', isDefault: true }
-  ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function DashboardPage() {
+  const { profile } = useAuth();
+  const tenantId = profile?.tenantId;
 
-  const records = useStore(state => state.records || []);
-  const products = useStore(state => state.products || []);
+  const [records, setRecords] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dashPeriod, setDashPeriod] = useState('Today');
+
+  useEffect(() => {
+    if (!tenantId) { setDataLoading(false); return; }
+    const q = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
+    const unsub = onSnapshot(q, (snap) => {
+      setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setDataLoading(false);
+    });
+    return () => unsub();
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
+    const unsub = onSnapshot(q, (snap) => {
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [tenantId]);
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // ✅ Quick Questions
-  const quickQuestions = [
-    { icon: DollarSign, text: 'ဒီနေ့အရောင်းဘယ်လောက်လဲ', color: 'text-cyan-400' },
-    { icon: TrendingUp, text: 'ဘယ်ပစ္စည်းရောင်းအားကောင်းလဲ', color: 'text-emerald-400' },
-    { icon: AlertTriangle, text: 'Stock နည်းတဲ့ပစ္စည်းတွေက ဘာတွေလဲ', color: 'text-amber-400' },
-    { icon: DollarSign, text: 'ဒီနေ့အကြွေးဘယ်လောက်ရှိလဲ', color: 'text-rose-400' },
-  ];
-
-  // ✅ Local AI Rules Engine
-  const getAIResponse = (userInput) => {
-    const q = userInput.toLowerCase();
-    const today = new Date().toISOString().split('T')[0];
-
-    const todayRecords = records.filter(r => {
-      const ts = r.createdAt?.seconds ? r.createdAt?.seconds * 1000 : (r.createdAt || 0);
-      return new Date(ts).toISOString().split('T')[0] === today;
+  const periodRecs = useMemo(() => {
+    const now = Date.now();
+    const today = new Date().toDateString();
+    return records.filter(r => {
+      const ts = r.createdAt?.seconds ? r.createdAt.seconds * 1000 : (r.createdAt || 0);
+      if (dashPeriod === 'Today') return new Date(ts).toDateString() === today;
+      if (dashPeriod === 'Week') return now - ts <= 7 * 86400000;
+      if (dashPeriod === 'Month') return now - ts <= 30 * 86400000;
+      return true;
     });
+  }, [records, dashPeriod]);
 
-    const todaySales = todayRecords.filter(r => r.type === 'Sale' || r.type === 'sale');
-    const todayExpenses = todayRecords.filter(r => r.type === 'Expense' || r.type === 'expense');
-    const totalSales = todaySales.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    const totalExpenses = todayExpenses.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-    const totalDebt = records.reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0);
-    const orderCount = todaySales.length;
+  const salesRecs = useMemo(() => periodRecs.filter(r => r.type === 'Sale' || r.type === 'sale'), [periodRecs]);
+  const purchaseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Purchase' || r.type === 'purchase'), [periodRecs]);
+  const expenseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Expense' || r.type === 'expense'), [periodRecs]);
 
-    const lowStock = products.filter(p => (Number(p.stock) || 0) <= (Number(p.minStock) || 5));
+  const totalSales = useMemo(() => salesRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [salesRecs]);
+  const totalPurchases = useMemo(() => purchaseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [purchaseRecs]);
+  const totalExpenses = useMemo(() => expenseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [expenseRecs]);
+  const totalDebt = useMemo(() => records.reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0), [records]);
+  const orderCount = useMemo(() => salesRecs.length, [salesRecs]);
+  const balance = totalSales - totalPurchases - totalExpenses;
 
-    const productMap = {};
-    todaySales.forEach(r => {
+  const lowStock = useMemo(() => products.filter(p => (Number(p.stock) || 0) <= (Number(p.minStock) || 5)), [products]);
+
+  const topProducts = useMemo(() => {
+    const map = {};
+    salesRecs.forEach(r => {
       const items = r.itemsDetail || r.items || [];
       items.forEach(item => {
         const name = item.name || 'Unknown';
-        productMap[name] = (productMap[name] || 0) + (Number(item.quantity) || 1);
+        map[name] = (map[name] || 0) + (Number(item.quantity) || Number(item.qty) || 1);
       });
     });
-    const topProducts = Object.entries(productMap).sort((a,b) => b[1] - a[1]).slice(0, 5);
+    return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5);
+  }, [salesRecs]);
 
-    if (q.includes('အရောင်း') || q.includes('sales') || q.includes('ဝင်ငွေ')) {
-      return `📊 ဒီနေ့အရောင်း အနှစ်ချုပ်:\n• အော်ဒါ: ${orderCount} ခု\n• စုစုပေါင်း: ${fmt(totalSales)} Ks\n• အသုံးစရိတ်: ${fmt(totalExpenses)} Ks\n• အသားတင်: ${fmt(totalSales - totalExpenses)} Ks`;
-    }
-    if (q.includes('ပစ္စည်း') || q.includes('product') || q.includes('ရောင်းအား')) {
-      if (topProducts.length === 0) return '📦 ဒီနေ့ အရောင်းမရှိသေးပါ။';
-      let reply = '🏆 ဒီနေ့ ရောင်းအားအကောင်းဆုံးပစ္စည်းများ:\n';
-      topProducts.forEach((p, i) => { reply += `• ${i+1}. ${p[0]} - ${p[1]} ခု\n`; });
-      return reply;
-    }
-    if (q.includes('stock') || q.includes('နည်း') || q.includes('ကုန်')) {
-      if (lowStock.length === 0) return '✅ Stock နည်းနေတဲ့ ပစ္စည်းမရှိပါ။';
-      let reply = `⚠️ Stock နည်းနေသောပစ္စည်း (${lowStock.length} မျိုး):\n`;
-      lowStock.slice(0, 10).forEach(p => { reply += `• ${p.name} - ${p.stock || 0} ${p.baseUnit || 'ခု'}\n`; });
-      return reply;
-    }
-    if (q.includes('ကြွေး') || q.includes('debt') || q.includes('ကျန်')) {
-      if (totalDebt === 0) return '💳 ကြွေးကျန်မရှိပါ။';
-      return `💳 စုစုပေါင်းကြွေးကျန်: ${fmt(totalDebt)} Ks`;
-    }
-    if (q.includes('profit') || q.includes('အမြတ်')) {
-      const profit = totalSales - totalExpenses;
-      return `💰 ဒီနေ့အမြတ်: ${fmt(profit)} Ks\n(အရောင်း: ${fmt(totalSales)} - အသုံးစရိတ်: ${fmt(totalExpenses)})`;
-    }
-    if (q.includes('ဘာတွေ') || q.includes('မေး') || q.includes('ကူညီ')) {
-      return '📋 မေးနိုင်သောမေးခွန်းများ:\n• ဒီနေ့အရောင်းဘယ်လောက်လဲ\n• ဘယ်ပစ္စည်းရောင်းအားကောင်းလဲ\n• Stock နည်းတဲ့ပစ္စည်းတွေက ဘာတွေလဲ\n• ဒီနေ့အကြွေးဘယ်လောက်ရှိလဲ\n• ဒီနေ့အမြတ်ဘယ်လောက်လဲ';
-    }
-    return '🤔 နားမလည်ပါ။ "ဘာတွေမေးလို့ရလဲ" လို့ မေးကြည့်ပါ။';
-  };
+  const payments = useMemo(() => {
+    const methods = { Cash: 0, Kpay: 0, Wave: 0, AYAPay: 0 };
+    salesRecs.forEach(r => {
+      const method = r.paymentMethod || r.paymentType || 'Cash';
+      methods[method] = (methods[method] || 0) + Number(r.amount || 0);
+    });
+    return methods;
+  }, [salesRecs]);
 
-  const sendMessage = (text) => {
-    const msg = text || input;
-    if (!msg.trim()) return;
-    const userMsg = { role: 'user', content: msg };
-    setMessages(prev => [...prev, userMsg]);
-    if (text) setInput('');
-    else setInput('');
-    setLoading(true);
+  const chartData = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const ds = d.toDateString();
+      const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+      const dayRecs = records.filter(r => {
+        const ts = r.createdAt?.seconds ? r.createdAt.seconds * 1000 : (r.createdAt || 0);
+        return new Date(ts).toDateString() === ds;
+      });
+      const sales = dayRecs.filter(r => r.type === 'Sale' || r.type === 'sale').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      const expenses = dayRecs.filter(r => r.type === 'Expense' || r.type === 'expense').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      days.push({ day: dayName, sales, expenses });
+    }
+    return days;
+  }, [records]);
 
-    setTimeout(() => {
-      const reply = getAIResponse(msg);
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-      setLoading(false);
-    }, 500);
-  };
+  const recentSales = useMemo(() => salesRecs.slice(-5).reverse(), [salesRecs]);
 
-  if (!open) {
+  const insights = useMemo(() => {
+    const ins = [];
+    if (totalSales > 0) ins.push(`💰 Total sales: ${fmt(totalSales)} Ks this period`);
+    if (topProducts.length > 0) ins.push(`🏆 Top seller: ${topProducts[0]?.name}`);
+    if (lowStock.length > 0) ins.push(`⚠️ ${lowStock.length} products low in stock`);
+    if (balance > 0) ins.push(`📈 Net balance: ${fmt(balance)} Ks`);
+    if (totalDebt > 0) ins.push(`💳 Outstanding debt: ${fmt(totalDebt)} Ks`);
+    return ins.length > 0 ? ins : ['Start selling to see insights 📊'];
+  }, [totalSales, lowStock, topProducts, balance, totalDebt]);
+
+  if (dataLoading) {
     return (
-      <button onClick={() => setOpen(true)} className="fixed bottom-20 right-4 z-50 bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-3 rounded-full shadow-lg hover:scale-110 transition-all animate-pulse">
-        <Bot size={24} />
-      </button>
+      <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 
   return (
-    <div className="fixed bottom-20 right-4 z-50 w-80 sm:w-96 h-[450px] bg-[#0d1120] border border-emerald-500/20 rounded-2xl shadow-2xl flex flex-col">
+    <div className="p-3 sm:p-4 space-y-4 text-white pb-28 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex justify-between items-center p-3 border-b border-emerald-500/10 bg-emerald-900/20 rounded-t-2xl">
-        <h3 className="text-sm font-black text-emerald-400 flex items-center gap-2">
-          <Bot size={18}/> AI Assistant
-          <span className="text-[10px] text-slate-500 font-normal">Local Engine</span>
-        </h3>
-        <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white p-1"><X size={18}/></button>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl sm:text-2xl font-black text-cyan-400"><Zap size={22} className="inline mr-1"/>QuickPOS</h1>
+        <div className="flex bg-[#111827] p-1 rounded-xl border border-cyan-500/10">
+          {['Today','Week','Month'].map(p => (
+            <button key={p} onClick={() => setDashPeriod(p)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${dashPeriod===p?'bg-cyan-500 text-black':'text-slate-500'}`}>{p}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
-        {messages.map((msg, i) => (
-          <div key={i} className={`p-2.5 rounded-xl max-w-[85%] whitespace-pre-line ${msg.role === 'user' ? 'bg-emerald-900/30 text-white ml-auto' : msg.isDefault ? 'bg-slate-800/50 text-slate-400 mr-auto text-xs' : 'bg-slate-800 text-slate-300 mr-auto'}`}>
-            {msg.content}
-            {/* ✅ Quick Question Buttons after default message */}
-            {msg.isDefault && (
-              <div className="grid grid-cols-1 gap-1.5 mt-3">
-                {quickQuestions.map((qq, idx) => {
-                  const Icon = qq.icon;
-                  return (
-                    <button key={idx} onClick={() => sendMessage(qq.text)} className={`flex items-center gap-2 p-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-xs text-left ${qq.color} transition-all`}>
-                      <Icon size={14}/> {qq.text}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+      {/* Status Bar */}
+      <div className="bg-cyan-950/30 border border-cyan-500/20 rounded-xl p-2 text-xs text-center text-cyan-300">
+        📊 {records.length} Records | 📦 {products.length} Products | 💰 Balance: {fmt(balance)} Ks
+      </div>
+
+      {/* Balance Card */}
+      <div className="rounded-2xl p-4 bg-gradient-to-br from-cyan-950 to-[#111827] border border-cyan-500/10">
+        <p className="text-xs text-cyan-400 font-bold uppercase">Net Balance</p>
+        <h2 className="text-3xl font-black mt-1">{fmt(balance)} Ks</h2>
+        <div className="grid grid-cols-4 gap-2 mt-3 text-center">
+          <div><p className="text-xs text-slate-500">Sales</p><p className="text-sm font-black text-cyan-400">{fmt(totalSales)}</p></div>
+          <div><p className="text-xs text-slate-500">Purchases</p><p className="text-sm font-black text-blue-400">{fmt(totalPurchases)}</p></div>
+          <div><p className="text-xs text-slate-500">Expenses</p><p className="text-sm font-black text-amber-400">{fmt(totalExpenses)}</p></div>
+          <div><p className="text-xs text-slate-500">Orders</p><p className="text-sm font-black">{orderCount}</p></div>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="bg-[#111827] rounded-2xl p-4 border border-cyan-500/10">
+        <h2 className="text-sm font-black mb-3">📈 Sales vs Expenses (7 Days)</h2>
+        <div className="h-40">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="grd" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.4}/>
+                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#1e293b" strokeDasharray="3 3"/>
+              <XAxis dataKey="day" stroke="#64748b" fontSize={10}/>
+              <YAxis stroke="#64748b" fontSize={10}/>
+              <Tooltip contentStyle={{background:'#020617',border:'1px solid #22d3ee22',borderRadius:'12px',fontSize:'11px'}}/>
+              <Area type="monotone" dataKey="sales" stroke="#22d3ee" fill="url(#grd)" strokeWidth={2}/>
+              <Line type="monotone" dataKey="expenses" stroke="#fb7185" strokeWidth={2}/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 gap-2">
+        {[{ label:'Sales', value:totalSales, color:'text-cyan-400' },{ label:'Profit', value:balance, color:'text-emerald-400' },{ label:'Debt', value:totalDebt, color:'text-rose-400' },{ label:'Expenses', value:totalExpenses, color:'text-amber-400' }].map((item,i) => (
+          <div key={i} className="bg-[#111827] rounded-xl p-3 border border-white/5">
+            <p className="text-xs text-slate-500">{item.label}</p>
+            <p className={`text-lg font-black mt-1 ${item.color}`}>{fmt(item.value)}</p>
           </div>
         ))}
-        {loading && (
-          <div className="flex items-center gap-2 text-slate-500 text-xs p-2">
-            <Loader2 size={14} className="animate-spin"/> စဉ်းစားနေသည်...
-          </div>
-        )}
       </div>
 
-      {/* Input */}
-      <div className="p-2 border-t border-emerald-500/10 flex gap-2">
-        <input 
-          value={input} 
-          onChange={e => setInput(e.target.value)} 
-          onKeyDown={e => e.key === 'Enter' && sendMessage()} 
-          placeholder="မေးခွန်းမေးပါ..." 
-          className="flex-1 bg-black border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-400"
-        />
-        <button onClick={() => sendMessage()} disabled={loading} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-all disabled:opacity-50">
-          <Send size={14}/>
-        </button>
+      {/* Payment Methods */}
+      <div className="bg-[#111827] rounded-2xl p-4 border border-cyan-500/10">
+        <h2 className="text-sm font-black mb-3">💳 Payment Methods</h2>
+        <div className="space-y-2">
+          {Object.entries(payments).map(([name, value]) => (
+            <div key={name}>
+              <div className="flex justify-between text-xs mb-1"><span>{name}</span><span className="font-bold">{fmt(value)} Ks</span></div>
+              <div className="h-2 rounded-full bg-black/20 overflow-hidden"><div className="h-full rounded-full bg-cyan-400" style={{width:`${totalSales?(value/totalSales)*100:0}%`}}/></div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* Top Products */}
+      {topProducts.length > 0 && (
+        <div className="bg-[#111827] rounded-2xl p-4 border border-cyan-500/10">
+          <h2 className="text-sm font-black mb-3">🏆 Top Products</h2>
+          <div className="space-y-2">
+            {topProducts.map((p,i) => (
+              <div key={i} className="flex justify-between text-xs"><span>{p.name}</span><span className="font-bold">{p.qty} sold</span></div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Low Stock */}
+      {lowStock.length > 0 && (
+        <div className="bg-rose-950/20 rounded-2xl p-4 border border-rose-500/20">
+          <h2 className="text-sm font-black text-rose-400 mb-2"><AlertTriangle size={16} className="inline mr-1"/>Low Stock</h2>
+          {lowStock.map(p => <p key={p.id} className="text-rose-300 text-xs">• {p.name} ({p.stock})</p>)}
+        </div>
+      )}
+
+      {/* Recent Sales */}
+      <div className="bg-[#111827] rounded-2xl p-4 border border-cyan-500/10">
+        <h2 className="text-sm font-black mb-2"><Clock3 size={14} className="inline mr-1 text-cyan-400"/>Recent Sales</h2>
+        {recentSales.length === 0 && <p className="text-slate-500 text-xs">No sales yet</p>}
+        {recentSales.map((sale,i) => (
+          <div key={i} className="flex justify-between py-1.5 border-b border-white/5 text-xs">
+            <span>{sale.personName || 'Walk-in'}</span>
+            <span className="text-cyan-400 font-bold">{fmt(sale.amount)} Ks</span>
+          </div>
+        ))}
+      </div>
+
+      {/* AI Insights */}
+      <div className="bg-[#111827] rounded-2xl p-4 border border-purple-500/10">
+        <h2 className="text-sm font-black text-purple-300 mb-2"><TrendingUp size={14} className="inline mr-1"/>Insights</h2>
+        <div className="space-y-1">
+          {insights.map((text,i) => (
+            <div key={i} className="p-2 rounded-lg bg-purple-500/10 text-xs">{text}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* ✅ AI Chat */}
+      <AIChat records={records} products={products} />
     </div>
   );
 }

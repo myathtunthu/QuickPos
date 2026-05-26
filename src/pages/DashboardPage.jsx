@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Zap, ShoppingCart, DollarSign, CreditCard, AlertTriangle, Clock3 } from 'lucide-react';
 import { AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import AIChat from '../components/AIChat';
 
 export default function DashboardPage() {
   const { profile } = useAuth();
@@ -274,6 +275,7 @@ export default function DashboardPage() {
             <span className="text-cyan-400 font-bold">{fmt(sale.amount)} Ks</span>
           </div>
         ))}
+        <AIChat />
       </div>
     </div>
   );

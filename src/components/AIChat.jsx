@@ -17,7 +17,7 @@ export default function AIChat({ records = [], products = [] }) {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // ✅ Load Gemini API Key from Settings
+  // ✅ Load Gemini API Key from Settings (ONCE only)
   useEffect(() => {
     if (!profile?.tenantId) return;
     const loadKey = async () => {
@@ -26,16 +26,13 @@ export default function AIChat({ records = [], products = [] }) {
         if (snap.exists() && snap.data().geminiKey) {
           setGeminiKey(snap.data().geminiKey);
           setUseAI(true);
-          console.log('✅ Gemini AI enabled');
-        } else {
-          console.log('ℹ️ Using Local AI (no Gemini key)');
         }
       } catch (err) {
         console.error('Error loading Gemini key:', err);
       }
     };
     loadKey();
-  }, [profile]);
+  }, [profile?.tenantId]);
 
   const quickQuestions = [
     { icon: DollarSign, text: 'ဒီနေ့အရောင်းဘယ်လောက်လဲ', color: 'text-cyan-400' },
@@ -58,6 +55,11 @@ export default function AIChat({ records = [], products = [] }) {
           })
         }
       );
+      
+      if (response.status === 429) {
+        return '⏳ မေးခွန်းများလွန်းနေပါသည်။ ၁ မိနစ်ခန့် စောင့်ပြီး ထပ်မေးပါ။';
+      }
+      
       const data = await response.json();
       if (data.error) {
         console.error('Gemini API Error:', data.error);
@@ -159,7 +161,6 @@ export default function AIChat({ records = [], products = [] }) {
 
     let reply;
     
-    // ✅ Try Gemini first, fallback to Local
     if (useAI && geminiKey) {
       const geminiReply = await callGemini(msg);
       if (geminiReply) {

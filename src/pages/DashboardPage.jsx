@@ -239,7 +239,6 @@ export default function DashboardPage() {
               {change >= 0 ? '+' : ''}{change}%
             </b> (Today: {fmt(todayTotal)} vs Yesterday: {fmt(yesterdayTotal)})
           </div>
-          <AIChat />
         );
       }
       return null;
@@ -263,6 +262,12 @@ export default function DashboardPage() {
         👋 Welcome! Start by adding your first <b className="text-cyan-400">product</b> and making a <b className="text-emerald-400">sale</b>!
       </div>
     )}
+
+    {/* ✅ AI Chat Assistant */}
+      <AIChat />
+    </div> {/* Main Container ပိတ် */}
+  );
+}
 
   </div>
 </div>

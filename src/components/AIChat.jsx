@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Send, Bot, X, Loader2, TrendingUp, AlertTriangle, DollarSign } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -14,6 +14,7 @@ export default function AIChat({ records = [], products = [] }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [useAI, setUseAI] = useState(false);
+  const lastRequestTime = useRef(0);
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
@@ -27,9 +28,7 @@ export default function AIChat({ records = [], products = [] }) {
           setGeminiKey(snap.data().geminiKey);
           setUseAI(true);
         }
-      } catch (err) {
-        console.error('Error loading Gemini key:', err);
-      }
+      } catch (err) { console.error(err); }
     };
     loadKey();
   }, [profile?.tenantId]);
@@ -42,37 +41,49 @@ export default function AIChat({ records = [], products = [] }) {
     { icon: DollarSign, text: 'ဒီနေ့အကြွေးဘယ်လောက်ရှိလဲ', color: 'text-rose-400' },
   ];
 
-  // ✅ Gemini API Call
+  // ✅ Fixed Gemini API Call
   const callGemini = async (userInput) => {
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `You are a helpful POS assistant for QuickPOS. Keep answers short (2-3 sentences) and in Burmese. Be friendly.\n\nUser: ${userInput}` }] }]
+            contents: [
+              {
+                role: "user",
+                parts: [{
+                  text: `You are QuickPOS AI assistant.\nReply only in Burmese language.\nKeep answers short and helpful.\n\nQuestion:\n${userInput}`
+                }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 300
+            }
           })
         }
       );
-      
+
       if (response.status === 429) {
-        return '⏳ မေးခွန်းများလွန်းနေပါသည်။ ၁ မိနစ်ခန့် စောင့်ပြီး ထပ်မေးပါ။';
+        return '⏳ AI အသုံးပြုသူများနေပါသည်။ ခဏစောင့်ပြီး ထပ်မေးပါ။';
       }
-      
-      const data = await response.json();
-      if (data.error) {
-        console.error('Gemini API Error:', data.error);
+
+      if (!response.ok) {
+        console.error('Gemini Error:', response.status);
         return null;
       }
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+
+      const data = await response.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
     } catch (err) {
-      console.error('Gemini fetch error:', err);
+      console.error(err);
       return null;
     }
   };
 
-  // ✅ Local AI Rules Engine
+  // ✅ Local AI Rules Engine (Fallback)
   const getLocalResponse = (userInput) => {
     const q = userInput.toLowerCase();
     const now = new Date();
@@ -144,7 +155,7 @@ export default function AIChat({ records = [], products = [] }) {
       return `💳 စုစုပေါင်းကြွေးကျန်: ${fmt(totalDebt)} Ks`;
     }
     if (q.includes('profit') || q.includes('အမြတ်') || q.includes('အသားတင်')) {
-      return `💰 ${periodLabel}အမြတ်: ${fmt(totalSales - totalExpenses)} Ks\n(အရောင်း: ${fmt(totalSales)} - အသုံးစရိတ်: ${fmt(totalExpenses)})`;
+      return `💰 ${periodLabel}အမြတ်: ${fmt(totalSales - totalExpenses)} Ks`;
     }
     if (q.includes('ဘာတွေ') || q.includes('မေး') || q.includes('ကူညီ')) {
       return '📋 မေးနိုင်သောမေးခွန်းများ:\n• ဒီနေ့/မနေ့က/ဒီတစ်ပတ် အရောင်းဘယ်လောက်လဲ\n• ဘယ်ပစ္စည်းရောင်းအားကောင်းလဲ\n• Stock နည်းတဲ့ပစ္စည်းတွေက ဘာတွေလဲ\n• ကြွေးကျန်ဘယ်လောက်ရှိလဲ\n• အမြတ်ဘယ်လောက်လဲ';
@@ -152,22 +163,29 @@ export default function AIChat({ records = [], products = [] }) {
     return '🤔 နားမလည်ပါ။ "ဘာတွေမေးလို့ရလဲ" လို့ မေးကြည့်ပါ။';
   };
 
+  // ✅ Fixed sendMessage with Cooldown + Duplicate Prevention
   const sendMessage = async (text) => {
+    if (loading) return;
+
     const msg = text || input;
     if (!msg.trim()) return;
+
+    // ✅ Cooldown: minimum 3 seconds between requests
+    const now = Date.now();
+    if (now - lastRequestTime.current < 3000) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '⏳ ခဏစောင့်ပြီး ထပ်မေးပါ (၃ စက္ကန့်)...' }]);
+      return;
+    }
+    lastRequestTime.current = now;
+
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setInput('');
     setLoading(true);
 
     let reply;
-    
     if (useAI && geminiKey) {
       const geminiReply = await callGemini(msg);
-      if (geminiReply) {
-        reply = geminiReply;
-      } else {
-        reply = getLocalResponse(msg) + '\n\n⚠️ (Gemini API error - Local AI response)';
-      }
+      reply = geminiReply || getLocalResponse(msg);
     } else {
       reply = getLocalResponse(msg);
     }
@@ -190,7 +208,7 @@ export default function AIChat({ records = [], products = [] }) {
         <h3 className="text-sm font-black text-emerald-400 flex items-center gap-2">
           <Bot size={18}/> AI Assistant
           <span className={`text-[10px] font-normal ${useAI ? 'text-purple-400' : 'text-slate-500'}`}>
-            {useAI ? 'Gemini AI' : 'Local Engine'}
+            {useAI ? 'Gemini 1.5' : 'Local Engine'}
           </span>
         </h3>
         <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white p-1"><X size={18}/></button>

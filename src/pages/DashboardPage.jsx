@@ -239,6 +239,7 @@ export default function DashboardPage() {
               {change >= 0 ? '+' : ''}{change}%
             </b> (Today: {fmt(todayTotal)} vs Yesterday: {fmt(yesterdayTotal)})
           </div>
+          <AIChat />
         );
       }
       return null;
@@ -275,7 +276,6 @@ export default function DashboardPage() {
             <span className="text-cyan-400 font-bold">{fmt(sale.amount)} Ks</span>
           </div>
         ))}
-        <AIChat />
       </div>
     </div>
   );

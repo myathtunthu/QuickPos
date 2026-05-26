@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   ShoppingCart, PlusCircle, Trash2, Search, ScanBarcode,
-  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle, Package
+  Wallet, X, Printer, Tag, User, Calendar, Loader2, AlertTriangle, Package, CreditCard
 } from 'lucide-react';
 
 export default function EntryPage({ products = [] }) {
@@ -38,6 +38,7 @@ export default function EntryPage({ products = [] }) {
   const [showScanner, setShowScanner] = useState(false);
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const scannerRef = useRef(null);
+  const quantityRef = useRef(null);
 
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [priceType, setPriceType] = useState('retail');
@@ -74,6 +75,11 @@ export default function EntryPage({ products = [] }) {
     const g = globalDiscountType === '%' ? (s - d) * (Number(globalDiscountAmt || 0) / 100) : Number(globalDiscountAmt || 0);
     return { subtotal: s, itemDiscounts: d, globalDisc: g, total: Math.max(s - d - g, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
+
+  // ✅ Auto-set Paid Amount for Credit
+  useEffect(() => {
+    if (paymentMethod === 'Credit') setPaidAmount('0');
+  }, [paymentMethod]);
 
   const selectProduct = (prod) => {
     setSelProdId(prod.id);
@@ -206,8 +212,19 @@ export default function EntryPage({ products = [] }) {
 
   const doPrint = (record) => {
     const items = record.itemsDetail || [];
-    const w = window.open('', '_blank', 'width=380,height=600');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title><style>body{font-family:'Courier New',monospace;font-size:13px;width:340px;margin:10px auto;padding:15px;border:1px dashed #000;background:#fff;}.header{text-align:center;border-bottom:1px dashed #000;padding-bottom:10px;margin-bottom:10px;}.shop-name{font-size:18px;font-weight:bold;}.shop-info{font-size:11px;color:#555;margin:2px 0;}table{width:100%;border-collapse:collapse;margin:10px 0;}th,td{padding:5px 0;border-bottom:1px dotted #ccc;font-size:12px;}th{border-bottom:1px solid #000;text-align:left;}td{text-align:right;}td:first-child{text-align:left;}.total-row{font-weight:bold;font-size:16px;border-top:1px solid #000;padding-top:8px;}.footer{text-align:center;margin-top:15px;font-size:11px;color:#555;}</style></head><body><div class="header"><div class="shop-name">${shopName}</div><div class="shop-info">📞 ${shopPhone}</div><div class="shop-info">📍 ${shopAddress}</div><div class="shop-info">📅 ${record.date || ''}</div></div><table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Total</th></tr></thead><tbody>${items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>${i.unitName||'-'}</td><td>${fmt(i.unitPrice)}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}</tbody></table>${record.globalDiscount>0?`<p style="text-align:right;font-size:12px;">Global Disc: -${fmt(record.globalDiscount)} Ks</p>`:''}<div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div><p style="text-align:right;font-size:12px;">Method: ${record.paymentMethod}</p><p style="text-align:right;font-size:12px;">Paid: ${fmt(record.paidAmount||0)} Ks | Debt: ${fmt(record.remainingDebt||0)} Ks</p><div class="footer">ဝယ်ယူအားပေးမှုကို ကျေးဇူးတင်ပါသည်<br>Thank you!</div><script>window.onload=()=>{window.print();window.close();}</script></body></html>`);
+    const w = window.open('', '_blank', 'width=400,height=650');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
+    <style>body{font-family:'Courier New',monospace;font-size:13px;width:360px;margin:10px auto;padding:15px;border:2px dashed #000;background:#fff;}.header{text-align:center;border-bottom:2px dashed #000;padding-bottom:12px;margin-bottom:12px;}.shop-name{font-size:20px;font-weight:bold;}.shop-info{font-size:11px;color:#555;margin:3px 0;}table{width:100%;border-collapse:collapse;margin:10px 0;}th{text-align:left;border-bottom:1px solid #000;padding:4px 0;font-size:12px;}td{padding:4px 0;font-size:12px;}td:last-child{text-align:right;}.total-row{font-weight:bold;font-size:18px;border-top:2px solid #000;padding-top:10px;margin-top:8px;}.footer{text-align:center;margin-top:15px;font-size:11px;color:#555;}.discount-row{color:#888;font-size:11px;text-align:right;}</style></head><body>
+    <div class="header"><div class="shop-name">${shopName}</div><div class="shop-info">📞 ${shopPhone}</div><div class="shop-info">📍 ${shopAddress}</div><div class="shop-info">📅 ${record.date || ''}</div><div class="shop-info">🧾 ${record.invoiceNo || record.id?.slice(-8) || ''}</div></div>
+    <table><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead><tbody>
+    ${items.map(i => `<tr><td>${i.name}${i.itemDiscountAmt>0?`<br><small style="color:#888;">Disc: -${fmt(i.itemDiscountAmt)}</small>`:''}</td><td>${i.quantity}</td><td>${i.unitName||'-'}${i.priceType!=='retail'?`<br><small>${i.priceType}</small>`:''}</td><td>${fmt(i.unitPrice*i.quantity-(i.itemDiscountAmt||0))}</td></tr>`).join('')}
+    </tbody></table>
+    ${record.globalDiscount>0?`<p class="discount-row">Global Disc: -${fmt(record.globalDiscount)} Ks</p>`:''}
+    <div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div>
+    <p style="text-align:right;font-size:12px;margin:4px 0;">Method: ${record.paymentMethod}</p>
+    <p style="text-align:right;font-size:12px;margin:4px 0;">Paid: ${fmt(record.paidAmount||0)} Ks | Balance: ${fmt(record.remainingDebt||0)} Ks</p>
+    <div class="footer">ဝယ်ယူအားပေးမှုကို ကျေးဇူးတင်ပါသည်<br>Thank you for your purchase!</div>
+    <script>window.onload=()=>{window.print();/*window.close();*/}</script></body></html>`);
     w.document.close();
   };
 
@@ -216,7 +233,11 @@ export default function EntryPage({ products = [] }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-lg sm:text-xl font-black text-cyan-400"><ShoppingCart size={20} className="inline mr-1"/>POS ENTRY</h1>
-        <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-1"><Calendar size={14}/><span className="text-xs font-bold text-cyan-300">{entryDate}</span></div>
+        {/* ✅ Date Picker */}
+        <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-1">
+          <Calendar size={14} className="text-cyan-400"/>
+          <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-28" style={{colorScheme:'dark'}}/>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -257,24 +278,18 @@ export default function EntryPage({ products = [] }) {
             {prodSearch && <button onClick={() => setProdSearch('')} className="absolute right-2 top-1.5 text-slate-500"><X size={14}/></button>}
           </div>
 
-          {/* Product Grid */}
-          {(prodSearch.trim() || selCategory !== 'All') ? (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-48 overflow-y-auto">
-              {filteredProducts.slice(0, 25).map(prod => (
-                <button key={prod.id} onClick={() => selectProduct(prod)} className={`bg-[#0d1120] border-2 rounded-lg p-1.5 text-center transition-all active:scale-95 ${selProdId===prod.id?'border-cyan-400 bg-cyan-900/20':'border-white/5'}`}>
-                  <div className="w-7 h-7 mx-auto bg-cyan-500/10 rounded-md flex items-center justify-center mb-0.5"><Package size={12} className="text-cyan-400"/></div>
-                  <p className="text-[10px] font-bold text-white truncate">{prod.name}</p>
-                  <p className="text-[10px] text-cyan-400 font-bold">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)}</p>
-                  <p className="text-[10px] text-slate-500">({prod.stock})</p>
-                </button>
-              ))}
-              {filteredProducts.length === 0 && <div className="col-span-full text-center text-slate-500 text-xs py-6">No products</div>}
-            </div>
-          ) : (
-            <div className="text-center text-slate-600 text-xs py-6 border border-dashed border-slate-800 rounded-lg">
-              🔍 Search or select category
-            </div>
-          )}
+          {/* ✅ Product Grid - Always show when All category */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-48 overflow-y-auto">
+            {filteredProducts.slice(0, 30).map(prod => (
+              <button key={prod.id} onClick={() => selectProduct(prod)} className={`bg-[#0d1120] border-2 rounded-lg p-1.5 text-center transition-all active:scale-95 ${selProdId===prod.id?'border-cyan-400 bg-cyan-900/20':'border-white/5'}`}>
+                <div className="w-7 h-7 mx-auto bg-cyan-500/10 rounded-md flex items-center justify-center mb-0.5"><Package size={12} className="text-cyan-400"/></div>
+                <p className="text-[10px] font-bold text-white truncate">{prod.name}</p>
+                <p className="text-[10px] text-cyan-400 font-bold">{fmt(prod.packageUnits?.[0]?.prices?.retail || 0)}</p>
+                <p className="text-[10px] text-slate-500">({prod.stock})</p>
+              </button>
+            ))}
+            {filteredProducts.length === 0 && <div className="col-span-full text-center text-slate-500 text-xs py-6">No products found</div>}
+          </div>
 
           {/* Selected Product Detail */}
           {selProdId && selectedUnit && (
@@ -316,16 +331,43 @@ export default function EntryPage({ products = [] }) {
 
               <div className="flex gap-1.5 items-end text-[10px]"><div className="flex-1"><label className="text-[9px] text-slate-500">Global Disc</label><input value={globalDiscountAmt} onChange={e=>setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-full bg-black/40 border border-amber-500/20 rounded-md px-2 py-1.5 text-amber-400"/></div><button onClick={()=>setGlobalDiscountType('%')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='%'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>%</button><button onClick={()=>setGlobalDiscountType('flat')} className={`px-2 py-1.5 rounded text-[10px] font-bold ${globalDiscountType==='flat'?'bg-amber-600 text-white':'bg-black/40 text-slate-400'}`}>Ks</button></div>
               <div className="bg-black/50 border border-cyan-500/20 rounded-lg p-2 space-y-1 text-[10px]"><div className="flex justify-between"><span>Subtotal</span><span>{fmt(cartTotals.subtotal)} Ks</span></div>{(cartTotals.itemDiscounts+cartTotals.globalDisc)>0 && <div className="flex justify-between text-amber-400"><span>Discount</span><span>-{fmt(cartTotals.itemDiscounts+cartTotals.globalDisc)} Ks</span></div>}<div className="flex justify-between text-sm font-black text-cyan-300 border-t border-cyan-500/20 pt-1.5"><span>TOTAL</span><span>{fmt(cartTotals.total)} Ks</span></div></div>
-              <div className="grid grid-cols-4 gap-1">{['Cash','Kpay','Wave','AYAPay'].map(m => (<button key={m} onClick={()=>setPaymentMethod(m)} className={`py-1.5 rounded-md text-[9px] font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>))}</div>
-              <div className="relative"><Wallet className="absolute left-2.5 top-1.5 text-emerald-400" size={12}/><input value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} placeholder="Paid (empty=full)" className="w-full bg-black/40 border border-emerald-500/20 rounded-md pl-8 pr-2 py-1.5 text-[10px] text-emerald-300"/></div>
-              <button onClick={submitTransaction} disabled={loading} className="w-full py-2.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xs font-black flex items-center justify-center gap-1.5">{loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={14}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}</button>
+
+              {/* ✅ Payment Methods - 5 buttons */}
+              <div className="grid grid-cols-5 gap-1">
+                {['Cash','Kpay','Wave','AYAPay','Credit'].map(m => (
+                  <button key={m} onClick={()=>setPaymentMethod(m)} className={`py-1.5 rounded-md text-[8px] font-bold border ${paymentMethod===m?'bg-cyan-600 border-cyan-400 text-white':'bg-black/40 border-white/5 text-slate-400'}`}>{m}</button>
+                ))}
+              </div>
+
+              {/* ✅ Paid Amount - Auto 0 for Credit */}
+              <div className="relative">
+                <Wallet className="absolute left-2.5 top-1.5 text-emerald-400" size={12}/>
+                <input 
+                  value={paidAmount} 
+                  onChange={e => setPaidAmount(e.target.value)} 
+                  placeholder={paymentMethod === 'Credit' ? '0' : 'Paid (empty=full)'} 
+                  className="w-full bg-black/40 border border-emerald-500/20 rounded-md pl-8 pr-2 py-1.5 text-[10px] text-emerald-300"
+                  readOnly={paymentMethod === 'Credit'}
+                />
+              </div>
+
+              {/* ✅ Submit Button - Centered Text */}
+              <button onClick={submitTransaction} disabled={loading} className="w-full py-2.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-xs font-black flex items-center justify-center gap-1.5 text-center">
+                {loading ? <><Loader2 className="animate-spin"/> Processing...</> : <><ShoppingCart size={14}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>}
+              </button>
             </div>
           )}
         </>
       )}
 
       {showScanner && <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-lg bg-[#0d1120] border border-cyan-500/20 rounded-3xl p-6"><div className="flex justify-between mb-5"><h2 className="text-xl font-black"><ScanBarcode className="inline text-cyan-400"/> Scanner</h2><button onClick={()=>setShowScanner(false)}><X/></button></div><div id="barcode-reader" className="overflow-hidden rounded-2xl"/></div></div>}
-      {receiptModal.show && <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 max-h-[90vh] overflow-y-auto"><div className="text-center border-b border-dashed pb-4"><h2 className="text-xl font-black">{shopName}</h2><p className="text-xs text-gray-500">📞 {shopPhone}</p><p className="text-xs text-gray-500">📍 {shopAddress}</p><p className="text-xs text-gray-500 mt-2">{receiptModal.record?.date}</p></div><div className="space-y-2 py-4 text-sm">{(receiptModal.record?.itemsDetail||[]).map((item,i)=>(<div key={i} className="flex justify-between"><span>{item.name} × {item.quantity} ({item.unitName})</span><span>{fmt((item.unitPrice*item.quantity)-(item.itemDiscountAmt||0))}</span></div>))}</div>{(receiptModal.record?.globalDiscount||0)>0 && <p className="text-right text-sm text-gray-500">Disc: -{fmt(receiptModal.record.globalDiscount)} Ks</p>}<div className="border-t pt-3 flex justify-between text-xl font-black"><span>TOTAL</span><span>{fmt(receiptModal.record?.amount)} Ks</span></div><p className="text-sm text-right mt-1">Paid: {fmt(receiptModal.record?.paidAmount||0)} Ks | Debt: {fmt(receiptModal.record?.remainingDebt||0)} Ks</p><div className="grid grid-cols-2 gap-3 mt-4"><button onClick={()=>doPrint(receiptModal.record)} className="py-3 rounded-2xl bg-cyan-600 text-white font-black flex items-center gap-2"><Printer size={18}/> Print</button><button onClick={()=>setReceiptModal({show:false,record:null})} className="py-3 rounded-2xl bg-gray-200 text-black font-black">Close</button></div></div></div>}
+      {receiptModal.show && <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4"><div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 max-h-[90vh] overflow-y-auto"><div className="text-center border-b border-dashed pb-4"><h2 className="text-xl font-black">{shopName}</h2><p className="text-xs text-gray-500">📞 {shopPhone}</p><p className="text-xs text-gray-500">📍 {shopAddress}</p><p className="text-xs text-gray-500 mt-2">{receiptModal.record?.date}</p></div><div className="space-y-2 py-4 text-sm">{(receiptModal.record?.itemsDetail||[]).map((item,i)=>(<div key={i} className="flex justify-between"><span>{item.name} × {item.quantity} ({item.unitName})</span><span>{fmt((item.unitPrice*item.quantity)-(item.itemDiscountAmt||0))}</span></div>))}</div>{(receiptModal.record?.globalDiscount||0)>0 && <p className="text-right text-sm text-gray-500">Disc: -{fmt(receiptModal.record.globalDiscount)} Ks</p>}<div className="border-t pt-3 flex justify-between text-xl font-black"><span>TOTAL</span><span>{fmt(receiptModal.record?.amount)} Ks</span></div><p className="text-sm text-right mt-1">Paid: {fmt(receiptModal.record?.paidAmount||0)} Ks | Debt: {fmt(receiptModal.record?.remainingDebt||0)} Ks</p>
+      
+      {/* ✅ Print Button - Centered */}
+      <div className="flex justify-center mt-4">
+        <button onClick={()=>doPrint(receiptModal.record)} className="px-8 py-3 rounded-2xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 text-center"><Printer size={18}/> Print</button>
+      </div>
+      <button onClick={()=>setReceiptModal({show:false,record:null})} className="w-full mt-2 py-3 rounded-2xl bg-gray-200 text-black font-black text-center">Close</button></div></div>}
     </div>
   );
 }

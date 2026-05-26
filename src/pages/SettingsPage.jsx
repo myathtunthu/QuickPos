@@ -122,7 +122,7 @@ export default function SettingsPage() {
               <p className="font-bold text-blue-400 mb-2">အဆင့် ၄ - Chat ID ရယူပါ</p>
               <p>• သင့် Bot ကို Telegram မှာ ရှာပြီး <b className="text-white">/start</b> လို့ရိုက်ပါ</p>
               <p>• Browser မှာ <b className="text-cyan-400">https://api.telegram.org/botYOUR_TOKEN/getUpdates</b> ကိုဖွင့်ပါ</p>
-              <p>• ပေါ်လာတဲ့ JSON ထဲက <b className="text-white">"chat":{"id":123456789}</b> ဆိုတဲ့ နံပါတ်ကို ကူးပါ</p>
+              <p>• ပေါ်လာတဲ့ JSON ထဲက <b className="text-white">"chat":&#123;"id":123456789&#125;</b> ဆိုတဲ့ နံပါတ်ကို ကူးပါ</p>
               <p>• အဲဒီနံပါတ်ကို <b className="text-cyan-400">Telegram Chat ID</b> အကွက်မှာ ထည့်ပါ</p>
             </div>
           </div>

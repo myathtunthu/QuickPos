@@ -41,47 +41,47 @@ export default function AIChat({ records = [], products = [] }) {
     { icon: DollarSign, text: 'ဒီနေ့အကြွေးဘယ်လောက်ရှိလဲ', color: 'text-rose-400' },
   ];
 
-  // ✅ Fixed Gemini API Call
+  // ✅ Gemini API Call (v1beta + gemini-2.0-flash)
   const callGemini = async (userInput) => {
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{
-                text: `You are QuickPOS AI assistant.\nReply only in Burmese language.\nKeep answers short and helpful.\n\nQuestion:\n${userInput}`
-              }]
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{
+                  text: `You are QuickPOS AI assistant.\nReply only in Burmese language.\nKeep answers short and helpful.\n\nQuestion:\n${userInput}`
+                }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 300
             }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 300
-          }
-        })
+          })
+        }
+      );
+
+      if (response.status === 429) {
+        return '⏳ AI အသုံးပြုသူများနေပါသည်။ ခဏစောင့်ပြီး ထပ်မေးပါ။';
       }
-    );
 
-    if (response.status === 429) {
-      return '⏳ AI အသုံးပြုသူများနေပါသည်။ ခဏစောင့်ပြီး ထပ်မေးပါ။';
-    }
+      if (!response.ok) {
+        console.error('Gemini Error:', response.status);
+        return null;
+      }
 
-    if (!response.ok) {
-      console.error('Gemini Error:', response.status);
+      const data = await response.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } catch (err) {
+      console.error(err);
       return null;
     }
-
-    const data = await response.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-  } catch (err) {
-    console.error(err);
-    return null;
-  }
-};
+  };
 
   // ✅ Local AI Rules Engine (Fallback)
   const getLocalResponse = (userInput) => {
@@ -208,7 +208,7 @@ export default function AIChat({ records = [], products = [] }) {
         <h3 className="text-sm font-black text-emerald-400 flex items-center gap-2">
           <Bot size={18}/> AI Assistant
           <span className={`text-[10px] font-normal ${useAI ? 'text-purple-400' : 'text-slate-500'}`}>
-            {useAI ? 'Gemini 1.5' : 'Local Engine'}
+            {useAI ? 'Gemini 2.0' : 'Local Engine'}
           </span>
         </h3>
         <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-white p-1"><X size={18}/></button>

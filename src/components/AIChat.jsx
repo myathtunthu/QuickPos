@@ -43,45 +43,45 @@ export default function AIChat({ records = [], products = [] }) {
 
   // ✅ Fixed Gemini API Call
   const callGemini = async (userInput) => {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{
-                  text: `You are QuickPOS AI assistant.\nReply only in Burmese language.\nKeep answers short and helpful.\n\nQuestion:\n${userInput}`
-                }]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 300
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{
+                text: `You are QuickPOS AI assistant.\nReply only in Burmese language.\nKeep answers short and helpful.\n\nQuestion:\n${userInput}`
+              }]
             }
-          })
-        }
-      );
-
-      if (response.status === 429) {
-        return '⏳ AI အသုံးပြုသူများနေပါသည်။ ခဏစောင့်ပြီး ထပ်မေးပါ။';
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 300
+          }
+        })
       }
+    );
 
-      if (!response.ok) {
-        console.error('Gemini Error:', response.status);
-        return null;
-      }
+    if (response.status === 429) {
+      return '⏳ AI အသုံးပြုသူများနေပါသည်။ ခဏစောင့်ပြီး ထပ်မေးပါ။';
+    }
 
-      const data = await response.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } catch (err) {
-      console.error(err);
+    if (!response.ok) {
+      console.error('Gemini Error:', response.status);
       return null;
     }
-  };
+
+    const data = await response.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+};
 
   // ✅ Local AI Rules Engine (Fallback)
   const getLocalResponse = (userInput) => {

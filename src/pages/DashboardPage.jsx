@@ -42,7 +42,7 @@ export default function DashboardPage() {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // ✅ Period Filter
+  // Period Filter
   const periodRecs = useMemo(() => {
     const now = Date.now();
     const today = new Date().toDateString();
@@ -55,22 +55,29 @@ export default function DashboardPage() {
     });
   }, [records, dashPeriod]);
 
-  // ✅ Separate by Type
+  // Separate by Type
   const salesRecs = useMemo(() => periodRecs.filter(r => r.type === 'Sale' || r.type === 'sale'), [periodRecs]);
   const purchaseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Purchase' || r.type === 'purchase'), [periodRecs]);
   const expenseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Expense' || r.type === 'expense'), [periodRecs]);
   const paymentRecs = useMemo(() => periodRecs.filter(r => r.type === 'Payment'), [periodRecs]);
 
-  // ✅ Correct Stats
+  // Stats
   const totalSales = useMemo(() => salesRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [salesRecs]);
   const totalPurchases = useMemo(() => purchaseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [purchaseRecs]);
   const totalExpenses = useMemo(() => expenseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [expenseRecs]);
   const totalPayments = useMemo(() => paymentRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [paymentRecs]);
   
-  // ✅ Debt = Only from Sale records (remainingDebt)
-  const totalDebt = useMemo(() => {
+  // ✅ Customer Debt (ရရန်) = Sale Type remainingDebt
+  const totalCustomerDebt = useMemo(() => {
     return records
       .filter(r => r.type === 'Sale' || r.type === 'sale')
+      .reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0);
+  }, [records]);
+
+  // ✅ Supplier Debt (ပေးရန်) = Purchase Type remainingDebt
+  const totalSupplierDebt = useMemo(() => {
+    return records
+      .filter(r => r.type === 'Purchase' || r.type === 'purchase')
       .reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0);
   }, [records]);
 
@@ -78,10 +85,10 @@ export default function DashboardPage() {
   const balance = totalSales - totalPurchases - totalExpenses + totalPayments;
   const profit = totalSales - totalPurchases - totalExpenses;
 
-  // ✅ Low Stock
+  // Low Stock
   const lowStock = useMemo(() => products.filter(p => (Number(p.stock) || 0) <= (Number(p.minStock) || 5)), [products]);
 
-  // ✅ Top Products
+  // Top Products
   const topProducts = useMemo(() => {
     const map = {};
     salesRecs.forEach(r => {
@@ -94,7 +101,7 @@ export default function DashboardPage() {
     return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [salesRecs]);
 
-  // ✅ Payment Methods
+  // Payment Methods
   const payments = useMemo(() => {
     const methods = { Cash: 0, Kpay: 0, Wave: 0, AYAPay: 0 };
     salesRecs.forEach(r => {
@@ -104,7 +111,7 @@ export default function DashboardPage() {
     return methods;
   }, [salesRecs]);
 
-  // ✅ Chart Data (7 Days)
+  // Chart Data
   const chartData = useMemo(() => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -123,19 +130,20 @@ export default function DashboardPage() {
     return days;
   }, [records]);
 
-  // ✅ Recent Sales
+  // Recent Sales
   const recentSales = useMemo(() => salesRecs.slice(-5).reverse(), [salesRecs]);
 
-  // ✅ AI Insights
+  // AI Insights
   const insights = useMemo(() => {
     const ins = [];
     if (totalSales > 0) ins.push(`💰 Total sales: ${fmt(totalSales)} Ks`);
     if (topProducts.length > 0) ins.push(`🏆 Top seller: ${topProducts[0]?.name}`);
     if (lowStock.length > 0) ins.push(`⚠️ ${lowStock.length} products low in stock`);
     if (profit > 0) ins.push(`📈 Net profit: ${fmt(profit)} Ks`);
-    if (totalDebt > 0) ins.push(`💳 Outstanding debt: ${fmt(totalDebt)} Ks`);
+    if (totalCustomerDebt > 0) ins.push(`📥 ရရန်: ${fmt(totalCustomerDebt)} Ks`);
+    if (totalSupplierDebt > 0) ins.push(`📤 ပေးရန်: ${fmt(totalSupplierDebt)} Ks`);
     return ins.length > 0 ? ins : ['Start selling to see insights 📊'];
-  }, [totalSales, lowStock, topProducts, profit, totalDebt]);
+  }, [totalSales, lowStock, topProducts, profit, totalCustomerDebt, totalSupplierDebt]);
 
   if (dataLoading) {
     return (
@@ -203,7 +211,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - 6 Cards */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
           <p className="text-xs text-slate-500">Sales</p>
@@ -214,12 +222,20 @@ export default function DashboardPage() {
           <p className={`text-lg font-black ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{fmt(profit)}</p>
         </div>
         <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
-          <p className="text-xs text-slate-500">Debt (Sales)</p>
-          <p className={`text-lg font-black ${totalDebt > 0 ? 'text-rose-400' : 'text-slate-500'}`}>{fmt(totalDebt)}</p>
+          <p className="text-xs text-slate-500">📥 ရရန် (Customer)</p>
+          <p className={`text-lg font-black ${totalCustomerDebt > 0 ? 'text-rose-400' : 'text-slate-500'}`}>{fmt(totalCustomerDebt)}</p>
+        </div>
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">📤 ပေးရန် (Supplier)</p>
+          <p className={`text-lg font-black ${totalSupplierDebt > 0 ? 'text-amber-400' : 'text-slate-500'}`}>{fmt(totalSupplierDebt)}</p>
         </div>
         <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
           <p className="text-xs text-slate-500">Expenses</p>
           <p className="text-lg font-black text-amber-400">{fmt(totalExpenses)}</p>
+        </div>
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">Purchases</p>
+          <p className="text-lg font-black text-blue-400">{fmt(totalPurchases)}</p>
         </div>
       </div>
 
@@ -278,7 +294,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ✅ AI Chat */}
+      {/* AI Chat */}
       <AIChat records={records} products={products} />
     </div>
   );

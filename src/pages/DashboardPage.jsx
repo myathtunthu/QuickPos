@@ -42,6 +42,7 @@ export default function DashboardPage() {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
+  // ✅ Period Filter
   const periodRecs = useMemo(() => {
     const now = Date.now();
     const today = new Date().toDateString();
@@ -54,19 +55,33 @@ export default function DashboardPage() {
     });
   }, [records, dashPeriod]);
 
+  // ✅ Separate by Type
   const salesRecs = useMemo(() => periodRecs.filter(r => r.type === 'Sale' || r.type === 'sale'), [periodRecs]);
   const purchaseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Purchase' || r.type === 'purchase'), [periodRecs]);
   const expenseRecs = useMemo(() => periodRecs.filter(r => r.type === 'Expense' || r.type === 'expense'), [periodRecs]);
+  const paymentRecs = useMemo(() => periodRecs.filter(r => r.type === 'Payment'), [periodRecs]);
 
+  // ✅ Correct Stats
   const totalSales = useMemo(() => salesRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [salesRecs]);
   const totalPurchases = useMemo(() => purchaseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [purchaseRecs]);
   const totalExpenses = useMemo(() => expenseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [expenseRecs]);
-  const totalDebt = useMemo(() => records.reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0), [records]);
-  const orderCount = useMemo(() => salesRecs.length, [salesRecs]);
-  const balance = totalSales - totalPurchases - totalExpenses;
+  const totalPayments = useMemo(() => paymentRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [paymentRecs]);
+  
+  // ✅ Debt = Only from Sale records (remainingDebt)
+  const totalDebt = useMemo(() => {
+    return records
+      .filter(r => r.type === 'Sale' || r.type === 'sale')
+      .reduce((s, r) => s + (Number(r.remainingDebt) || 0), 0);
+  }, [records]);
 
+  const orderCount = useMemo(() => salesRecs.length, [salesRecs]);
+  const balance = totalSales - totalPurchases - totalExpenses + totalPayments;
+  const profit = totalSales - totalPurchases - totalExpenses;
+
+  // ✅ Low Stock
   const lowStock = useMemo(() => products.filter(p => (Number(p.stock) || 0) <= (Number(p.minStock) || 5)), [products]);
 
+  // ✅ Top Products
   const topProducts = useMemo(() => {
     const map = {};
     salesRecs.forEach(r => {
@@ -79,6 +94,7 @@ export default function DashboardPage() {
     return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [salesRecs]);
 
+  // ✅ Payment Methods
   const payments = useMemo(() => {
     const methods = { Cash: 0, Kpay: 0, Wave: 0, AYAPay: 0 };
     salesRecs.forEach(r => {
@@ -88,6 +104,7 @@ export default function DashboardPage() {
     return methods;
   }, [salesRecs]);
 
+  // ✅ Chart Data (7 Days)
   const chartData = useMemo(() => {
     const days = [];
     for (let i = 6; i >= 0; i--) {
@@ -99,23 +116,26 @@ export default function DashboardPage() {
         return new Date(ts).toDateString() === ds;
       });
       const sales = dayRecs.filter(r => r.type === 'Sale' || r.type === 'sale').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+      const purchases = dayRecs.filter(r => r.type === 'Purchase' || r.type === 'purchase').reduce((s, r) => s + (Number(r.amount) || 0), 0);
       const expenses = dayRecs.filter(r => r.type === 'Expense' || r.type === 'expense').reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      days.push({ day: dayName, sales, expenses });
+      days.push({ day: dayName, sales, purchases, expenses });
     }
     return days;
   }, [records]);
 
+  // ✅ Recent Sales
   const recentSales = useMemo(() => salesRecs.slice(-5).reverse(), [salesRecs]);
 
+  // ✅ AI Insights
   const insights = useMemo(() => {
     const ins = [];
-    if (totalSales > 0) ins.push(`💰 Total sales: ${fmt(totalSales)} Ks this period`);
+    if (totalSales > 0) ins.push(`💰 Total sales: ${fmt(totalSales)} Ks`);
     if (topProducts.length > 0) ins.push(`🏆 Top seller: ${topProducts[0]?.name}`);
     if (lowStock.length > 0) ins.push(`⚠️ ${lowStock.length} products low in stock`);
-    if (balance > 0) ins.push(`📈 Net balance: ${fmt(balance)} Ks`);
+    if (profit > 0) ins.push(`📈 Net profit: ${fmt(profit)} Ks`);
     if (totalDebt > 0) ins.push(`💳 Outstanding debt: ${fmt(totalDebt)} Ks`);
     return ins.length > 0 ? ins : ['Start selling to see insights 📊'];
-  }, [totalSales, lowStock, topProducts, balance, totalDebt]);
+  }, [totalSales, lowStock, topProducts, profit, totalDebt]);
 
   if (dataLoading) {
     return (
@@ -156,7 +176,7 @@ export default function DashboardPage() {
 
       {/* Chart */}
       <div className="bg-[#111827] rounded-2xl p-4 border border-cyan-500/10">
-        <h2 className="text-sm font-black mb-3">📈 Sales vs Expenses (7 Days)</h2>
+        <h2 className="text-sm font-black mb-3">📈 Sales vs Purchases vs Expenses (7 Days)</h2>
         <div className="h-40">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
@@ -170,21 +190,37 @@ export default function DashboardPage() {
               <XAxis dataKey="day" stroke="#64748b" fontSize={10}/>
               <YAxis stroke="#64748b" fontSize={10}/>
               <Tooltip contentStyle={{background:'#020617',border:'1px solid #22d3ee22',borderRadius:'12px',fontSize:'11px'}}/>
-              <Area type="monotone" dataKey="sales" stroke="#22d3ee" fill="url(#grd)" strokeWidth={2}/>
-              <Line type="monotone" dataKey="expenses" stroke="#fb7185" strokeWidth={2}/>
+              <Area type="monotone" dataKey="sales" stroke="#22d3ee" fill="url(#grd)" strokeWidth={2} name="Sales"/>
+              <Line type="monotone" dataKey="purchases" stroke="#3b82f6" strokeWidth={2} name="Purchases"/>
+              <Line type="monotone" dataKey="expenses" stroke="#fb7185" strokeWidth={2} name="Expenses"/>
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+        <div className="flex justify-center gap-4 mt-2 text-xs">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-cyan-400"/> Sales</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"/> Purchases</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-rose-400"/> Expenses</span>
         </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-2">
-        {[{ label:'Sales', value:totalSales, color:'text-cyan-400' },{ label:'Profit', value:balance, color:'text-emerald-400' },{ label:'Debt', value:totalDebt, color:'text-rose-400' },{ label:'Expenses', value:totalExpenses, color:'text-amber-400' }].map((item,i) => (
-          <div key={i} className="bg-[#111827] rounded-xl p-3 border border-white/5">
-            <p className="text-xs text-slate-500">{item.label}</p>
-            <p className={`text-lg font-black mt-1 ${item.color}`}>{fmt(item.value)}</p>
-          </div>
-        ))}
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">Sales</p>
+          <p className="text-lg font-black text-cyan-400">{fmt(totalSales)}</p>
+        </div>
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">Profit</p>
+          <p className={`text-lg font-black ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{fmt(profit)}</p>
+        </div>
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">Debt (Sales)</p>
+          <p className={`text-lg font-black ${totalDebt > 0 ? 'text-rose-400' : 'text-slate-500'}`}>{fmt(totalDebt)}</p>
+        </div>
+        <div className="bg-[#111827] rounded-xl p-3 border border-white/5">
+          <p className="text-xs text-slate-500">Expenses</p>
+          <p className="text-lg font-black text-amber-400">{fmt(totalExpenses)}</p>
+        </div>
       </div>
 
       {/* Payment Methods */}

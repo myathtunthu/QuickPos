@@ -1,23 +1,18 @@
-export default function EntryTabs({ activeTab, onTabChange }) {
-  const tabs = [
-    { id: 'Sale', label: 'Sale', color: 'cyan' },
-    { id: 'Purchase', label: 'Purchase', color: 'amber' },
-    { id: 'Expense', label: 'Expense', color: 'rose' }
-  ];
-
+export default function EntryTabs({ entryTab, setEntryTab }) {
+  const tabs = ['Sale', 'Purchase', 'Expense'];
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-3 gap-2">
       {tabs.map(tab => (
         <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={`py-3 rounded-xl font-black text-sm transition-all ${
-            activeTab === tab.id
-              ? `bg-${tab.color}-600 text-white shadow-lg`
-              : 'bg-[#0f172a] text-slate-400 border border-white/5'
+          key={tab}
+          onClick={() => setEntryTab(tab)}
+          className={`py-1.5 rounded-lg font-black text-xs border transition-all ${
+            entryTab === tab
+              ? 'bg-cyan-600 border-cyan-400 text-white'
+              : 'bg-[#0d1120] border-white/5 text-slate-500'
           }`}
         >
-          {tab.label}
+          {tab}
         </button>
       ))}
     </div>

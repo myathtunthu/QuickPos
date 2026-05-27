@@ -1,31 +1,102 @@
-import { ScanBarcode } from 'lucide-react';
+import { useState } from 'react';
+import { ScanBarcode, X } from 'lucide-react';
+import BarcodeScannerModal from './BarcodeScannerModal';
+import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 
-export default function BarcodeSection({ onScan, onOpenScanner }) {
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      onScan(e.target.value);
-      e.target.value = '';
+export default function BarcodeSection({ products, onBarcodeScanned, entryTab }) {
+  const [manualInput, setManualInput] = useState('');
+
+  const handleScan = (code) => {
+    if (!code) return;
+    // Search in all product's packageUnits barcodes
+    for (const prod of products) {
+      if (prod.packageUnits && Array.isArray(prod.packageUnits)) {
+        for (const unit of prod.packageUnits) {
+          const barcodes = unit.barcodes || {};
+          for (const [priceType, barcodeVal] of Object.entries(barcodes)) {
+            if (barcodeVal === code) {
+              // Found product, unit, priceType
+              onBarcodeScanned({
+                product: prod,
+                unit,
+                priceType,
+                tab: entryTab
+              });
+              return;
+            }
+          }
+        }
+      }
     }
+    // Fallback: try product primary barcode (if any)
+    const prod = products.find(p => p.barcode === code);
+    if (prod) {
+      const defaultUnit = prod.packageUnits?.[0];
+      if (defaultUnit) {
+        onBarcodeScanned({
+          product: prod,
+          unit: defaultUnit,
+          priceType: entryTab === 'Sale' ? 'retail' : undefined,
+          tab: entryTab
+        });
+        return;
+      }
+    }
+    // Error beep
+    playBeep('error');
+  };
+
+  const { showScanner, startScanner, stopScanner, initScanner } = useBarcodeScanner(handleScan);
+
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    handleScan(manualInput);
+    setManualInput('');
   };
 
   return (
-    <div className="flex gap-2 flex-1 mb-4">
-      <div className="relative flex-1">
-        <ScanBarcode className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-400" />
-        <input
-          id="barcode-input"
-          type="text"
-          onKeyDown={handleKeyDown}
-          placeholder="Scan or type barcode..."
-          className="w-full bg-[#0f172a] border border-blue-500/20 rounded-xl pl-10 pr-3 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
-        />
+    <>
+      <div className="flex gap-1.5">
+        <div className="relative flex-1">
+          <ScanBarcode className="absolute left-2.5 top-2 text-blue-500" size={14} />
+          <input
+            value={manualInput}
+            onChange={e => setManualInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleManualSubmit(e); }}
+            placeholder="Scan barcode or type"
+            className="w-full bg-black/40 border border-blue-500/20 rounded-lg pl-8 pr-2 py-2 text-xs text-white outline-none"
+          />
+        </div>
+        <button
+          onClick={startScanner}
+          className="px-2.5 bg-blue-600 rounded-lg flex items-center"
+        >
+          <ScanBarcode size={16} />
+        </button>
       </div>
-      <button
-        onClick={onOpenScanner}
-        className="px-4 bg-blue-600 rounded-xl text-white font-bold hover:bg-blue-500 transition-colors"
-      >
-        <ScanBarcode className="w-5 h-5" />
-      </button>
-    </div>
+      {showScanner && (
+        <BarcodeScannerModal
+          onClose={stopScanner}
+          initScanner={initScanner}
+        />
+      )}
+    </>
   );
+}
+
+// Helper beep
+function playBeep(type = 'success') {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type === 'success' ? 'sine' : 'square';
+    osc.frequency.value = type === 'success' ? 900 : 180;
+    gain.gain.value = 0.15;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {}
 }

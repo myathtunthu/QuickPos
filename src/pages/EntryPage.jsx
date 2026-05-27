@@ -4,7 +4,7 @@ import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
 
-// Components (ခွဲထုတ်ထားတဲ့)
+// Components
 import EntryTabs from '../components/entry/EntryTabs';
 import ProductSearch from '../components/entry/ProductSearch';
 import CartSection from '../components/entry/CartSection';
@@ -24,7 +24,7 @@ export default function EntryPage() {
   const [discount, setDiscount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Load Products (Optimized)
+  // Load Products
   useEffect(() => {
     if (!tenantId) return;
     const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
@@ -107,18 +107,12 @@ export default function EntryPage() {
         <EntryTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
-          {/* Product Area */}
           <div className="lg:col-span-7">
-            {activeTab === 'products' && (
-              <ProductSearch products={products} addToCart={addToCart} />
-            )}
-            {activeTab === 'barcode' && (
-              <BarcodeSection products={products} addToCart={addToCart} />
-            )}
+            {activeTab === 'products' && <ProductSearch products={products} addToCart={addToCart} />}
+            {activeTab === 'barcode' && <BarcodeSection products={products} addToCart={addToCart} />}
             {activeTab === 'hold' && <HoldOrders heldOrders={heldOrders} />}
           </div>
 
-          {/* Cart Area */}
           <div className="lg:col-span-5">
             <CartSection
               cart={cart}

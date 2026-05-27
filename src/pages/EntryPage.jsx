@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
+import { Package } from 'lucide-react';
 
-// Components
 import EntryTabs from '../components/entry/EntryTabs';
 import ProductSearch from '../components/entry/ProductSearch';
 import CartSection from '../components/entry/CartSection';
@@ -24,7 +24,6 @@ export default function EntryPage() {
   const [discount, setDiscount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Load Products
   useEffect(() => {
     if (!tenantId) return;
     const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
@@ -93,9 +92,7 @@ export default function EntryPage() {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-cyan-400">Loading POS System...</div>;
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-cyan-400">Loading POS...</div>;
 
   return (
     <div className="min-h-screen bg-[#060816] text-white pb-20">

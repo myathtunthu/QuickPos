@@ -1,58 +1,48 @@
-import { Wallet, CreditCard } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 
-export default function PaymentSection({ 
-  total, 
-  paymentMethod, 
-  setPaymentMethod, 
-  paidAmount, 
-  setPaidAmount, 
-  onSubmit, 
-  isLoading 
+export default function PaymentSection({
+  paymentMethod,
+  setPaymentMethod,
+  paidAmount,
+  setPaidAmount,
+  total,
+  fmt
 }) {
   const methods = ['Cash', 'Kpay', 'Wave', 'AYAPay', 'Credit'];
-  const fmt = (n) => (Number(n) || 0).toLocaleString();
 
   return (
-    <div className="bg-[#0f172a] rounded-2xl p-4 border border-cyan-500/20">
-      <h3 className="font-bold text-white mb-3 flex items-center gap-2">
-        <CreditCard size={16} className="text-cyan-400" /> Payment
-      </h3>
-      
-      <div className="grid grid-cols-5 gap-1 mb-4">
+    <div className="space-y-1">
+      <div className="grid grid-cols-5 gap-1">
         {methods.map(m => (
           <button
             key={m}
-            onClick={() => setPaymentMethod(m)}
-            className={`py-2 rounded-lg text-xs font-bold transition-all ${
+            onClick={() => {
+              setPaymentMethod(m);
+              if (m === 'Credit') setPaidAmount('0');
+            }}
+            className={`py-1.5 rounded-md text-[8px] font-bold border transition-all ${
               paymentMethod === m
-                ? 'bg-cyan-600 text-white'
-                : 'bg-black/40 text-slate-400 border border-white/5'
+                ? 'bg-cyan-600 border-cyan-400 text-white'
+                : 'bg-black/40 border-white/5 text-slate-400'
             }`}
           >
             {m}
           </button>
         ))}
       </div>
-      
-      <div className="relative mb-4">
-        <Wallet className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-emerald-400" />
+      <div className="relative">
+        <Wallet className="absolute left-2.5 top-1.5 text-emerald-400" size={12} />
         <input
-          type="number"
           value={paidAmount}
-          onChange={(e) => setPaidAmount(e.target.value)}
-          placeholder={paymentMethod === 'Credit' ? '0 (Credit Sale)' : `Enter amount (Total: ${fmt(total)} Ks)`}
+          onChange={e => setPaidAmount(e.target.value)}
+          placeholder={paymentMethod === 'Credit' ? '0' : `Paid (default ${fmt(total)})`}
+          className="w-full bg-black/40 border border-emerald-500/20 rounded-md pl-8 pr-2 py-1.5 text-[10px] text-emerald-300"
           readOnly={paymentMethod === 'Credit'}
-          className="w-full bg-black/40 border border-emerald-500/20 rounded-xl pl-10 pr-3 py-3 text-white placeholder-slate-500"
         />
+        {paymentMethod === 'Credit' && (
+          <p className="text-[9px] text-rose-400 mt-0.5">Credit: paid amount is 0</p>
+        )}
       </div>
-      
-      <button
-        onClick={onSubmit}
-        disabled={isLoading}
-        className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-      >
-        {isLoading ? 'Processing...' : `Complete ${paymentMethod === 'Credit' ? 'Credit' : ''} Sale`}
-      </button>
     </div>
   );
 }

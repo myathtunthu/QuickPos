@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { collection, doc, writeBatch, serverTimestamp, query, where, getDocs, orderBy, limit, startAfter } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { collection, doc, writeBatch, serverTimestamp, query, where, getDocs, orderBy, limit, addDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +8,7 @@ import {
   ShoppingCart, Loader2, Save, Archive, Trash2, Printer, 
   User, ScanBarcode, Search, X, Package, Plus, Minus,
   Wallet, CreditCard, AlertTriangle, Clock, TrendingUp,
-  Zap, Edit2, ChevronLeft, ChevronRight, QrCode
+  Zap, Edit2
 } from 'lucide-react';
 
 // ============================================

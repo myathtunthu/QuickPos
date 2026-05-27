@@ -1,59 +1,46 @@
-import { useState, useEffect } from 'react';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export function useHoldOrders(tenantId) {
-  const [holdOrders, setHoldOrders] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const loadHoldOrders = async () => {
+  useEffect(() => {
     if (!tenantId) return;
+    const q = query(
+      collection(db, 'heldOrders'),
+      where('tenantId', '==', tenantId),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOrders(list);
+    });
+    return () => unsubscribe();
+  }, [tenantId]);
+
+  const holdOrder = useCallback(async (orderData) => {
     setLoading(true);
     try {
-      const q = query(
-        collection(db, 'held_orders'),
-        where('tenantId', '==', tenantId),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      setHoldOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      console.error("Error loading hold orders:", error);
+      await addDoc(collection(db, 'heldOrders'), {
+        ...orderData,
+        tenantId,
+        createdAt: serverTimestamp()
+      });
     } finally {
       setLoading(false);
     }
-  };
-
-  const saveHoldOrder = async (orderData) => {
-    if (!tenantId) return;
-    try {
-      await addDoc(collection(db, 'held_orders'), {
-        ...orderData,
-        tenantId,
-        createdAt: new Date().toISOString()
-      });
-      await loadHoldOrders();
-      return true;
-    } catch (error) {
-      console.error("Error saving hold order:", error);
-      return false;
-    }
-  };
-
-  const deleteHoldOrder = async (orderId) => {
-    try {
-      await deleteDoc(doc(db, 'held_orders', orderId));
-      await loadHoldOrders();
-      return true;
-    } catch (error) {
-      console.error("Error deleting hold order:", error);
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    loadHoldOrders();
   }, [tenantId]);
 
-  return { holdOrders, loading, saveHoldOrder, deleteHoldOrder, loadHoldOrders };
+  const deleteOrder = useCallback(async (id) => {
+    setLoading(true);
+    try {
+      await deleteDoc(doc(db, 'heldOrders', id));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { orders, loading, holdOrder, deleteOrder };
 }

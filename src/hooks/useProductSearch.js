@@ -23,7 +23,7 @@ export function useProductSearch(products) {
         p.barcode?.includes(term)
       );
     }
-    return result;
+    return result.slice(0, 100);
   }, [products, searchTerm, selectedCategory]);
 
   const selectProduct = (product, unit = null) => {
@@ -35,6 +35,7 @@ export function useProductSearch(products) {
   const clearSelection = () => {
     setSelectedProduct(null);
     setSelectedUnit(null);
+    setSelectedPriceType('retail');
     setSearchTerm('');
   };
 
@@ -42,7 +43,6 @@ export function useProductSearch(products) {
     searchTerm,
     setSearchTerm,
     selectedProduct,
-    setSelectedProduct,
     selectedUnit,
     setSelectedUnit,
     selectedPriceType,

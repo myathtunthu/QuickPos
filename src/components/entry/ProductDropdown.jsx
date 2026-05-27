@@ -1,103 +1,60 @@
-import { useState, useMemo } from 'react';
-import { Search, Package, X } from 'lucide-react';
+import { FixedSizeGrid as Grid } from 'react-window';
+import { Package } from 'lucide-react';
 
-export default function ProductDropdown({ 
-  products, 
-  searchTerm, 
-  setSearchTerm, 
-  onSelectProduct 
+export default function ProductDropdown({
+  products,
+  selectedId,
+  onSelect,
+  fmt // number formatting function
 }) {
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  
-  const categories = useMemo(() => 
-    ['All', ...new Set(products.map(p => p.category).filter(Boolean))]
-  , [products]);
-  
-  const filteredProducts = useMemo(() => {
-    let result = products;
-    if (selectedCategory !== 'All') {
-      result = result.filter(p => p.category === selectedCategory);
-    }
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(p => 
-        p.name.toLowerCase().includes(term) || 
-        p.barcode?.includes(term)
-      );
-    }
-    return result.slice(0, 50);
-  }, [products, searchTerm, selectedCategory]);
+  const COL_COUNT = 4;
+  const ROW_HEIGHT = 90;
+  const GAP = 4;
+
+  if (products.length === 0) {
+    return <div className="text-center text-slate-500 text-xs py-6">No products found</div>;
+  }
+
+  const Cell = ({ columnIndex, rowIndex, style }) => {
+    const idx = rowIndex * COL_COUNT + columnIndex;
+    if (idx >= products.length) return null;
+    const prod = products[idx];
+    const isSelected = selectedId === prod.id;
+    return (
+      <div style={{ ...style, padding: GAP / 2 }}>
+        <button
+          onClick={() => onSelect(prod)}
+          className={`h-full w-full bg-[#0d1120] border-2 rounded-lg p-1.5 text-center transition-all active:scale-95 ${
+            isSelected ? 'border-cyan-400 bg-cyan-900/20' : 'border-white/5'
+          }`}
+        >
+          <div className="w-7 h-7 mx-auto bg-cyan-500/10 rounded-md flex items-center justify-center mb-0.5">
+            <Package size={12} className="text-cyan-400" />
+          </div>
+          <p className="text-[10px] font-bold text-white truncate">{prod.name}</p>
+          <p className="text-[10px] text-cyan-400 font-bold">
+            {fmt(prod.packageUnits?.[0]?.prices?.retail || 0)}
+          </p>
+          <p className="text-[9px] text-slate-500">({prod.stockBase})</p>
+        </button>
+      </div>
+    );
+  };
+
+  const rowCount = Math.ceil(products.length / COL_COUNT);
+  const height = rowCount * ROW_HEIGHT > 240 ? 240 : rowCount * ROW_HEIGHT; // max 240px height
 
   return (
-    <div className="relative flex-1">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          id="product-search"
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search products..."
-          className="w-full bg-[#0f172a] border border-cyan-500/20 rounded-xl pl-10 pr-10 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-        />
-        {searchTerm && (
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 transform -translate-y-1/2"
-          >
-            <X className="w-4 h-4 text-slate-400" />
-          </button>
-        )}
-      </div>
-      
-      {/* Categories */}
-      <div className="flex gap-2 mt-3 overflow-x-auto pb-2 scrollbar-hide">
-        {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-              selectedCategory === cat
-                ? 'bg-cyan-600 text-white'
-                : 'bg-[#0f172a] text-slate-400 border border-white/5'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-      
-      {/* Product List */}
-      {filteredProducts.length > 0 && (
-        <div className="mt-3 bg-[#0f172a] rounded-xl border border-cyan-500/20 max-h-80 overflow-y-auto">
-          {filteredProducts.map(product => (
-            <div
-              key={product.id}
-              onClick={() => onSelectProduct(product)}
-              className="flex items-center gap-3 p-3 hover:bg-cyan-500/10 cursor-pointer border-b border-white/5 transition-colors"
-            >
-              <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center">
-                <Package className="w-4 h-4 text-cyan-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{product.name}</p>
-                <p className="text-xs text-slate-400">Stock: {product.stock || 0} {product.baseUnit || 'pcs'}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-bold text-cyan-400">
-                  {(product.packageUnits?.[0]?.prices?.retail || 0).toLocaleString()} Ks
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      
-      {filteredProducts.length === 0 && searchTerm && (
-        <div className="mt-3 bg-[#0f172a] rounded-xl p-8 text-center border border-cyan-500/20">
-          <p className="text-slate-400 text-sm">No products found for "{searchTerm}"</p>
-        </div>
-      )}
-    </div>
+    <Grid
+      columnCount={COL_COUNT}
+      columnWidth={100 / COL_COUNT + '%'}
+      height={height}
+      rowCount={rowCount}
+      rowHeight={ROW_HEIGHT}
+      width="100%"
+      className="custom-scrollbar"
+    >
+      {Cell}
+    </Grid>
   );
 }

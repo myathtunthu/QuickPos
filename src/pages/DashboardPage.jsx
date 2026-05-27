@@ -192,7 +192,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
           <h1 className="text-3xl font-black text-cyan-400 tracking-wider flex items-center gap-3">
             <Zap size={28} className="drop-shadow-[0_0_12px_rgb(6,182,212)]"/>
-            NEXUS<span className="text-white">POS</span>
+            Quick<span className="text-white">POS</span>
           </h1>
 
           <div className="flex flex-col sm:flex-row gap-3">

@@ -1,38 +1,40 @@
-import { useState, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 
-export function useBarcodeScanner(products, onProductFound) {
-  const [isScanning, setIsScanning] = useState(false);
+export function useBarcodeScanner(onScanSuccess) {
+  const [showScanner, setShowScanner] = useState(false);
+  const scannerRef = useRef(null);
 
-  const handleBarcodeScan = useCallback((barcode) => {
-    if (!barcode || !products.length) return false;
-    
-    const foundProduct = products.find(product => {
-      if (product.barcode === barcode) return true;
-      if (product.packageUnits) {
-        return product.packageUnits.some(unit => 
-          unit.barcodes && Object.values(unit.barcodes).includes(barcode)
-        );
-      }
-      return false;
-    });
-    
-    if (foundProduct) {
-      let scannedUnit = foundProduct.packageUnits?.[0];
-      if (foundProduct.packageUnits) {
-        for (const unit of foundProduct.packageUnits) {
-          if (unit.barcodes && Object.values(unit.barcodes).includes(barcode)) {
-            scannedUnit = unit;
-            break;
-          }
-        }
-      }
-      onProductFound(foundProduct, scannedUnit);
-      setIsScanning(true);
-      setTimeout(() => setIsScanning(false), 500);
-      return true;
+  const startScanner = useCallback(() => {
+    setShowScanner(true);
+  }, []);
+
+  const stopScanner = useCallback(() => {
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {});
+      scannerRef.current = null;
     }
-    return false;
-  }, [products, onProductFound]);
+    setShowScanner(false);
+  }, []);
 
-  return { handleBarcodeScan, isScanning };
+  const initScanner = useCallback(async (elementId) => {
+    try {
+      const html5QrCode = new Html5Qrcode(elementId);
+      scannerRef.current = html5QrCode;
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          onScanSuccess(decodedText);
+          stopScanner();
+        },
+        () => {}
+      );
+    } catch (err) {
+      console.error('Scanner error:', err);
+      stopScanner();
+    }
+  }, [onScanSuccess, stopScanner]);
+
+  return { showScanner, startScanner, stopScanner, initScanner };
 }

@@ -12,19 +12,28 @@ export default function ProductSearch({ products, addToCart }) {
   const debouncedSearch = useDebounce(searchTerm, 300);
 
   const filteredProducts = useMemo(() => {
-    if (!debouncedSearch) return products.slice(0, 30);
+    if (!debouncedSearch.trim()) return products.slice(0, 50);
 
     return products
       .filter(p => 
         p.name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        p.barcode?.includes(debouncedSearch)
+        p.barcode?.toLowerCase().includes(debouncedSearch.toLowerCase())
       )
-      .slice(0, 30);
+      .slice(0, 50);
   }, [products, debouncedSearch]);
+
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    setSelectedUnit(product.units?.[0]?.name || 'ဘူး');
+    setQty(1);
+  };
 
   const handleAdd = () => {
     if (!selectedProduct || !selectedUnit || qty < 1) return;
     addToCart(selectedProduct, selectedUnit, priceType, qty);
+    
+    // Clear selection after adding
+    setSelectedProduct(null);
     setQty(1);
   };
 
@@ -32,7 +41,7 @@ export default function ProductSearch({ products, addToCart }) {
 
   return (
     <div className="space-y-4">
-      {/* Search Bar */}
+      {/* Search */}
       <div className="relative">
         <Search className="absolute left-4 top-4 text-slate-400" size={20} />
         <input
@@ -45,57 +54,56 @@ export default function ProductSearch({ products, addToCart }) {
       </div>
 
       {/* Product List */}
-      <div className="max-h-[520px] overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+      <div className="max-h-[420px] overflow-y-auto pr-2 space-y-2 custom-scrollbar">
         {filteredProducts.map(product => (
           <div
             key={product.id}
-            onClick={() => {
-              setSelectedProduct(product);
-              setSelectedUnit(product.units?.[0]?.name || 'ဘူး');
-            }}
+            onClick={() => handleSelectProduct(product)}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
               selectedProduct?.id === product.id 
                 ? 'border-cyan-400 bg-cyan-500/10' 
                 : 'border-white/10 hover:border-white/20 bg-[#0f172a]'
             }`}
           >
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <div>
-                <p className="font-bold text-white">{product.name}</p>
+                <p className="font-bold">{product.name}</p>
                 <p className="text-xs text-slate-400">Stock: {product.stockBase || 0} ဘူး</p>
               </div>
-              <div className="text-right text-cyan-400 font-mono text-sm">
-                {product.units?.[0]?.prices?.retail?.toLocaleString()} Ks
+              <div className="text-right">
+                <p className="text-cyan-400 font-bold text-sm">
+                  {product.units?.[0]?.prices?.retail?.toLocaleString()} Ks
+                </p>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Unit & Price Selection */}
+      {/* Selection Panel */}
       {selectedProduct && (
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-[#0f172a] border border-cyan-500/30 rounded-3xl p-5 space-y-4"
+          className="bg-[#0f172a] border border-cyan-500/30 rounded-3xl p-5 space-y-4 mt-4"
         >
-          <h3 className="font-bold text-cyan-400">{selectedProduct.name}</h3>
+          <h3 className="font-bold text-lg text-white">{selectedProduct.name}</h3>
 
           {/* Units */}
           <div>
-            <p className="text-xs text-slate-400 mb-2">ယူနစ် ရွေးပါ</p>
+            <p className="text-xs text-slate-400 mb-2">ယူနစ်</p>
             <div className="flex flex-wrap gap-2">
               {selectedProduct.units?.map((unit, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedUnit(unit.name)}
-                  className={`px-4 py-2 rounded-xl text-sm transition-all ${
+                  className={`px-5 py-2.5 rounded-2xl text-sm transition-all ${
                     selectedUnit === unit.name 
-                      ? 'bg-cyan-500 text-black' 
-                      : 'bg-white/5 hover:bg-white/10'
+                      ? 'bg-cyan-500 text-black font-bold' 
+                      : 'bg-white/10 hover:bg-white/20'
                   }`}
                 >
-                  {unit.name} ({unit.factor})
+                  {unit.name}
                 </button>
               ))}
             </div>
@@ -109,8 +117,8 @@ export default function ProductSearch({ products, addToCart }) {
                 <button
                   key={type}
                   onClick={() => setPriceType(type)}
-                  className={`px-4 py-2 rounded-xl text-sm transition-all ${
-                    priceType === type ? 'bg-emerald-500 text-black' : 'bg-white/5 hover:bg-white/10'
+                  className={`px-5 py-2.5 rounded-2xl text-sm transition-all ${
+                    priceType === type ? 'bg-emerald-500 text-black' : 'bg-white/10 hover:bg-white/20'
                   }`}
                 >
                   {type}
@@ -120,22 +128,25 @@ export default function ProductSearch({ products, addToCart }) {
           </div>
 
           {/* Quantity */}
-          <div className="flex gap-3 items-center">
-            <button onClick={() => setQty(Math.max(1, qty-1))} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20">-</button>
-            <input 
-              type="number" 
-              value={qty} 
-              onChange={e => setQty(Math.max(1, Number(e.target.value)))}
-              className="w-20 text-center bg-transparent border border-cyan-500/30 rounded-xl py-3 text-xl font-bold"
-            />
-            <button onClick={() => setQty(qty+1)} className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20">+</button>
+          <div>
+            <p className="text-xs text-slate-400 mb-2">အရေအတွက်</p>
+            <div className="flex items-center gap-4">
+              <button onClick={() => setQty(q => Math.max(1, q-1))} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl">-</button>
+              <input 
+                type="number" 
+                value={qty} 
+                onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))}
+                className="w-24 text-center bg-transparent border border-cyan-500/30 rounded-2xl py-4 text-2xl font-bold"
+              />
+              <button onClick={() => setQty(q => q+1)} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl">+</button>
+            </div>
           </div>
 
           <button
             onClick={handleAdd}
-            className="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-black rounded-2xl flex items-center justify-center gap-2 transition-all"
+            className="w-full py-5 bg-gradient-to-r from-cyan-500 to-teal-500 text-black font-black rounded-2xl text-lg mt-2 hover:scale-[1.02] transition-all"
           >
-            <Plus size={20} /> Cart ထဲ ထည့်မည်
+            <Plus className="inline mr-2" size={20} /> Cart ထဲ ထည့်မည်
           </button>
         </motion.div>
       )}

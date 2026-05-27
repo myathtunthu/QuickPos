@@ -1,5 +1,4 @@
 import { Printer, X } from 'lucide-react';
-import QRCode from 'qrcode.react'; // ✅ ဒီစာကြောင်းထည့်
 
 export default function ReceiptModal({ record, shop, onClose, onPrint, fmt }) {
   return (
@@ -69,11 +68,6 @@ export default function ReceiptModal({ record, shop, onClose, onPrint, fmt }) {
             Debt:{' '}
             {record.remainingDebt > 0 ? fmt(record.remainingDebt) + ' Ks' : 'None'}
           </p>
-        </div>
-
-        {/* ✅ QR Code of Invoice ID */}
-        <div className="flex justify-center my-3">
-          <QRCode value={record.id || 'invoice'} size={80} />
         </div>
 
         {/* Footer */}

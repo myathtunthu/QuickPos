@@ -3,14 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { motion } from 'framer-motion';
+import { Package } from 'lucide-react';
 
 // Components
 import EntryTabs from '../components/entry/EntryTabs';
 import ProductSearch from '../components/entry/ProductSearch';
 import CartSection from '../components/entry/CartSection';
-import PaymentSection from '../components/entry/PaymentSection';
-import HoldOrders from '../components/entry/HoldOrders';
 import BarcodeSection from '../components/entry/BarcodeSection';
+import HoldOrders from '../components/entry/HoldOrders';
 
 export default function EntryPage() {
   const { profile } = useAuth();
@@ -18,7 +18,7 @@ export default function EntryPage() {
 
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
-  const [activeTab, setActiveTab] = useState('search'); // search, barcode, hold
+  const [activeTab, setActiveTab] = useState('products');
   const [heldOrders, setHeldOrders] = useState([]);
   const [customer, setCustomer] = useState({ name: '', phone: '' });
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -30,54 +30,47 @@ export default function EntryPage() {
     if (!tenantId) return;
     const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
     const unsub = onSnapshot(q, (snap) => {
-      setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
     return () => unsub();
   }, [tenantId]);
 
-  const addToCart = useCallback((product, unit, priceType, qty) => {
-    const selectedUnit = product.units?.find(u => u.name === unit) || product.units?.[0];
-    if (!selectedUnit) return;
+  const addToCart = useCallback((product, selectedUnit, priceType, qty) => {
+    const unitObj = product.units?.find(u => u.name === selectedUnit) || product.units?.[0];
+    if (!unitObj) return;
 
-    const unitPrice = selectedUnit.prices?.[priceType] || selectedUnit.prices?.retail || 0;
-    const baseQuantity = qty * (selectedUnit.factor || 1);
+    const unitPrice = unitObj.prices?.[priceType] || unitObj.prices?.retail || 0;
+    const baseQty = qty * (unitObj.factor || 1);
 
-    // Stock Check
-    if (baseQuantity > (product.stockBase || 0)) {
-      alert("Stock မလုံလောက်ပါဘူး!");
+    if (baseQty > (product.stockBase || 0)) {
+      alert(`Stock မလုံလောက်ပါဘူး! (${product.stockBase} ဘူး ကျန်ပါတယ်)`);
       return;
     }
 
-    const cartItem = {
+    const newItem = {
       id: Date.now(),
       productId: product.id,
       name: product.name,
-      unit: unit,
-      factor: selectedUnit.factor,
+      unit: selectedUnit,
+      factor: unitObj.factor,
       priceType,
       unitPrice,
       quantity: qty,
-      baseQuantity,
+      baseQuantity: baseQty,
       subtotal: qty * unitPrice,
     };
 
-    setCart(prev => [...prev, cartItem]);
+    setCart(prev => [...prev, newItem]);
   }, []);
 
   const removeFromCart = (id) => setCart(prev => prev.filter(item => item.id !== id));
 
-  const updateCartItem = (id, updates) => {
-    setCart(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
-  };
-
-  const clearCart = () => setCart([]);
-
-  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.subtotal, 0), [cart]);
+  const subtotal = useMemo(() => cart.reduce((sum, i) => sum + i.subtotal, 0), [cart]);
   const total = Math.max(0, subtotal - discount);
 
   const saveSale = async () => {
-    if (cart.length === 0) return alert("Cart ဗလာ ဖြစ်နေပါတယ်");
+    if (cart.length === 0) return alert("Cart ဗလာဖြစ်နေပါတယ်");
 
     try {
       await addDoc(collection(db, 'pos_records'), {
@@ -90,40 +83,41 @@ export default function EntryPage() {
         paymentMethod,
         personName: customer.name || 'Walk-in',
         createdAt: serverTimestamp(),
-        status: 'completed'
       });
 
-      alert("ရောင်းချမှု အောင်မြင်ပါသည်!");
-      clearCart();
+      alert("✅ ရောင်းချမှု အောင်မြင်ပါသည်!");
+      setCart([]);
       setCustomer({ name: '', phone: '' });
-    } catch (err) {
+      setDiscount(0);
+    } catch (e) {
       alert("Error saving sale");
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center text-cyan-400">Loading POS System...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-[#060816] text-white pb-24">
+    <div className="min-h-screen bg-[#060816] text-white pb-20">
       <div className="max-w-7xl mx-auto p-4">
-        <h1 className="text-3xl font-black text-cyan-400 mb-6">POS Entry</h1>
+        <h1 className="text-3xl font-black text-cyan-400 mb-6 flex items-center gap-3">
+          <Package size={32} /> POS Entry
+        </h1>
 
         <EntryTabs activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
-          {/* Left - Products */}
-          <div className="lg:col-span-7 space-y-4">
-            {activeTab === 'search' && <ProductSearch products={products} addToCart={addToCart} />}
-            {activeTab === 'barcode' && <BarcodeSection addToCart={addToCart} products={products} />}
+          <div className="lg:col-span-7">
+            {activeTab === 'products' && <ProductSearch products={products} addToCart={addToCart} />}
+            {activeTab === 'barcode' && <BarcodeSection products={products} addToCart={addToCart} />}
             {activeTab === 'hold' && <HoldOrders heldOrders={heldOrders} />}
           </div>
 
-          {/* Right - Cart */}
           <div className="lg:col-span-5">
-            <CartSection 
-              cart={cart} 
+            <CartSection
+              cart={cart}
               removeFromCart={removeFromCart}
-              updateCartItem={updateCartItem}
               subtotal={subtotal}
               total={total}
               discount={discount}

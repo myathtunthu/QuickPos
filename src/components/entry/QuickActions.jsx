@@ -1,34 +1,14 @@
-import { Save, Archive, Trash2, Printer } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 
-export default function QuickActions({ onHold, onLoad, onClear, onPrint, disabled }) {
+export default function QuickActions() {
   return (
-    <div className="flex gap-2">
-      <button
-        onClick={onHold}
-        disabled={disabled}
-        className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 rounded-lg text-amber-400 text-xs font-bold transition-colors flex items-center gap-1 disabled:opacity-50"
-      >
-        <Save size={14} /> Hold
-      </button>
-      <button
-        onClick={onLoad}
-        className="px-3 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 rounded-lg text-cyan-400 text-xs font-bold transition-colors flex items-center gap-1"
-      >
-        <Archive size={14} /> Load
-      </button>
-      <button
-        onClick={onClear}
-        disabled={disabled}
-        className="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 rounded-lg text-rose-400 text-xs font-bold transition-colors disabled:opacity-50"
-      >
-        <Trash2 size={14} /> Clear
-      </button>
-      <button
-        onClick={onPrint}
-        className="px-3 py-1.5 bg-slate-600/20 hover:bg-slate-600/30 rounded-lg text-slate-300 text-xs font-bold transition-colors flex items-center gap-1"
-      >
-        <Printer size={14} /> Print
-      </button>
+    <div className="bg-amber-900/20 border border-amber-500/20 rounded-lg p-2 text-[10px] text-amber-400">
+      <p className="font-bold flex items-center gap-1"><Lightbulb size={12} /> AI Suggestions</p>
+      <ul className="list-disc list-inside mt-1 space-y-0.5">
+        <li>Top seller: Shark (24 units today)</li>
+        <li>Low stock: Energy Drink (12 left)</li>
+        <li>Price recommendation: Retail ဖာ - 12,500 Ks</li>
+      </ul>
     </div>
   );
 }

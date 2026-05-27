@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, Plus } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useDebounce } from '../../hooks/useDebounce';
 
 export default function ProductSearch({ products, addToCart }) {
@@ -17,7 +18,7 @@ export default function ProductSearch({ products, addToCart }) {
     return products
       .filter(p => 
         p.name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        p.barcode?.toLowerCase().includes(debouncedSearch.toLowerCase())
+        (p.barcode && p.barcode.includes(debouncedSearch))
       )
       .slice(0, 50);
   }, [products, debouncedSearch]);
@@ -32,7 +33,6 @@ export default function ProductSearch({ products, addToCart }) {
     if (!selectedProduct || !selectedUnit || qty < 1) return;
     addToCart(selectedProduct, selectedUnit, priceType, qty);
     
-    // Clear selection after adding
     setSelectedProduct(null);
     setQty(1);
   };
@@ -41,7 +41,7 @@ export default function ProductSearch({ products, addToCart }) {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
+      {/* Search Bar */}
       <div className="relative">
         <Search className="absolute left-4 top-4 text-slate-400" size={20} />
         <input
@@ -67,13 +67,11 @@ export default function ProductSearch({ products, addToCart }) {
           >
             <div className="flex justify-between items-center">
               <div>
-                <p className="font-bold">{product.name}</p>
+                <p className="font-bold text-white">{product.name}</p>
                 <p className="text-xs text-slate-400">Stock: {product.stockBase || 0} ဘူး</p>
               </div>
-              <div className="text-right">
-                <p className="text-cyan-400 font-bold text-sm">
-                  {product.units?.[0]?.prices?.retail?.toLocaleString()} Ks
-                </p>
+              <div className="text-right text-cyan-400 font-mono">
+                {product.units?.[0]?.prices?.retail?.toLocaleString()} Ks
               </div>
             </div>
           </div>
@@ -91,7 +89,7 @@ export default function ProductSearch({ products, addToCart }) {
 
           {/* Units */}
           <div>
-            <p className="text-xs text-slate-400 mb-2">ယူနစ်</p>
+            <p className="text-xs text-slate-400 mb-2">ယူနစ် ရွေးပါ</p>
             <div className="flex flex-wrap gap-2">
               {selectedProduct.units?.map((unit, i) => (
                 <button
@@ -131,20 +129,30 @@ export default function ProductSearch({ products, addToCart }) {
           <div>
             <p className="text-xs text-slate-400 mb-2">အရေအတွက်</p>
             <div className="flex items-center gap-4">
-              <button onClick={() => setQty(q => Math.max(1, q-1))} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl">-</button>
+              <button 
+                onClick={() => setQty(q => Math.max(1, q-1))} 
+                className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl font-bold"
+              >
+                −
+              </button>
               <input 
                 type="number" 
                 value={qty} 
                 onChange={e => setQty(Math.max(1, Number(e.target.value) || 1))}
                 className="w-24 text-center bg-transparent border border-cyan-500/30 rounded-2xl py-4 text-2xl font-bold"
               />
-              <button onClick={() => setQty(q => q+1)} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl">+</button>
+              <button 
+                onClick={() => setQty(q => q+1)} 
+                className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-white/20 text-2xl font-bold"
+              >
+                +
+              </button>
             </div>
           </div>
 
           <button
             onClick={handleAdd}
-            className="w-full py-5 bg-gradient-to-r from-cyan-500 to-teal-500 text-black font-black rounded-2xl text-lg mt-2 hover:scale-[1.02] transition-all"
+            className="w-full py-5 bg-gradient-to-r from-cyan-500 to-teal-500 text-black font-black rounded-2xl text-lg hover:scale-[1.02] transition-all"
           >
             <Plus className="inline mr-2" size={20} /> Cart ထဲ ထည့်မည်
           </button>

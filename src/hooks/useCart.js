@@ -1,74 +1,88 @@
-import { useState, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
 export function useCart() {
   const [cart, setCart] = useState([]);
+  const [globalDiscountAmt, setGlobalDiscountAmt] = useState('');
+  const [globalDiscountType, setGlobalDiscountType] = useState('%');
 
-  const addToCart = useCallback((product, unit, priceType, quantity, price) => {
-    const baseQty = quantity * (unit.factor || 1);
-    const subtotal = price * quantity;
-    
+  // Add or merge item
+  const addItem = useCallback((item) => {
     setCart(prev => {
-      const existingIndex = prev.findIndex(item => 
-        item.productId === product.id && 
-        item.unitName === unit.name &&
-        item.priceType === priceType
+      const existingIndex = prev.findIndex(
+        x => x.productId === item.productId &&
+             x.unitName === item.unitName &&
+             x.priceType === item.priceType
       );
-      
-      if (existingIndex !== -1) {
-        const newCart = [...prev];
-        const existing = newCart[existingIndex];
-        newCart[existingIndex] = {
-          ...existing,
-          quantity: existing.quantity + quantity,
-          baseQuantity: existing.baseQuantity + baseQty,
-          subtotal: existing.subtotal + subtotal
+      if (existingIndex > -1) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          quantity: updated[existingIndex].quantity + item.quantity,
+          itemDiscountAmt: (updated[existingIndex].itemDiscountAmt || 0) + (item.itemDiscountAmt || 0)
         };
-        return newCart;
+        return updated;
       }
-      
-      return [...prev, {
-        id: Date.now(),
-        productId: product.id,
-        productStock: product.stock || 0,
-        baseUnit: product.baseUnit || 'pcs',
-        name: product.name,
-        unitName: unit.name,
-        unitFactor: unit.factor || 1,
-        priceType,
-        unitPrice: price,
-        costPrice: unit.costPrice || 0,
-        quantity,
-        baseQuantity: baseQty,
-        subtotal,
-        itemDiscount: 0
-      }];
+      return [...prev, { ...item, id: Date.now(), itemDiscountAmt: item.itemDiscountAmt || 0, notes: item.notes || '' }];
     });
   }, []);
 
-  const removeFromCart = useCallback((id) => {
-    setCart(prev => prev.filter(item => item.id !== id));
+  const removeItem = useCallback((id) => {
+    setCart(prev => prev.filter(c => c.id !== id));
   }, []);
 
-  const updateQuantity = useCallback((id, newQuantity) => {
-    setCart(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const newBaseQty = newQuantity * (item.unitFactor || 1);
-      return {
-        ...item,
-        quantity: newQuantity,
-        baseQuantity: newBaseQty,
-        subtotal: (item.unitPrice * newQuantity) - (item.itemDiscount || 0)
-      };
-    }));
+  const updateItemQuantity = useCallback((id, newQty) => {
+    if (newQty < 1) return;
+    setCart(prev => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
   }, []);
 
-  const clearCart = useCallback(() => setCart([]), []);
-
-  const getCartTotals = useCallback((cartItems) => {
-    const subtotal = cartItems.reduce((sum, item) => sum + (item.subtotal || 0), 0);
-    const itemDiscounts = cartItems.reduce((sum, item) => sum + (item.itemDiscount || 0), 0);
-    return { subtotal, itemDiscounts, totalDiscount: itemDiscounts, total: subtotal };
+  const updateItemDiscount = useCallback((id, amt) => {
+    setCart(prev => prev.map(c => c.id === id ? { ...c, itemDiscountAmt: Number(amt) || 0 } : c));
   }, []);
 
-  return { cart, addToCart, removeFromCart, updateQuantity, clearCart, getCartTotals };
+  const updateItemUnit = useCallback((id, unitName, multiplier, unitPrice) => {
+    setCart(prev => prev.map(c => c.id === id ? { ...c, unitName, multiplier, unitPrice } : c));
+  }, []);
+
+  const updateItemPriceType = useCallback((id, priceType, unitPrice) => {
+    setCart(prev => prev.map(c => c.id === id ? { ...c, priceType, unitPrice } : c));
+  }, []);
+
+  const updateItemNotes = useCallback((id, notes) => {
+    setCart(prev => prev.map(c => c.id === id ? { ...c, notes } : c));
+  }, []);
+
+  const clearCart = useCallback(() => {
+    setCart([]);
+    setGlobalDiscountAmt('');
+    setGlobalDiscountType('%');
+  }, []);
+
+  // Totals calculation
+  const totals = useMemo(() => {
+    const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+    const itemDiscounts = cart.reduce((sum, item) => sum + (item.itemDiscountAmt || 0), 0);
+    const afterItemDisc = subtotal - itemDiscounts;
+    const globalDisc = globalDiscountType === '%'
+      ? afterItemDisc * (Number(globalDiscountAmt) / 100)
+      : Number(globalDiscountAmt);
+    const total = Math.max(afterItemDisc - globalDisc, 0);
+    return { subtotal, itemDiscounts, globalDisc, total };
+  }, [cart, globalDiscountAmt, globalDiscountType]);
+
+  return {
+    cart,
+    addItem,
+    removeItem,
+    updateItemQuantity,
+    updateItemDiscount,
+    updateItemUnit,
+    updateItemPriceType,
+    updateItemNotes,
+    clearCart,
+    globalDiscountAmt,
+    setGlobalDiscountAmt,
+    globalDiscountType,
+    setGlobalDiscountType,
+    totals
+  };
 }

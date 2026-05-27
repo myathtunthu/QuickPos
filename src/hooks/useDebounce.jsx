@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 
-/**
- * Common hook used for search inputs to prevent excessive Firestore queries
- */
-export function useDebounce(value, delay) {
+export function useDebounce(value, delay = 300) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
@@ -11,9 +8,7 @@ export function useDebounce(value, delay) {
       setDebouncedValue(value);
     }, delay);
 
-    return () => {
-      clearTimeout(handler);
-    };
+    return () => clearTimeout(handler);
   }, [value, delay]);
 
   return debouncedValue;

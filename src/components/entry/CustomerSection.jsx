@@ -11,7 +11,7 @@ export default function CustomerSection({ personName, setPersonName }) {
         value={personName}
         onChange={(e) => setPersonName(e.target.value)}
         placeholder="Customer name"
-        className="w-full bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm"
+        className="w-full bg-black/40 border border-cyan-500/20 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-400"
       />
     </div>
   );

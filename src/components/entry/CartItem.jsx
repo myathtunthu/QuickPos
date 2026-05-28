@@ -1,106 +1,84 @@
-import { useState, useRef } from 'react';
-import { Trash2, Tag, Minus, Plus } from 'lucide-react';
+import React from 'react';
+import { Trash2, Tag } from 'lucide-react';
 
-export default function CartItem({
-  item,
-  onRemove,
-  onQuantityChange,
-  onDiscountChange,
-  onNotesChange,
-  fmt
-}) {
-  const [showControls, setShowControls] = useState(false);
-  const touchStart = useRef(0);
-  const touchEnd = useRef(0);
-
-  const handleTouchStart = (e) => {
-    touchStart.current = e.touches[0].clientX;
-  };
-  const handleTouchMove = (e) => {
-    touchEnd.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = () => {
-    if (touchStart.current - touchEnd.current > 80) {
-      // Swipe left: show remove confirm
-      if (window.confirm('Remove this item?')) {
-        onRemove(item.id);
-      }
-    }
-    touchStart.current = 0;
-    touchEnd.current = 0;
-  };
-
+const CartItem = React.memo(({ 
+  item, 
+  products,
+  onUpdateQty, 
+  onUpdateUnit, 
+  onUpdatePriceType, 
+  onUpdateDiscount, 
+  onRemove 
+}) => {
+  // လက်ရှိ Product ရဲ့ ရနိုင်တဲ့ Unit များကို ရှာဖွေခြင်း
+  const product = products.find(p => p.id === item.productId);
+  const availableUnits = product?.packageUnits || [];
+  
   return (
-    <div
-      className="bg-black/40 border border-cyan-500/10 rounded-lg p-2 mb-1.5"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="bg-black/40 border border-cyan-500/10 rounded-lg p-2 transition-all hover:border-cyan-500/30">
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <p className="font-bold text-xs">{item.name}</p>
-          <p className="text-cyan-400 text-[10px] mt-0.5">
-            {fmt(item.unitPrice)} × {item.quantity} {item.unitName} = {fmt(item.unitPrice * item.quantity)} Ks
-          </p>
-          <p className="text-[9px] text-slate-500">
-            {item.priceType} | ×{item.multiplier}
-            {item.notes && <span className="ml-2 text-amber-400">📝 {item.notes}</span>}
+          <p className="font-bold text-xs text-white">{item.name}</p>
+          
+          <div className="flex items-center gap-2 mt-1.5">
+            {/* အရေအတွက် ပြင်ဆင်ရန် */}
+            <input 
+              type="number" 
+              min="1"
+              value={item.quantity} 
+              onChange={(e) => onUpdateQty(item.id, e.target.value)}
+              className="w-12 bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white text-center outline-none focus:border-cyan-400"
+            />
+            
+            {/* Unit ပြောင်းလဲရန် (ဥပမာ - ဖာ မှ ဘူး သို့) */}
+            <select 
+              value={item.unitName}
+              onChange={(e) => onUpdateUnit(item.id, e.target.value)}
+              className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400"
+            >
+              {availableUnits.map(u => (
+                <option key={u.name} value={u.name}>{u.name}</option>
+              ))}
+            </select>
+
+            {/* Price Type ပြောင်းလဲရန် */}
+            <select 
+              value={item.priceType}
+              onChange={(e) => onUpdatePriceType(item.id, e.target.value)}
+              className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400"
+            >
+              <option value="retail">Retail</option>
+              <option value="wholesaleA">WS-A</option>
+              <option value="wholesaleB">WS-B</option>
+              <option value="wholesaleC">WS-C</option>
+            </select>
+          </div>
+
+          <p className="text-cyan-400 text-[10px] mt-1.5 font-semibold">
+            {Number(item.unitPrice).toLocaleString()} Ks × {item.quantity} = {Number(item.unitPrice * item.quantity).toLocaleString()} Ks
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setShowControls(!showControls)}
-            className="text-slate-400 text-[10px] underline"
-          >
-            {showControls ? 'Done' : 'Edit'}
+
+        {/* Discount နှင့် ဖျက်ရန် Button */}
+        <div className="flex flex-col items-end gap-2">
+          <button onClick={() => onRemove(item.id)} className="text-rose-400 hover:text-rose-300 transition-colors p-1">
+            <Trash2 size={14}/>
           </button>
-          <button onClick={() => onRemove(item.id)} className="text-rose-400">
-            <Trash2 size={14} />
-          </button>
+          
+          <div className="flex items-center gap-1 text-amber-400 text-[10px] bg-amber-900/10 px-1.5 py-1 rounded border border-amber-500/10">
+            <Tag size={10}/> 
+            <input 
+              type="number"
+              value={item.itemDiscountAmt || ''} 
+              onChange={e => onUpdateDiscount(item.id, e.target.value)} 
+              placeholder="0" 
+              className="w-12 bg-transparent text-[10px] text-amber-400 outline-none text-right placeholder-amber-700"
+            /> Ks
+          </div>
         </div>
       </div>
-
-      {showControls && (
-        <div className="mt-2 space-y-1.5">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onQuantityChange(item.id, item.quantity - 1)}
-              className="p-0.5 bg-black rounded"
-            >
-              <Minus size={12} />
-            </button>
-            <input
-              type="number"
-              value={item.quantity}
-              onChange={e => onQuantityChange(item.id, Number(e.target.value) || 1)}
-              className="w-14 bg-black border border-cyan-500/20 rounded px-1.5 py-0.5 text-[10px] text-white text-center"
-            />
-            <button
-              onClick={() => onQuantityChange(item.id, item.quantity + 1)}
-              className="p-0.5 bg-black rounded"
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-          <div className="flex items-center gap-1 text-amber-400 text-[10px]">
-            <Tag size={10} />
-            <input
-              value={item.itemDiscountAmt || ''}
-              onChange={e => onDiscountChange(item.id, e.target.value)}
-              placeholder="Discount"
-              className="w-16 bg-black border border-amber-500/20 rounded px-1.5 py-0.5 text-[10px] text-white"
-            />
-            <span>Ks</span>
-          </div>
-          <input
-            value={item.notes || ''}
-            onChange={e => onNotesChange(item.id, e.target.value)}
-            placeholder="Item note"
-            className="w-full bg-black border border-slate-500/20 rounded px-1.5 py-0.5 text-[10px] text-white"
-          />
-        </div>
-      )}
     </div>
   );
-}
+});
+
+export default CartItem;

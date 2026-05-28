@@ -1,88 +1,97 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { calculateBaseQty, checkStockAvailability } from '../utils/stockConverter';
 
-export function useCart() {
+export const useCart = (products, entryTab) => {
   const [cart, setCart] = useState([]);
   const [globalDiscountAmt, setGlobalDiscountAmt] = useState('');
   const [globalDiscountType, setGlobalDiscountType] = useState('%');
 
-  // Add or merge item
-  const addItem = useCallback((item) => {
-    setCart(prev => {
-      const existingIndex = prev.findIndex(
-        x => x.productId === item.productId &&
-             x.unitName === item.unitName &&
-             x.priceType === item.priceType
-      );
-      if (existingIndex > -1) {
-        const updated = [...prev];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + item.quantity,
-          itemDiscountAmt: (updated[existingIndex].itemDiscountAmt || 0) + (item.itemDiscountAmt || 0)
-        };
-        return updated;
+  // အသစ်ထည့်ခြင်း
+  const addToCart = useCallback((product, unit, priceType, quantity) => {
+    const qtyNum = Number(quantity);
+    if (!qtyNum || qtyNum <= 0) return { success: false, message: 'အရေအတွက် မှားယွင်းနေပါသည်' };
+
+    const baseQty = calculateBaseQty(qtyNum, unit.factor);
+
+    // Sale ဖောင်အတွက်ဆိုလျှင် Stock စစ်မည်
+    if (entryTab === 'Sale') {
+      const stockCheck = checkStockAvailability(qtyNum, unit.factor, product.stockBase);
+      if (!stockCheck.isAvailable) {
+        return { success: false, message: 'Stock မလုံလောက်ပါ' };
       }
-      return [...prev, { ...item, id: Date.now(), itemDiscountAmt: item.itemDiscountAmt || 0, notes: item.notes || '' }];
+    }
+
+    setCart(prev => {
+      const existing = prev.find(x => x.productId === product.id && x.unitName === unit.name && x.priceType === priceType);
+      
+      if (existing) {
+        return prev.map(x => x.id === existing.id 
+          ? { 
+              ...x, 
+              quantity: x.quantity + qtyNum, 
+              baseQuantity: x.baseQuantity + baseQty 
+            } 
+          : x);
+      }
+
+      return [...prev, {
+        id: Date.now(),
+        productId: product.id,
+        name: product.name,
+        unitName: unit.name,
+        factor: unit.factor,
+        priceType: priceType,
+        unitPrice: entryTab === 'Sale' ? unit.prices[priceType] : unit.cost,
+        quantity: qtyNum,
+        baseQuantity: baseQty,
+        itemDiscountAmt: 0
+      }];
     });
+
+    return { success: true };
+  }, [entryTab]);
+
+  // အခြေခံ Update Functions များ
+  const removeCartItem = useCallback((id) => {
+    setCart(prev => prev.filter(item => item.id !== id));
   }, []);
 
-  const removeItem = useCallback((id) => {
-    setCart(prev => prev.filter(c => c.id !== id));
-  }, []);
-
-  const updateItemQuantity = useCallback((id, newQty) => {
-    if (newQty < 1) return;
-    setCart(prev => prev.map(c => c.id === id ? { ...c, quantity: newQty } : c));
-  }, []);
-
-  const updateItemDiscount = useCallback((id, amt) => {
-    setCart(prev => prev.map(c => c.id === id ? { ...c, itemDiscountAmt: Number(amt) || 0 } : c));
-  }, []);
-
-  const updateItemUnit = useCallback((id, unitName, multiplier, unitPrice) => {
-    setCart(prev => prev.map(c => c.id === id ? { ...c, unitName, multiplier, unitPrice } : c));
-  }, []);
-
-  const updateItemPriceType = useCallback((id, priceType, unitPrice) => {
-    setCart(prev => prev.map(c => c.id === id ? { ...c, priceType, unitPrice } : c));
-  }, []);
-
-  const updateItemNotes = useCallback((id, notes) => {
-    setCart(prev => prev.map(c => c.id === id ? { ...c, notes } : c));
+  const updateCartItemQty = useCallback((id, newQty) => {
+    setCart(prev => prev.map(item => item.id === id ? { ...item, quantity: Number(newQty) || 1 } : item));
   }, []);
 
   const clearCart = useCallback(() => {
     setCart([]);
     setGlobalDiscountAmt('');
-    setGlobalDiscountType('%');
   }, []);
 
-  // Totals calculation
-  const totals = useMemo(() => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
-    const itemDiscounts = cart.reduce((sum, item) => sum + (item.itemDiscountAmt || 0), 0);
-    const afterItemDisc = subtotal - itemDiscounts;
-    const globalDisc = globalDiscountType === '%'
-      ? afterItemDisc * (Number(globalDiscountAmt) / 100)
-      : Number(globalDiscountAmt);
-    const total = Math.max(afterItemDisc - globalDisc, 0);
-    return { subtotal, itemDiscounts, globalDisc, total };
+  // Totals တွက်ချက်ခြင်း (useMemo ဖြင့် Performance မြှင့်ထားသည်)
+  const cartTotals = useMemo(() => {
+    const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
+    const itemDiscounts = cart.reduce((acc, item) => acc + Number(item.itemDiscountAmt || 0), 0);
+    
+    const globalDisc = globalDiscountType === '%' 
+      ? (subtotal - itemDiscounts) * (Number(globalDiscountAmt || 0) / 100) 
+      : Number(globalDiscountAmt || 0);
+      
+    return { 
+      subtotal, 
+      itemDiscounts, 
+      globalDisc, 
+      total: Math.max(subtotal - itemDiscounts - globalDisc, 0) 
+    };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
   return {
     cart,
-    addItem,
-    removeItem,
-    updateItemQuantity,
-    updateItemDiscount,
-    updateItemUnit,
-    updateItemPriceType,
-    updateItemNotes,
+    addToCart,
+    removeCartItem,
+    updateCartItemQty,
     clearCart,
+    cartTotals,
     globalDiscountAmt,
     setGlobalDiscountAmt,
     globalDiscountType,
-    setGlobalDiscountType,
-    totals
+    setGlobalDiscountType
   };
-}
+};

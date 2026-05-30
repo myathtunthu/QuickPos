@@ -128,7 +128,7 @@ export default function EntryPage({ products = [] }) {
           name: i.name || 'Unknown Item', 
           quantity: Number(i.quantity) || 1, 
           unitPrice: Number(i.unitPrice) || 0, 
-          itemDiscountAmt: Number(i.itemDiscountAmt) || 0, // undefined ဖြစ်တတ်ဆုံးနေရာ
+          itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
           unitName: i.unitName || 'ခု', 
           factor: Number(i.factor) || 1, 
           priceType: i.priceType || 'retail',
@@ -178,68 +178,9 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-      // Record Document တည်ဆောက်ခြင်း
-      const record = { 
-        id: ref.id,
-        type: entryTab, 
-        tenantId, 
-        personName: personName || 'Walk-in', 
-        itemsDetail: cart.map(i => ({ 
-          productId: i.productId,
-          name: i.name, 
-          quantity: i.quantity, 
-          unitPrice: i.unitPrice, 
-          itemDiscountAmt: i.itemDiscountAmt, 
-          unitName: i.unitName, 
-          factor: i.factor, 
-          priceType: i.priceType,
-          baseQuantity: i.baseQuantity
-        })), 
-        amount: total, 
-        subtotal: cartTotals.subtotal, 
-        itemDiscount: cartTotals.itemDiscounts, 
-        globalDiscount: cartTotals.globalDisc, 
-        paymentMethod, 
-        paidAmount: paid, 
-        remainingDebt, 
-        date: entryDate, 
-        createdAt: serverTimestamp() 
-      };
-
-      batch.set(ref, record);
-
-      // Product Collection ထဲရှိ Stock Base ကို အတိုး/အလျော့ လုပ်ခြင်း
-      cart.forEach(item => {
-        const prodData = products.find(x => x.id === item.productId);
-        if (prodData) {
-          const currentStockBase = Number(prodData.stockBase) || 0;
-          const newStockBase = entryTab === 'Sale' 
-            ? Math.max(0, currentStockBase - item.baseQuantity) 
-            : currentStockBase + item.baseQuantity;
-            
-          batch.update(doc(db, 'pos_products', item.productId), { 
-            stockBase: newStockBase 
-          });
-        }
-      });
-
-      await batch.commit();
-      setReceiptModal({ show: true, record }); // ဘောင်ချာပြမည်
-      clearCart();
-      setPersonName('');
-      setPaidAmount('');
-      setPaymentMethod('Cash');
-
-    } catch (err) { 
-      console.error(err); 
-      alert("Error saving transaction!");
-    }
-    setLoading(false);
-  };
-
   // --- Print Logic ---
   const doPrint = (record) => {
-    // Print JS Logic (ယခင်က ရေးခဲ့သည့် html string print out အတိုင်း)
+    // Print JS Logic
     const items = record.itemsDetail || [];
     const fmt = (n) => Number(n).toLocaleString();
     const w = window.open('', '_blank', 'width=400,height=650');

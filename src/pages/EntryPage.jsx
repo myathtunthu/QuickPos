@@ -1,141 +1,120 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebase/config';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-import { motion } from 'framer-motion';
+import { useCart } from '../hooks/useCart';
+import useDebounce from '../hooks/useDebounce';
 
-// Components (ခွဲထုတ်ထားတဲ့)
-import EntryTabs from '../components/entry/EntryTabs';
+// Components
 import ProductSearch from '../components/entry/ProductSearch';
+import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
-import BarcodeSection from '../components/entry/BarcodeSection';
-import HoldOrders from '../components/entry/HoldOrders';
+import PaymentSection from '../components/entry/PaymentSection';
+import SummarySection from '../components/entry/SummarySection'; // Create a simple display component for totals if needed
 
-export default function EntryPage() {
+export default function EntryPage({ products = [] }) {
   const { profile } = useAuth();
-  const tenantId = profile?.tenantId;
+  const [entryTab, setEntryTab] = useState('Sale'); // 'Sale' | 'Purchase'
+  
+  // Search States
+  const [selCategory, setSelCategory] = useState('All');
+  const [prodSearch, setProdSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const debouncedSearch = useDebounce(prodSearch, 300);
 
-  const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [activeTab, setActiveTab] = useState('products');
-  const [heldOrders, setHeldOrders] = useState([]);
-  const [customer, setCustomer] = useState({ name: '', phone: '' });
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [discount, setDiscount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  // Payment States
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paidAmount, setPaidAmount] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Load Products (Optimized)
-  useEffect(() => {
-    if (!tenantId) return;
-    const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
-    const unsub = onSnapshot(q, (snap) => {
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [tenantId]);
+  // Use Custom Hook for Cart Logic
+  const { 
+    cart, addToCart, removeCartItem, updateCartItemQty, 
+    cartTotals, clearCart 
+    // ... global discount states
+  } = useCart(products, entryTab);
 
-  const addToCart = useCallback((product, selectedUnit, priceType, qty) => {
-    const unitObj = product.units?.find(u => u.name === selectedUnit) || product.units?.[0];
-    if (!unitObj) return;
-
-    const unitPrice = unitObj.prices?.[priceType] || unitObj.prices?.retail || 0;
-    const baseQty = qty * (unitObj.factor || 1);
-
-    if (baseQty > (product.stockBase || 0)) {
-      alert(`Stock မလုံလောက်ပါဘူး! (${product.stockBase} ဘူး ကျန်ပါတယ်)`);
-      return;
+  // Data Memos
+  const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+  
+  const filteredProducts = useMemo(() => {
+    let result = products;
+    if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(p => (p.name || '').toLowerCase().includes(q) || (p.barcode || '').includes(q));
     }
+    return result;
+  }, [products, debouncedSearch, selCategory]);
 
-    const newItem = {
-      id: Date.now(),
-      productId: product.id,
-      name: product.name,
-      unit: selectedUnit,
-      factor: unitObj.factor,
-      priceType,
-      unitPrice,
-      quantity: qty,
-      baseQuantity: baseQty,
-      subtotal: qty * unitPrice,
-    };
-
-    setCart(prev => [...prev, newItem]);
-  }, []);
-
-  const removeFromCart = (id) => setCart(prev => prev.filter(item => item.id !== id));
-
-  const subtotal = useMemo(() => cart.reduce((sum, i) => sum + i.subtotal, 0), [cart]);
-  const total = Math.max(0, subtotal - discount);
-
-  const saveSale = async () => {
-    if (cart.length === 0) return alert("Cart ဗလာဖြစ်နေပါတယ်");
-
-    try {
-      await addDoc(collection(db, 'pos_records'), {
-        tenantId,
-        type: 'sale',
-        items: cart,
-        subtotal,
-        discount,
-        total,
-        paymentMethod,
-        personName: customer.name || 'Walk-in',
-        createdAt: serverTimestamp(),
-      });
-
-      alert("✅ ရောင်းချမှု အောင်မြင်ပါသည်!");
-      setCart([]);
-      setCustomer({ name: '', phone: '' });
-      setDiscount(0);
-    } catch (e) {
-      alert("Error saving sale");
+  const handleSelectProduct = (product) => {
+    // Default unit and price type
+    const defaultUnit = product.packageUnits?.[0] || { name: 'ခု', factor: 1, prices: { retail: 0 }};
+    const response = addToCart(product, defaultUnit, 'retail', 1);
+    
+    if (response.success) {
+      setProdSearch(''); // Clear search after adding
+    } else {
+      alert(response.message); // Show error (e.g. Out of stock)
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-cyan-400">Loading POS System...</div>;
-  }
+  const handleCheckout = async () => {
+    // Firebase ဖြင့် သိမ်းဆည်းမည့် Logic (ဒီနေရာတွင် ဆက်လက်ရေးသားနိုင်သည်)
+    setLoading(true);
+    // ... Save to Firestore ...
+    setLoading(false);
+  };
 
   return (
-    <div className="min-h-screen bg-[#060816] text-white pb-20">
-      <div className="max-w-7xl mx-auto p-4">
-        <h1 className="text-3xl font-black text-cyan-400 mb-6 flex items-center gap-3">
-          <Package size={32} /> POS Entry
-        </h1>
+    <div className="p-3 sm:p-4 pb-28 text-white max-w-4xl mx-auto space-y-4 bg-[#080c14] min-h-screen">
+      
+      {/* Header & Tabs ကို ဒီနေရာမှာ ထားပါ */}
+      <h1 className="text-xl font-black text-cyan-400">POS ENTRY</h1>
 
-        <EntryTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* Search & Categories */}
+      <ProductSearch 
+        categories={categories}
+        selCategory={selCategory}
+        setSelCategory={setSelCategory}
+        prodSearch={prodSearch}
+        setProdSearch={setProdSearch}
+        setShowScanner={setShowScanner}
+      />
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
-          {/* Product Area */}
-          <div className="lg:col-span-7">
-            {activeTab === 'products' && (
-              <ProductSearch products={products} addToCart={addToCart} />
-            )}
-            {activeTab === 'barcode' && (
-              <BarcodeSection products={products} addToCart={addToCart} />
-            )}
-            {activeTab === 'hold' && <HoldOrders heldOrders={heldOrders} />}
-          </div>
-
-          {/* Cart Area */}
-          <div className="lg:col-span-5">
-            <CartSection
-              cart={cart}
-              removeFromCart={removeFromCart}
-              subtotal={subtotal}
-              total={total}
-              discount={discount}
-              setDiscount={setDiscount}
-              customer={customer}
-              setCustomer={setCustomer}
-              paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
-              saveSale={saveSale}
-            />
-          </div>
-        </div>
+      {/* Dropdown (Shows only when typing) */}
+      <div className="relative">
+        <ProductDropdown 
+          products={filteredProducts} 
+          onSelect={handleSelectProduct} 
+          isOpen={debouncedSearch.length > 0} 
+        />
       </div>
+
+      {/* Main Cart Section */}
+      <CartSection 
+        cart={cart}
+        products={products}
+        onUpdateQty={updateCartItemQty}
+        // ... pass other cart updaters from useCart
+        onRemove={removeCartItem}
+      />
+
+      {/* Checkout Area (Sticky Bottom for Mobile or inline for Desktop) */}
+      {cart.length > 0 && (
+        <div className="space-y-3 pt-4 border-t border-cyan-500/20">
+          <PaymentSection 
+            paymentMethod={paymentMethod}
+            setPaymentMethod={setPaymentMethod}
+            paidAmount={paidAmount}
+            setPaidAmount={setPaidAmount}
+            submitTransaction={handleCheckout}
+            loading={loading}
+            entryTab={entryTab}
+          />
+        </div>
+      )}
+
+      {/* Scanner Modal & Receipt Modal များကို ဤနေရာတွင် လှမ်းခေါ်ပါ */}
+      
     </div>
   );
 }

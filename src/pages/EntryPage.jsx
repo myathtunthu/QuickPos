@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
-import { Calendar, User, ShoppingCart, Loader2, X, Printer } from 'lucide-react';
+import { Calendar, User, ShoppingCart, Printer } from 'lucide-react';
 
 // Components များကို လှမ်းခေါ်ခြင်း
 import ProductSearch from '../components/entry/ProductSearch';
@@ -48,7 +48,10 @@ export default function EntryPage({ products = [] }) {
     cart, 
     addToCart, 
     removeCartItem, 
-    updateCartItemQty, 
+    updateCartItemQty,
+    updateCartItemUnit, // UI အလုပ်လုပ်ရန် ပြန်ခေါ်ထားသည်
+    updateCartItemPriceType, // UI အလုပ်လုပ်ရန် ပြန်ခေါ်ထားသည်
+    updateCartItemDiscount, // UI အလုပ်လုပ်ရန် ပြန်ခေါ်ထားသည်
     clearCart, 
     cartTotals, 
     globalDiscountAmt, 
@@ -84,18 +87,26 @@ export default function EntryPage({ products = [] }) {
   }, [addToCart]);
 
   // --- Firebase Submit Logic ---
+  
+  // 1. Expense ကို မှန်ကန်သော Batch Pattern ဖြင့်သိမ်းခြင်း
   const submitExpense = async () => {
     if (!expenseTitle || !expenseAmt || !tenantId) return;
     setLoading(true);
     try {
-      await writeBatch(db).set(doc(collection(db, 'pos_records')), { 
+      const batch = writeBatch(db);
+      const ref = doc(collection(db, 'pos_records'));
+      
+      batch.set(ref, { 
         type: 'Expense', 
         tenantId, 
         item: expenseTitle, 
-        amount: Number(expenseAmt), 
+        amount: Number(expenseAmt) || 0, 
         date: entryDate, 
         createdAt: serverTimestamp() 
-      }).commit();
+      });
+      
+      await batch.commit();
+      
       setExpenseTitle(''); setExpenseAmt('');
       alert("Expense Saved!");
     } catch (err) { 
@@ -105,6 +116,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
+  // 2. Transaction ကို မှန်ကန်သော Batch Pattern နှင့် Database Stock ဖြင့်သိမ်းခြင်း
   const submitTransaction = async () => {
     if (cart.length === 0 || !tenantId) return;
     setLoading(true);
@@ -114,10 +126,10 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
       
       const total = Number(cartTotals.total) || 0;
-      const paid = paidAmount === '' ? total : Number(paidAmount || 0);
+      // String အလွတ်ဖြစ်နေရင် 0 မဟုတ်ဘဲ အားလုံးရှင်းသည် (total) ဟု မှတ်ယူမည်။ လုံခြုံစွာ Number ပြောင်းထားသည်။
+      const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
       const remainingDebt = Math.max(0, total - paid);
 
-      // 🌟 Firebase Error ဖြေရှင်းရန် undefined များကို 0 သို့မဟုတ် '' အဖြစ်ပြောင်းခြင်း 🌟
       const record = { 
         id: ref.id,
         type: entryTab || 'Sale', 
@@ -147,10 +159,15 @@ export default function EntryPage({ products = [] }) {
 
       batch.set(ref, record);
 
-      // Product Collection ထဲရှိ Stock Base ကို အတိုး/အလျော့ လုပ်ခြင်း
-      cart.forEach(item => {
-        const prodData = products.find(x => x.id === item.productId);
-        if (prodData) {
+      // Product Collection ထဲရှိ Stock Base ကို Firebase မှ တိုက်ရိုက်ယူ၍ (Fetch first) အတိုး/အလျော့ လုပ်ခြင်း
+      for (const item of cart) {
+        if (!item.productId) continue;
+        
+        const prodRef = doc(db, 'pos_products', item.productId);
+        const prodSnap = await getDoc(prodRef);
+        
+        if (prodSnap.exists()) {
+          const prodData = prodSnap.data();
           const currentStockBase = Number(prodData.stockBase) || 0;
           const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
           
@@ -158,13 +175,14 @@ export default function EntryPage({ products = [] }) {
             ? Math.max(0, currentStockBase - itemBaseQty) 
             : currentStockBase + itemBaseQty;
             
-          batch.update(doc(db, 'pos_products', item.productId), { 
+          batch.update(prodRef, { 
             stockBase: newStockBase 
           });
         }
-      });
+      }
 
       await batch.commit();
+      
       setReceiptModal({ show: true, record }); 
       clearCart();
       setPersonName('');
@@ -179,22 +197,9 @@ export default function EntryPage({ products = [] }) {
   };
 
   // --- Print Logic ---
-  const doPrint = (record) => {
-    // Print JS Logic
-    const items = record.itemsDetail || [];
-    const fmt = (n) => Number(n).toLocaleString();
-    const w = window.open('', '_blank', 'width=400,height=650');
-    
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title>
-    <style>body{font-family:'Courier New',monospace;font-size:13px;width:360px;margin:10px auto;padding:15px;border:2px dashed #000;} .header{text-align:center;border-bottom:2px dashed #000;padding-bottom:12px;margin-bottom:12px;} .shop-name{font-size:20px;font-weight:bold;} table{width:100%;border-collapse:collapse;margin:10px 0;} th{text-align:left;border-bottom:1px solid #000;} td{padding:4px 0;} td:last-child{text-align:right;} .total-row{font-weight:bold;font-size:18px;border-top:2px solid #000;padding-top:10px;} .footer{text-align:center;margin-top:15px;font-size:11px;}</style></head><body>
-    <div class="header"><div class="shop-name">${shopName}</div><div>📞 ${shopPhone}</div><div>📅 ${record.date}</div><div>🧾 ${record.id.slice(-8)}</div></div>
-    <table><thead><tr><th>Item</th><th>Qty</th><th>Total</th></tr></thead><tbody>
-    ${items.map(i => `<tr><td>${i.name}<br><small>${i.unitName}</small></td><td>${i.quantity}</td><td>${fmt(i.unitPrice * i.quantity)}</td></tr>`).join('')}
-    </tbody></table>
-    <div class="total-row" style="text-align:right;">TOTAL: ${fmt(record.amount)} Ks</div>
-    <div class="footer">Thank you for your purchase!</div>
-    <script>window.onload=()=>{window.print();}</script></body></html>`);
-    w.document.close();
+  // Mobile မှာ Popup Block တာ ကာကွယ်ဖို့ ရိုးရှင်းတဲ့ Print ကို ပြောင်းထားပါတယ်။ (နောက်ပိုင်း Iframe Print စဉ်းစားနိုင်သည်)
+  const doPrint = () => {
+     window.print();
   };
 
   return (
@@ -281,9 +286,9 @@ export default function EntryPage({ products = [] }) {
               cart={cart}
               products={products}
               onUpdateQty={updateCartItemQty}
-              onUpdateUnit={(id, unitName) => {/* To Be Handled by Context/Hook */}}
-              onUpdatePriceType={(id, pType) => {/* To Be Handled by Context/Hook */}}
-              onUpdateDiscount={(id, amt) => {/* To Be Handled by Context/Hook */}}
+              onUpdateUnit={updateCartItemUnit} // 🌟 Cart Hook မှ ချိတ်ဆက်ထားပါသည်
+              onUpdatePriceType={updateCartItemPriceType} // 🌟 Cart Hook မှ ချိတ်ဆက်ထားပါသည်
+              onUpdateDiscount={updateCartItemDiscount} // 🌟 Cart Hook မှ ချိတ်ဆက်ထားပါသည်
               onRemove={removeCartItem}
             />
 
@@ -323,7 +328,7 @@ export default function EntryPage({ products = [] }) {
 
       {/* --- Receipt Modal Overlay --- */}
       {receiptModal.show && (
-        <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="text-center border-b-2 border-dashed border-gray-300 pb-4">
               <h2 className="text-2xl font-black text-gray-800">{shopName}</h2>
@@ -346,7 +351,7 @@ export default function EntryPage({ products = [] }) {
             </div>
             
             <div className="mt-6 flex flex-col gap-2">
-              <button onClick={() => doPrint(receiptModal.record)} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
+              <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
                 <Printer size={18}/> Print Receipt
               </button>
               <button onClick={() => setReceiptModal({show:false, record:null})} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors">
@@ -355,6 +360,44 @@ export default function EntryPage({ products = [] }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* --- Printable Area (Hidden on screen, shown on print) --- */}
+      {receiptModal.show && receiptModal.record && (
+         <div className="hidden print:block fixed inset-0 bg-white text-black text-xs font-mono p-4 z-[9999]">
+             <div className="text-center mb-4">
+                 <h2 className="text-lg font-bold">{shopName}</h2>
+                 <p>📞 {shopPhone}</p>
+                 <p>📍 {shopAddress}</p>
+                 <p>📅 {receiptModal.record.date}</p>
+                 <p>🧾 {receiptModal.record.id.slice(-8)}</p>
+             </div>
+             <table className="w-full border-collapse mb-4">
+                 <thead>
+                     <tr className="border-b border-black">
+                         <th className="text-left py-1">Item</th>
+                         <th className="text-center py-1">Qty</th>
+                         <th className="text-right py-1">Total</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     {receiptModal.record.itemsDetail.map((item, i) => (
+                         <tr key={i} className="border-b border-gray-300">
+                             <td className="py-1">{item.name}<br/><span className="text-[10px] text-gray-600">{item.unitName}</span></td>
+                             <td className="text-center py-1">{item.quantity}</td>
+                             <td className="text-right py-1">{Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}</td>
+                         </tr>
+                     ))}
+                 </tbody>
+             </table>
+             <div className="flex justify-between font-bold border-t border-black pt-2 text-sm">
+                 <span>TOTAL:</span>
+                 <span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span>
+             </div>
+             <div className="text-center mt-6 text-[10px]">
+                 Thank you for your purchase!
+             </div>
+         </div>
       )}
 
     </div>

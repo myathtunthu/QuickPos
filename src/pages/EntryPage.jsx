@@ -113,9 +113,70 @@ export default function EntryPage({ products = [] }) {
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
-      const total = cartTotals.total;
+      const total = Number(cartTotals.total) || 0;
       const paid = paidAmount === '' ? total : Number(paidAmount || 0);
       const remainingDebt = Math.max(0, total - paid);
+
+      // 🌟 Firebase Error ဖြေရှင်းရန် undefined များကို 0 သို့မဟုတ် '' အဖြစ်ပြောင်းခြင်း 🌟
+      const record = { 
+        id: ref.id,
+        type: entryTab || 'Sale', 
+        tenantId: tenantId, 
+        personName: personName || 'Walk-in', 
+        itemsDetail: cart.map(i => ({ 
+          productId: i.productId || '',
+          name: i.name || 'Unknown Item', 
+          quantity: Number(i.quantity) || 1, 
+          unitPrice: Number(i.unitPrice) || 0, 
+          itemDiscountAmt: Number(i.itemDiscountAmt) || 0, // undefined ဖြစ်တတ်ဆုံးနေရာ
+          unitName: i.unitName || 'ခု', 
+          factor: Number(i.factor) || 1, 
+          priceType: i.priceType || 'retail',
+          baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
+        })), 
+        amount: total, 
+        subtotal: Number(cartTotals.subtotal) || 0, 
+        itemDiscount: Number(cartTotals.itemDiscounts) || 0, 
+        globalDiscount: Number(cartTotals.globalDisc) || 0, 
+        paymentMethod: paymentMethod || 'Cash', 
+        paidAmount: paid, 
+        remainingDebt: remainingDebt, 
+        date: entryDate || new Date().toISOString().split('T')[0], 
+        createdAt: serverTimestamp() 
+      };
+
+      batch.set(ref, record);
+
+      // Product Collection ထဲရှိ Stock Base ကို အတိုး/အလျော့ လုပ်ခြင်း
+      cart.forEach(item => {
+        const prodData = products.find(x => x.id === item.productId);
+        if (prodData) {
+          const currentStockBase = Number(prodData.stockBase) || 0;
+          const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
+          
+          const newStockBase = entryTab === 'Sale' 
+            ? Math.max(0, currentStockBase - itemBaseQty) 
+            : currentStockBase + itemBaseQty;
+            
+          batch.update(doc(db, 'pos_products', item.productId), { 
+            stockBase: newStockBase 
+          });
+        }
+      });
+
+      await batch.commit();
+      setReceiptModal({ show: true, record }); 
+      clearCart();
+      setPersonName('');
+      setPaidAmount('');
+      setPaymentMethod('Cash');
+
+    } catch (err) { 
+      console.error("Firebase Save Error: ", err); 
+      alert("Error saving transaction! Please check console.");
+    }
+    setLoading(false);
+  };
 
       // Record Document တည်ဆောက်ခြင်း
       const record = { 

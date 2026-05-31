@@ -3,18 +3,17 @@ import { useState, useCallback, useMemo } from 'react';
 export const useCart = (products, entryTab) => {
   const [cart, setCart] = useState([]);
   const [globalDiscountAmt, setGlobalDiscountAmt] = useState('');
-  const [globalDiscountType, setGlobalDiscountType] = useState('%');
+  const [globalDiscountType, setGlobalDiscountType] = useState('%'); // '%' or 'Flat'
 
-  // ၁။ Cart ထဲသို့ ပစ္စည်းအသစ်ထည့်ခြင်း
   const addToCart = useCallback((product, unit, priceType, quantity) => {
     const qtyNum = Number(quantity);
     if (!qtyNum || qtyNum <= 0) return { success: false, message: 'အရေအတွက် မှားယွင်းနေပါသည်' };
 
-    const baseQty = qtyNum * (Number(unit.factor) || 1);
+    // 🌟 BUG FIX: factor အစား multiplier ကို သုံးထားသည်
+    const baseQty = qtyNum * (Number(unit.multiplier) || 1);
 
-    // Sale ဖောင်အတွက်ဆိုလျှင် Stock စစ်မည်
     if (entryTab === 'Sale') {
-      const currentStockBase = Number(product.stockBase) || 0;
+      const currentStockBase = Number(product.stockBase) || Number(product.stock) || 0;
       if (baseQty > currentStockBase) {
         return { success: false, message: 'Stock မလုံလောက်ပါ' };
       }
@@ -29,15 +28,14 @@ export const useCart = (products, entryTab) => {
           : x);
       }
 
-      // 🌟 BUG FIX: Inventory ထဲမှ အဝယ်ဈေး (cost သို့မဟုတ် costPrice) ကို Default အနေဖြင့် Auto ယူပေးမည်
-      const defaultPurchasePrice = Number(unit.cost) || Number(unit.costPrice) || 0;
+      const defaultPurchasePrice = Number(unit.costPrice) || Number(unit.cost) || 0;
 
       return [...prev, {
         id: Date.now() + Math.random(),
         productId: product.id,
         name: product.name,
         unitName: unit.name,
-        factor: Number(unit.factor) || 1,
+        multiplier: Number(unit.multiplier) || 1, // 🌟 multiplier ဟု အမည်ပြောင်းထားသည်
         priceType: priceType,
         unitPrice: entryTab === 'Sale' ? (Number(unit.prices?.[priceType]) || 0) : defaultPurchasePrice,
         quantity: qtyNum,
@@ -49,36 +47,33 @@ export const useCart = (products, entryTab) => {
     return { success: true };
   }, [entryTab]);
 
-  // ၂။ ဖျက်ခြင်း
   const removeCartItem = useCallback((id) => {
     setCart(prev => prev.filter(item => item.id !== id));
   }, []);
 
-  // ၃။ အရေအတွက် ပြင်ခြင်း
   const updateCartItemQty = useCallback((id, newQty) => {
     const qtyNum = Number(newQty) || 1;
     setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, quantity: qtyNum, baseQuantity: qtyNum * (item.factor || 1) } : item
+      item.id === id ? { ...item, quantity: qtyNum, baseQuantity: qtyNum * (item.multiplier || 1) } : item
     ));
   }, []);
 
-  // ၄။ Unit ပြောင်းခြင်း
   const updateCartItemUnit = useCallback((id, unitName) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const product = products.find(p => p.id === item.productId);
         const newUnit = product?.packageUnits?.find(u => u.name === unitName);
         if (newUnit) {
-          // 🌟 BUG FIX: Unit ပြောင်းလျှင်လည်း ထို Unit ၏ Inventory အဝယ်ဈေးကို Auto ယူပေးမည်
-          const defaultPurchasePrice = Number(newUnit.cost) || Number(newUnit.costPrice) || 0;
+          // 🌟 BUG FIX: Unit ပြောင်းလျှင် Price နှင့် BaseQty ကို အတိအကျပြန်တွက်သည်
+          const defaultPurchasePrice = Number(newUnit.costPrice) || Number(newUnit.cost) || 0;
           const newPrice = entryTab === 'Sale' ? (Number(newUnit.prices?.[item.priceType]) || 0) : defaultPurchasePrice;
           
           return {
             ...item,
             unitName: newUnit.name,
-            factor: newUnit.factor || 1,
+            multiplier: Number(newUnit.multiplier) || 1,
             unitPrice: newPrice,
-            baseQuantity: Number(item.quantity) * Number(newUnit.factor || 1)
+            baseQuantity: Number(item.quantity) * (Number(newUnit.multiplier) || 1)
           };
         }
       }
@@ -86,7 +81,6 @@ export const useCart = (products, entryTab) => {
     }));
   }, [products, entryTab]);
 
-  // ၅။ ဈေးနှုန်းအမျိုးအစား ပြောင်းခြင်း
   const updateCartItemPriceType = useCallback((id, priceType) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
@@ -100,25 +94,21 @@ export const useCart = (products, entryTab) => {
     }));
   }, [products, entryTab]);
 
-  // ၆။ Discount ထည့်ခြင်း
   const updateCartItemDiscount = useCallback((id, amt) => {
     setCart(prev => prev.map(item => item.id === id ? { ...item, itemDiscountAmt: Number(amt) || 0 } : item));
   }, []);
 
-  // ၇။ အဝယ်ဈေး / Manual ဈေးနှုန်း ပြင်ဆင်ခြင်း 🌟 (UI မှ လက်ဖြင့်ပြင်ရိုက်လျှင် အလုပ်လုပ်မည်)
   const updateCartItemPrice = useCallback((id, newPrice) => {
     setCart(prev => prev.map(item => 
       item.id === id ? { ...item, unitPrice: Number(newPrice) || 0 } : item
     ));
   }, []);
 
-  // ၈။ ရှင်းလင်းခြင်း
   const clearCart = useCallback(() => {
     setCart([]);
     setGlobalDiscountAmt('');
   }, []);
 
-  // ၉။ Totals တွက်ချက်ခြင်း
   const cartTotals = useMemo(() => {
     const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
     const itemDiscounts = cart.reduce((acc, item) => acc + Number(item.itemDiscountAmt || 0), 0);

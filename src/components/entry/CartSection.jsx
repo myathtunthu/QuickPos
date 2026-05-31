@@ -1,137 +1,109 @@
-import { useState, useCallback, useMemo } from 'react';
+import React from 'react';
+import { Trash2, Tag } from 'lucide-react';
 
-export const useCart = (products, entryTab) => {
-  const [cart, setCart] = useState([]);
-  const [globalDiscountAmt, setGlobalDiscountAmt] = useState('');
-  const [globalDiscountType, setGlobalDiscountType] = useState('%');
+const CartSection = React.memo(({ 
+  cart, 
+  products,
+  onUpdateQty, 
+  onUpdateUnit, 
+  onUpdatePriceType, 
+  onUpdateDiscount, 
+  onUpdatePrice, 
+  onRemove 
+}) => {
+  if (cart.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-slate-500 border-2 border-dashed border-white/5 rounded-xl">
+        <p className="text-xs font-bold">Cart is empty</p>
+      </div>
+    );
+  }
 
-  // ၁။ Cart ထဲသို့ ပစ္စည်းအသစ်ထည့်ခြင်း
-  const addToCart = useCallback((product, unit, priceType, quantity) => {
-    const qtyNum = Number(quantity);
-    if (!qtyNum || qtyNum <= 0) return { success: false, message: 'အရေအတွက် မှားယွင်းနေပါသည်' };
-
-    const baseQty = qtyNum * (Number(unit.factor) || 1);
-
-    // Sale ဖောင်အတွက်ဆိုလျှင် Stock စစ်မည်
-    if (entryTab === 'Sale') {
-      const currentStockBase = Number(product.stockBase) || 0;
-      if (baseQty > currentStockBase) {
-        return { success: false, message: 'Stock မလုံလောက်ပါ' };
-      }
-    }
-
-    setCart(prev => {
-      const existing = prev.find(x => x.productId === product.id && x.unitName === unit.name && x.priceType === priceType);
-      
-      if (existing) {
-        return prev.map(x => x.id === existing.id 
-          ? { ...x, quantity: x.quantity + qtyNum, baseQuantity: x.baseQuantity + baseQty } 
-          : x);
-      }
-
-      // 🌟 BUG FIX: Inventory ထဲမှ အဝယ်ဈေး (cost သို့မဟုတ် costPrice) ကို Default အနေဖြင့် Auto ယူပေးမည်
-      const defaultPurchasePrice = Number(unit.cost) || Number(unit.costPrice) || 0;
-
-      return [...prev, {
-        id: Date.now() + Math.random(),
-        productId: product.id,
-        name: product.name,
-        unitName: unit.name,
-        factor: Number(unit.factor) || 1,
-        priceType: priceType,
-        unitPrice: entryTab === 'Sale' ? (Number(unit.prices?.[priceType]) || 0) : defaultPurchasePrice,
-        quantity: qtyNum,
-        baseQuantity: baseQty,
-        itemDiscountAmt: 0
-      }];
-    });
-
-    return { success: true };
-  }, [entryTab]);
-
-  // ၂။ ဖျက်ခြင်း
-  const removeCartItem = useCallback((id) => {
-    setCart(prev => prev.filter(item => item.id !== id));
-  }, []);
-
-  // ၃။ အရေအတွက် ပြင်ခြင်း
-  const updateCartItemQty = useCallback((id, newQty) => {
-    const qtyNum = Number(newQty) || 1;
-    setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, quantity: qtyNum, baseQuantity: qtyNum * (item.factor || 1) } : item
-    ));
-  }, []);
-
-  // ၄။ Unit ပြောင်းခြင်း
-  const updateCartItemUnit = useCallback((id, unitName) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
+  return (
+    <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1 custom-scrollbar">
+      {cart.map(item => {
         const product = products.find(p => p.id === item.productId);
-        const newUnit = product?.packageUnits?.find(u => u.name === unitName);
-        if (newUnit) {
-          // 🌟 BUG FIX: Unit ပြောင်းလျှင်လည်း ထို Unit ၏ Inventory အဝယ်ဈေးကို Auto ယူပေးမည်
-          const defaultPurchasePrice = Number(newUnit.cost) || Number(newUnit.costPrice) || 0;
-          const newPrice = entryTab === 'Sale' ? (Number(newUnit.prices?.[item.priceType]) || 0) : defaultPurchasePrice;
-          
-          return {
-            ...item,
-            unitName: newUnit.name,
-            factor: newUnit.factor || 1,
-            unitPrice: newPrice,
-            baseQuantity: Number(item.quantity) * Number(newUnit.factor || 1)
-          };
-        }
-      }
-      return item;
-    }));
-  }, [products, entryTab]);
+        const availableUnits = product?.packageUnits || [];
 
-  // ၅။ ဈေးနှုန်းအမျိုးအစား ပြောင်းခြင်း
-  const updateCartItemPriceType = useCallback((id, priceType) => {
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        const product = products.find(p => p.id === item.productId);
-        const unit = product?.packageUnits?.find(u => u.name === item.unitName);
-        if (unit && entryTab === 'Sale') {
-          return { ...item, priceType: priceType, unitPrice: Number(unit.prices?.[priceType]) || 0 };
-        }
-      }
-      return item;
-    }));
-  }, [products, entryTab]);
+        return (
+          <div key={item.id} className="bg-black/40 border border-cyan-500/10 rounded-lg p-2 transition-all hover:border-cyan-500/30">
+            <div className="flex justify-between items-start">
+              
+              <div className="flex-1">
+                <p className="font-bold text-xs text-white">{item.name}</p>
+                
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  {/* အရေအတွက် ပြင်ရန် */}
+                  <input 
+                    type="number" min="1"
+                    value={item.quantity} 
+                    onChange={(e) => onUpdateQty(item.id, e.target.value)}
+                    className="w-12 bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white text-center outline-none focus:border-cyan-400"
+                    placeholder="Qty"
+                  />
+                  
+                  {/* Unit ရွေးရန် */}
+                  <select 
+                    value={item.unitName}
+                    onChange={(e) => onUpdateUnit(item.id, e.target.value)}
+                    className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400"
+                  >
+                    {availableUnits.map(u => (
+                      <option key={u.name} value={u.name}>{u.name}</option>
+                    ))}
+                  </select>
 
-  // ၆။ Discount ထည့်ခြင်း
-  const updateCartItemDiscount = useCallback((id, amt) => {
-    setCart(prev => prev.map(item => item.id === id ? { ...item, itemDiscountAmt: Number(amt) || 0 } : item));
-  }, []);
+                  {/* ဈေးနှုန်းအမျိုးအစား (Retail/Wholesale) */}
+                  <select 
+                    value={item.priceType}
+                    onChange={(e) => onUpdatePriceType(item.id, e.target.value)}
+                    className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400"
+                  >
+                    <option value="retail">Retail</option>
+                    <option value="wholesaleA">WS-A</option>
+                    <option value="wholesaleB">WS-B</option>
+                    <option value="wholesaleC">WS-C</option>
+                  </select>
 
-  // ၇။ အဝယ်ဈေး / Manual ဈေးနှုန်း ပြင်ဆင်ခြင်း 🌟 (UI မှ လက်ဖြင့်ပြင်ရိုက်လျှင် အလုပ်လုပ်မည်)
-  const updateCartItemPrice = useCallback((id, newPrice) => {
-    setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, unitPrice: Number(newPrice) || 0 } : item
-    ));
-  }, []);
+                  {/* ဈေးနှုန်း ပြင်ရန် (Price Override Input) */}
+                  <input 
+                    type="number" 
+                    value={item.unitPrice || ''} 
+                    onChange={(e) => onUpdatePrice(item.id, e.target.value)}
+                    className="w-20 bg-amber-900/10 border border-amber-500/30 rounded px-1.5 py-1 text-[11px] text-amber-400 outline-none focus:border-amber-400 text-center"
+                    placeholder="Price"
+                  />
+                </div>
 
-  // ၈။ ရှင်းလင်းခြင်း
-  const clearCart = useCallback(() => {
-    setCart([]);
-    setGlobalDiscountAmt('');
-  }, []);
+                {/* Subtotal ပြသခြင်း */}
+                <p className="text-cyan-400 text-[10px] mt-1.5 font-semibold">
+                  {Number(item.unitPrice).toLocaleString()} Ks × {item.quantity} = {Number(item.unitPrice * item.quantity).toLocaleString()} Ks
+                </p>
+              </div>
 
-  // ၉။ Totals တွက်ချက်ခြင်း
-  const cartTotals = useMemo(() => {
-    const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
-    const itemDiscounts = cart.reduce((acc, item) => acc + Number(item.itemDiscountAmt || 0), 0);
-    const globalDisc = globalDiscountType === '%' ? (subtotal - itemDiscounts) * (Number(globalDiscountAmt || 0) / 100) : Number(globalDiscountAmt || 0);
-      
-    return { subtotal, itemDiscounts, globalDisc, total: Math.max(subtotal - itemDiscounts - globalDisc, 0) };
-  }, [cart, globalDiscountAmt, globalDiscountType]);
+              {/* ဖျက်ရန် နှင့် Discount ထည့်ရန် */}
+              <div className="flex flex-col items-end gap-2">
+                <button onClick={() => onRemove(item.id)} className="text-rose-400 hover:text-rose-300 transition-colors p-1">
+                  <Trash2 size={14}/>
+                </button>
+                
+                <div className="flex items-center gap-1 text-amber-400 text-[10px] bg-amber-900/10 px-1.5 py-1 rounded border border-amber-500/10">
+                  <Tag size={10}/> 
+                  <input 
+                    type="number"
+                    value={item.itemDiscountAmt || ''} 
+                    onChange={e => onUpdateDiscount(item.id, e.target.value)} 
+                    placeholder="0" 
+                    className="w-12 bg-transparent text-[10px] text-amber-400 outline-none text-right placeholder-amber-700"
+                  /> Ks
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
 
-  return {
-    cart, addToCart, removeCartItem, updateCartItemQty, 
-    updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount, 
-    updateCartItemPrice,
-    clearCart, cartTotals, globalDiscountAmt, setGlobalDiscountAmt, 
-    globalDiscountType, setGlobalDiscountType
-  };
-};
+export default CartSection;

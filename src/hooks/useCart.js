@@ -9,7 +9,6 @@ export const useCart = (products, entryTab) => {
     const qtyNum = Number(quantity);
     if (!qtyNum || qtyNum <= 0) return { success: false, message: 'အရေအတွက် မှားယွင်းနေပါသည်' };
 
-    // 🌟 BUG FIX: factor အစား multiplier ကို သုံးထားသည်
     const baseQty = qtyNum * (Number(unit.multiplier) || 1);
 
     if (entryTab === 'Sale') {
@@ -35,7 +34,7 @@ export const useCart = (products, entryTab) => {
         productId: product.id,
         name: product.name,
         unitName: unit.name,
-        multiplier: Number(unit.multiplier) || 1, // 🌟 multiplier ဟု အမည်ပြောင်းထားသည်
+        multiplier: Number(unit.multiplier) || 1,
         priceType: priceType,
         unitPrice: entryTab === 'Sale' ? (Number(unit.prices?.[priceType]) || 0) : defaultPurchasePrice,
         quantity: qtyNum,
@@ -51,11 +50,19 @@ export const useCart = (products, entryTab) => {
     setCart(prev => prev.filter(item => item.id !== id));
   }, []);
 
+  // 🌟 အရေအတွက် ပြင်ခြင်း (Backspace ခေါက်၍ အလွတ်ဖျက်နိုင်ရန် ပြင်ဆင်ထားသည်)
   const updateCartItemQty = useCallback((id, newQty) => {
-    const qtyNum = Number(newQty) || 1;
-    setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, quantity: qtyNum, baseQuantity: qtyNum * (item.multiplier || 1) } : item
-    ));
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        const qtyVal = newQty === '' ? '' : Number(newQty);
+        return { 
+          ...item, 
+          quantity: qtyVal, 
+          baseQuantity: (Number(qtyVal) || 0) * (item.multiplier || 1) 
+        };
+      }
+      return item;
+    }));
   }, []);
 
   const updateCartItemUnit = useCallback((id, unitName) => {
@@ -64,7 +71,6 @@ export const useCart = (products, entryTab) => {
         const product = products.find(p => p.id === item.productId);
         const newUnit = product?.packageUnits?.find(u => u.name === unitName);
         if (newUnit) {
-          // 🌟 BUG FIX: Unit ပြောင်းလျှင် Price နှင့် BaseQty ကို အတိအကျပြန်တွက်သည်
           const defaultPurchasePrice = Number(newUnit.costPrice) || Number(newUnit.cost) || 0;
           const newPrice = entryTab === 'Sale' ? (Number(newUnit.prices?.[item.priceType]) || 0) : defaultPurchasePrice;
           
@@ -73,7 +79,7 @@ export const useCart = (products, entryTab) => {
             unitName: newUnit.name,
             multiplier: Number(newUnit.multiplier) || 1,
             unitPrice: newPrice,
-            baseQuantity: Number(item.quantity) * (Number(newUnit.multiplier) || 1)
+            baseQuantity: (Number(item.quantity) || 0) * (Number(newUnit.multiplier) || 1)
           };
         }
       }
@@ -109,8 +115,9 @@ export const useCart = (products, entryTab) => {
     setGlobalDiscountAmt('');
   }, []);
 
+  // 🌟 Totals တွက်ချက်ခြင်း (quantity က အလွတ်ဖြစ်နေရင် 0 လို့ ယူဆမည်)
   const cartTotals = useMemo(() => {
-    const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0);
+    const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * (Number(item.quantity) || 0)), 0);
     const itemDiscounts = cart.reduce((acc, item) => acc + Number(item.itemDiscountAmt || 0), 0);
     const globalDisc = globalDiscountType === '%' ? (subtotal - itemDiscounts) * (Number(globalDiscountAmt || 0) / 100) : Number(globalDiscountAmt || 0);
       

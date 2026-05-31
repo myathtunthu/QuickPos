@@ -1,16 +1,72 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { collection, doc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; // 🌟 getDoc ဖယ်ထားသည်
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { collection, doc, writeBatch, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
-import { Calendar, User, ShoppingCart, Printer, AlertTriangle } from 'lucide-react';
+import { Calendar, User, ShoppingCart, Printer } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode'; // 🌟 Barcode Scanner အတွက် ထည့်သွင်းထားသည်
 
+// Components များကို လှမ်းခေါ်ခြင်း
 import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
 import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
+
+// 🌟 Memory Leak မဖြစ်စေသော Barcode Scanner Modal (Built-in)
+const ScannerModal = ({ onClose, onScan }) => {
+  useEffect(() => {
+    let html5QrCode;
+    const startScanner = async () => {
+      try {
+        html5QrCode = new Html5Qrcode("barcode-reader");
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            if (html5QrCode.isScanning) {
+              html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                onScan(decodedText);
+              }).catch(console.error);
+            }
+          },
+          (errorMessage) => { /* ignore */ }
+        );
+      } catch (err) {
+        console.error("Scanner Error:", err);
+      }
+    };
+    startScanner();
+
+    return () => {
+      // 🌟 Clean up: Stop & Clear ကို အတိအကျလုပ်ပေးထား၍ Memory Leak လုံးဝမဖြစ်တော့ပါ
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+          html5QrCode.clear();
+        }).catch(console.error);
+      } else if (html5QrCode) {
+        html5QrCode.clear();
+      }
+    };
+  }, [onScan]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
+      <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
+        <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
+          <h3 className="font-black text-gray-800">Scan Barcode</h3>
+          <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+        </div>
+        <div id="barcode-reader" className="w-full bg-black min-h-[250px]"></div>
+        <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
+          ကင်မရာကို Barcode တည့်တည့်သို့ ချိန်ပါ
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function EntryPage({ products = [] }) {
   const { profile } = useAuth();
@@ -26,7 +82,7 @@ export default function EntryPage({ products = [] }) {
 
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
+  const [showScanner, setShowScanner] = useState(false); // 🌟 Scanner အဖွင့်/အပိတ် State
   const debouncedSearch = useDebounce(prodSearch, 300);
 
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -47,7 +103,6 @@ export default function EntryPage({ products = [] }) {
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
   
-  // 🌟 BUG FIX: Barcode ကို Package Unit ထဲထိ ဆင်းရှာမည်
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
@@ -58,7 +113,7 @@ export default function EntryPage({ products = [] }) {
         const hasBarcode = p.packageUnits?.some(u => 
           u.barcodes?.retail?.toLowerCase().includes(q) || 
           u.barcodes?.wholesale?.toLowerCase().includes(q) ||
-          u.barcode?.toLowerCase().includes(q) // legacy support
+          u.barcode?.toLowerCase().includes(q) 
         );
         return (p.name || '').toLowerCase().includes(q) || hasBarcode;
       });
@@ -67,7 +122,6 @@ export default function EntryPage({ products = [] }) {
   }, [products, debouncedSearch, selCategory]);
 
   const handleSelectProduct = useCallback((product) => {
-    // 🌟 BUG FIX: multiplier === 1 ဖြစ်သော Base Unit ကိုသာ Default အဖြစ် ယူမည်
     const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 }};
     const response = addToCart(product, defaultUnit, 'retail', 1);
     
@@ -78,7 +132,6 @@ export default function EntryPage({ products = [] }) {
     }
   }, [addToCart]);
 
-  // 🌟 BUG FIX: Tab ပြောင်းလျှင် Cart ပျက်မသွားစေရန် Confirm လုပ်မည်
   const handleTabChange = (tab) => {
     if (cart.length > 0) {
       if (!window.confirm("Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?")) return;
@@ -108,10 +161,9 @@ export default function EntryPage({ products = [] }) {
   };
 
   const submitTransaction = async () => {
-    if (loading) return; // 🌟 BUG FIX: Double Submit ကာကွယ်ခြင်း
+    if (loading) return; 
     if (cart.length === 0 || !tenantId) return;
 
-    // 🌟 BUG FIX: Negative Stock ကာကွယ်ရန် Final Validation လုပ်ခြင်း
     if (entryTab === 'Sale') {
       for (const item of cart) {
         const prodData = products.find(p => p.id === item.productId);
@@ -159,7 +211,7 @@ export default function EntryPage({ products = [] }) {
         const prodRef = doc(db, 'pos_products', item.productId);
         batch.set(prodRef, { 
           stockBase: increment(stockChange),
-          stock: increment(stockChange) // For backward compatibility with InventoryPage
+          stock: increment(stockChange) 
         }, { merge: true });
       });
 
@@ -178,7 +230,6 @@ export default function EntryPage({ products = [] }) {
 
   return (
     <>
-      {/* 🌟 BUG FIX: Receipt Print ကို သီးသန့်ဖြစ်စေရန် Global CSS ထည့်သွင်းခြင်း */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -186,6 +237,17 @@ export default function EntryPage({ products = [] }) {
           #receipt-print-area { position: absolute; left: 0; top: 0; width: 100%; }
         }
       `}</style>
+
+      {/* 🌟 Barcode Scanner Modal ဖော်ပြမည့် အပိုင်း */}
+      {showScanner && (
+        <ScannerModal 
+          onClose={() => setShowScanner(false)}
+          onScan={(text) => {
+             setProdSearch(text); // Scan ဖတ်လို့ရတဲ့ စာသားကို Search Box ထဲထည့်ပေးမည်
+             setShowScanner(false); // ပြီးရင် Modal ကို ပိတ်မည်
+          }}
+        />
+      )}
 
       <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
         
@@ -217,7 +279,14 @@ export default function EntryPage({ products = [] }) {
               <input value={personName} onChange={e => setPersonName(e.target.value)} placeholder={entryTab === 'Sale' ? "Customer Name (Optional)" : "Supplier Name"} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none focus:border-cyan-400 transition-colors" />
             </div>
 
-            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+            <ProductSearch 
+              categories={categories} 
+              selCategory={selCategory} 
+              setSelCategory={setSelCategory} 
+              prodSearch={prodSearch} 
+              setProdSearch={setProdSearch} 
+              setShowScanner={setShowScanner} // 🌟 Scanner ဖွင့်ရန် ခလုတ်ကို ချိတ်ဆက်ထားသည်
+            />
 
             <div className="relative z-10">
               {debouncedSearch.length > 0 ? (
@@ -244,7 +313,6 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex justify-between text-amber-400"><span>Item Discounts</span><span>-{Number(cartTotals.itemDiscounts).toLocaleString()} Ks</span></div>
                   )}
                   
-                  {/* 🌟 BUG FIX: Global Invoice Discount ထည့်ရန် UI */}
                   {entryTab === 'Sale' && (
                     <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
                       <span className="flex items-center gap-1">
@@ -294,7 +362,6 @@ export default function EntryPage({ products = [] }) {
                 ))}
               </div>
               
-              {/* 🌟 BUG FIX: Receipt တွင် Breakdown အသေးစိတ်ပြသခြင်း */}
               <div className="pt-4 space-y-1 text-sm font-bold text-gray-600 border-b-2 border-dashed border-gray-300 pb-4">
                  <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record?.subtotal).toLocaleString()} Ks</span></div>
                  {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
@@ -315,7 +382,6 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* 🌟 BUG FIX: Receipt Print Element */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black text-xs font-mono p-4">
              <div className="text-center mb-4">

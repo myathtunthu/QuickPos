@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
 import { Calendar, User, ShoppingCart, Printer } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode'; // 🌟 Barcode Scanner အတွက် ထည့်သွင်းထားသည်
+import { Html5Qrcode } from 'html5-qrcode'; 
 
 // Components များကို လှမ်းခေါ်ခြင်း
 import ProductSearch from '../components/entry/ProductSearch';
@@ -41,7 +41,6 @@ const ScannerModal = ({ onClose, onScan }) => {
     startScanner();
 
     return () => {
-      // 🌟 Clean up: Stop & Clear ကို အတိအကျလုပ်ပေးထား၍ Memory Leak လုံးဝမဖြစ်တော့ပါ
       if (html5QrCode && html5QrCode.isScanning) {
         html5QrCode.stop().then(() => {
           html5QrCode.clear();
@@ -82,7 +81,7 @@ export default function EntryPage({ products = [] }) {
 
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
-  const [showScanner, setShowScanner] = useState(false); // 🌟 Scanner အဖွင့်/အပိတ် State
+  const [showScanner, setShowScanner] = useState(false); 
   const debouncedSearch = useDebounce(prodSearch, 300);
 
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -164,6 +163,17 @@ export default function EntryPage({ products = [] }) {
     if (loading) return; 
     if (cart.length === 0 || !tenantId) return;
 
+    // အကြွေးစစ်ဆေးရန်အတွက် ကနဦး တွက်ချက်ခြင်း
+    const total = Number(cartTotals.total) || 0;
+    const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
+    const remainingDebt = Math.max(0, total - paid);
+
+    // 🌟 🌟 🌟 BUG FIX: အကြွေးဖြင့် ရောင်းချ/ဝယ်ယူပါက နာမည် မဖြစ်မနေ ထည့်ခိုင်းခြင်း
+    if (remainingDebt > 0 && !personName.trim()) {
+      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} ${entryTab === 'Sale' ? 'Customer' : 'Supplier'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
+      return; 
+    }
+
     if (entryTab === 'Sale') {
       for (const item of cart) {
         const prodData = products.find(p => p.id === item.productId);
@@ -180,10 +190,6 @@ export default function EntryPage({ products = [] }) {
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
-      const total = Number(cartTotals.total) || 0;
-      const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
-      const remainingDebt = Math.max(0, total - paid);
-
       const finalPersonName = personName || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
       const record = { 
@@ -238,13 +244,12 @@ export default function EntryPage({ products = [] }) {
         }
       `}</style>
 
-      {/* 🌟 Barcode Scanner Modal ဖော်ပြမည့် အပိုင်း */}
       {showScanner && (
         <ScannerModal 
           onClose={() => setShowScanner(false)}
           onScan={(text) => {
-             setProdSearch(text); // Scan ဖတ်လို့ရတဲ့ စာသားကို Search Box ထဲထည့်ပေးမည်
-             setShowScanner(false); // ပြီးရင် Modal ကို ပိတ်မည်
+             setProdSearch(text); 
+             setShowScanner(false); 
           }}
         />
       )}
@@ -285,7 +290,7 @@ export default function EntryPage({ products = [] }) {
               setSelCategory={setSelCategory} 
               prodSearch={prodSearch} 
               setProdSearch={setProdSearch} 
-              setShowScanner={setShowScanner} // 🌟 Scanner ဖွင့်ရန် ခလုတ်ကို ချိတ်ဆက်ထားသည်
+              setShowScanner={setShowScanner} 
             />
 
             <div className="relative z-10">

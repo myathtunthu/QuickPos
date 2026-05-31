@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { collection, doc, writeBatch, serverTimestamp, getDoc, increment } from 'firebase/firestore'; // 🌟 getDoc, increment အသစ်ပါသည်
+import { collection, doc, writeBatch, serverTimestamp, getDoc, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
-import { Calendar, User, ShoppingCart, Printer } from 'lucide-react'; // 🌟 မလိုတဲ့ Imports တွေ ဖြုတ်ထားသည်
+import { Calendar, User, ShoppingCart, Printer } from 'lucide-react';
 
 // Components များကို လှမ်းခေါ်ခြင်း
 import ProductSearch from '../components/entry/ProductSearch';
@@ -43,7 +43,7 @@ export default function EntryPage({ products = [] }) {
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmt, setExpenseAmt] = useState('');
 
-  // --- Cart Hook ---
+  // --- Cart Hook (Logic အားလုံးကို ဤ hook တွင်တွက်သည်) ---
   const { 
     cart, 
     addToCart, 
@@ -51,8 +51,8 @@ export default function EntryPage({ products = [] }) {
     updateCartItemQty,
     updateCartItemUnit, 
     updateCartItemPriceType, 
-    updateCartItemDiscount, 
-    updateCartItemPrice, // 🌟 UI မှ အဝယ်ဈေး ပြင်ရန်
+    updateCartItemDiscount,
+    updateCartItemPrice, // UI မှ အဝယ်ဈေး ပြင်ရန်
     clearCart, 
     cartTotals, 
     globalDiscountAmt, 
@@ -76,6 +76,7 @@ export default function EntryPage({ products = [] }) {
 
   // --- Action Handlers ---
   const handleSelectProduct = useCallback((product) => {
+    // ပုံသေအားဖြင့် ပထမဆုံး Unit နှင့် Retail Price ကို ရွေးပေးမည်
     const defaultUnit = product.packageUnits?.[0] || { name: 'ခု', factor: 1, prices: { retail: 0 }};
     const response = addToCart(product, defaultUnit, 'retail', 1);
     
@@ -88,7 +89,7 @@ export default function EntryPage({ products = [] }) {
 
   // --- Firebase Submit Logic ---
   
-  // 🌟 BUG FIX 1: Expense ကို မှန်ကန်သော Batch Pattern ဖြင့် ပြင်ထားသည်
+  // 1. Expense ကို မှန်ကန်သော Batch Pattern ဖြင့်သိမ်းခြင်း
   const submitExpense = async () => {
     if (!expenseTitle || !expenseAmt || !tenantId) return;
     setLoading(true);
@@ -116,7 +117,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // 🌟 BUG FIX 2: Transaction လုံခြုံမှုနှင့် Data Mismatch ပြဿနာများ ဖြေရှင်းထားသည်
+  // 2. Transaction ကို မှန်ကန်သော Batch Pattern နှင့် Database Stock ဖြင့်သိမ်းခြင်း
   const submitTransaction = async () => {
     if (cart.length === 0 || !tenantId) return;
     setLoading(true);
@@ -126,7 +127,6 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
       
       const total = Number(cartTotals.total) || 0;
-      // Empty string error ကို ကာကွယ်ထားသည်
       const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
       const remainingDebt = Math.max(0, total - paid);
 
@@ -161,18 +161,21 @@ export default function EntryPage({ products = [] }) {
 
       batch.set(ref, record);
 
-      // 🌟 BUG FIX 4: Outdated Cache ပြဿနာနှင့် Race Condition ဖြေရှင်းရန် Database မှ တိုက်ရိုက်ယူပြီး Increment ဖြင့် Update လုပ်သည်
-      for (const item of cart) {
-        if (!item.productId) continue;
+      // 🌟 BUG FIX: Stock Base ရော၊ Stock အဟောင်းကိုပါ တွဲပြီး Update လုပ်ပေးမည်
+      cart.forEach(item => {
+        if (!item.productId) return;
         
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
         const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
         
         const prodRef = doc(db, 'pos_products', item.productId);
-        batch.update(prodRef, { 
-          stockBase: increment(stockChange) 
-        });
-      }
+        
+        // merge: true ကိုသုံးခြင်းဖြင့် Inventory UI အဟောင်း/အသစ် နှစ်ခုလုံးတွင် အလုပ်လုပ်မည်
+        batch.set(prodRef, { 
+          stockBase: increment(stockChange),
+          stock: increment(stockChange) 
+        }, { merge: true });
+      });
 
       await batch.commit();
       
@@ -189,7 +192,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // 🌟 BUG FIX 8: Mobile တွင် Popup Block ခံရခြင်းမှ ကာကွယ်ရန် တိုက်ရိုက် Print ခေါ်ထားသည်
+  // --- Print Logic ---
   const doPrint = () => {
      window.print();
   };
@@ -197,6 +200,7 @@ export default function EntryPage({ products = [] }) {
   return (
     <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen">
       
+      {/* Header Row */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2">
           <ShoppingCart size={22}/> POS ENTRY
@@ -207,6 +211,7 @@ export default function EntryPage({ products = [] }) {
         </div>
       </div>
 
+      {/* Entry Tabs */}
       <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
         {['Sale', 'Purchase', 'Expense'].map(tab => (
           <button 
@@ -220,6 +225,7 @@ export default function EntryPage({ products = [] }) {
       </div>
 
       {entryTab === 'Expense' ? (
+        // --- Expense View ---
         <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
           <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
           <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
@@ -227,8 +233,10 @@ export default function EntryPage({ products = [] }) {
           <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
         </div>
       ) : (
+        // --- Sale / Purchase View ---
         <div className="space-y-4">
           
+          {/* Customer / Supplier Input */}
           <div className="relative">
             <User className="absolute left-3 top-3 text-cyan-500" size={16}/>
             <input 
@@ -239,6 +247,7 @@ export default function EntryPage({ products = [] }) {
             />
           </div>
 
+          {/* Search, Filter & Scanner */}
           <ProductSearch 
             categories={categories}
             selCategory={selCategory}
@@ -248,6 +257,7 @@ export default function EntryPage({ products = [] }) {
             setShowScanner={setShowScanner}
           />
 
+          {/* Product Grid / Dropdown Toggling */}
           <div className="relative z-10">
             {debouncedSearch.length > 0 ? (
               <ProductDropdown 
@@ -263,6 +273,7 @@ export default function EntryPage({ products = [] }) {
             )}
           </div>
 
+          {/* Cart UI Container */}
           <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
             <h2 className="text-xs font-bold text-slate-400 mb-2 pl-1 uppercase tracking-wider">Current Order</h2>
             
@@ -277,6 +288,7 @@ export default function EntryPage({ products = [] }) {
               onRemove={removeCartItem}
             />
 
+            {/* Totals Summary Array */}
             {cart.length > 0 && (
               <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-300">
@@ -294,6 +306,7 @@ export default function EntryPage({ products = [] }) {
             )}
           </div>
 
+          {/* Checkout & Payment Area */}
           {cart.length > 0 && (
             <PaymentSection 
               paymentMethod={paymentMethod}
@@ -323,7 +336,6 @@ export default function EntryPage({ products = [] }) {
               {(receiptModal.record?.itemsDetail||[]).map((item,i) => (
                 <div key={i} className="flex justify-between text-sm font-semibold text-gray-700">
                   <span>{item.name} <span className="text-gray-400 text-xs">({item.quantity} {item.unitName})</span></span>
-                  {/* 🌟 BUG FIX 6: UI နှင့် Backend Total တူညီစေရန် Discount နှုတ်ပြီးသားကိုသာ ပြသည် */}
                   <span>{Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}</span>
                 </div>
               ))}

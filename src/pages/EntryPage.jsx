@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { collection, doc, writeBatch, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, increment, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
@@ -73,7 +73,6 @@ export default function EntryPage({ products = [] }) {
   const shopName = profile?.shopName || 'QuickPOS';
   const shopPhone = profile?.phone || '09-123456789';
   const shopAddress = profile?.address || 'No.123, Yangon';
-  // Cashier Name ကို Profile မှ ယူမည်
   const cashierName = profile?.name || profile?.email?.split('@')[0] || 'Admin';
 
   const todayISO = new Date().toISOString().split('T')[0];
@@ -145,15 +144,31 @@ export default function EntryPage({ products = [] }) {
     if (!expenseTitle || !expenseAmt || !tenantId || loading) return;
     setLoading(true);
     try {
+      // 🌟 Voucher Number Counter (Expense အတွက်)
+      const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+      const counterSnap = await getDoc(counterRef);
+      let currentCount = 0;
+      if (counterSnap.exists()) {
+        currentCount = counterSnap.data().expenseCount || 0;
+      }
+      const nextCount = currentCount + 1;
+      const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`; // ဥပမာ: Expense 00001
+
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
       batch.set(ref, { 
         type: 'Expense', tenantId, item: expenseTitle, 
         amount: Number(expenseAmt) || 0, date: entryDate, 
-        time: new Date().toLocaleTimeString(), cashier: cashierName,
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }), 
+        cashier: cashierName,
+        voucherNo: voucherNo, // ဘောက်ချာနံပါတ် အသစ်
         createdAt: serverTimestamp() 
       });
+
+      // Update Counter
+      batch.set(counterRef, { expenseCount: increment(1) }, { merge: true });
+
       await batch.commit();
       setExpenseTitle(''); setExpenseAmt('');
       alert("Expense Saved!");
@@ -170,7 +185,6 @@ export default function EntryPage({ products = [] }) {
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
     const remainingDebt = Math.max(0, total - paid);
-    // ပြန်အမ်းငွေ (Change) တွက်ချက်ခြင်း
     const changeAmount = Math.max(0, paid - total);
 
     if (remainingDebt > 0 && !personName.trim()) {
@@ -191,17 +205,28 @@ export default function EntryPage({ products = [] }) {
 
     setLoading(true);
     try {
+      // 🌟 Voucher Number Counter (Sale/Purchase အတွက်)
+      const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+      const counterSnap = await getDoc(counterRef);
+      let currentCount = 0;
+      const countField = `${entryTab.toLowerCase()}Count`; // saleCount or purchaseCount
+      if (counterSnap.exists()) {
+        currentCount = counterSnap.data()[countField] || 0;
+      }
+      const nextCount = currentCount + 1;
+      const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; // ဥပမာ: Sale 00001 / Purchase 00001
+
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
       const finalPersonName = personName || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
-      // အချိန် အတိအကျ ယူခြင်း
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = { 
         id: ref.id, type: entryTab || 'Sale', tenantId, personName: finalPersonName, 
-        cashier: cashierName, // 🌟 Cashier ထည့်သွင်းခြင်း
-        time: currentTime,    // 🌟 အချိန် ထည့်သွင်းခြင်း
+        cashier: cashierName, 
+        time: currentTime,    
+        voucherNo: voucherNo, // ဘောက်ချာနံပါတ် အသစ်
         itemsDetail: cart.map(i => ({ 
           productId: i.productId || '', name: i.name || 'Unknown Item', 
           quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, 
@@ -212,12 +237,13 @@ export default function EntryPage({ products = [] }) {
         amount: total, subtotal: Number(cartTotals.subtotal) || 0, 
         itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, 
         paymentMethod: paymentMethod || 'Cash', paidAmount: paid, remainingDebt: remainingDebt, 
-        changeAmount: changeAmount, // 🌟 Change ထည့်သွင်းခြင်း
+        changeAmount: changeAmount, 
         date: entryDate || todayISO, createdAt: serverTimestamp() 
       };
       
       batch.set(ref, record);
 
+      // Update Stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -229,6 +255,9 @@ export default function EntryPage({ products = [] }) {
           stock: increment(stockChange) 
         }, { merge: true });
       });
+
+      // Update Counter
+      batch.set(counterRef, { [countField]: increment(1) }, { merge: true });
 
       await batch.commit();
       
@@ -355,27 +384,25 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* 🌟 Professional Receipt Modal (UI မျက်နှာပြင်ပေါ်တွင်ပြရန်) */}
+        {/* 🌟 Professional Receipt Modal (UI) */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
               
-              {/* Header */}
               <div className="text-center mb-4">
                 <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopName}</h2>
                 <p className="text-xs text-gray-500 mt-1">{shopAddress}</p>
                 <p className="text-xs text-gray-500">Tel: {shopPhone}</p>
               </div>
               
-              {/* Meta Info */}
               <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
-                <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.id.slice(-8).toUpperCase()}</span></div>
+                {/* 🌟 Sequence Number ပြသခြင်း */}
+                <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
                 <div className="flex justify-between"><span>Date & Time:</span> <span className="text-gray-900">{receiptModal.record.date} | {receiptModal.record.time}</span></div>
                 <div className="flex justify-between"><span>Cashier:</span> <span className="text-gray-900">{receiptModal.record.cashier}</span></div>
                 <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
               </div>
 
-              {/* Items Table */}
               <div className="mb-4">
                 <table className="w-full text-xs">
                   <thead>
@@ -403,7 +430,6 @@ export default function EntryPage({ products = [] }) {
                 </table>
               </div>
               
-              {/* Summary */}
               <div className="border-t border-dashed border-gray-300 pt-3 text-[11px] font-semibold text-gray-600 space-y-1.5">
                  <div className="flex justify-between"><span>Subtotal:</span><span className="text-gray-900">{Number(receiptModal.record.subtotal).toLocaleString()} Ks</span></div>
                  {(receiptModal.record.itemDiscount > 0 || receiptModal.record.globalDiscount > 0) && (
@@ -417,7 +443,6 @@ export default function EntryPage({ products = [] }) {
                 <span>GRAND TOTAL</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span>
               </div>
 
-              {/* Payment Details */}
               <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
                  <div className="flex justify-between">
                    <span>Paid Amount ({receiptModal.record.paymentMethod}):</span>
@@ -436,7 +461,6 @@ export default function EntryPage({ products = [] }) {
                  )}
               </div>
               
-              {/* Footer Stamp */}
               <div className="text-center mt-6 flex flex-col items-center gap-2">
                 <span className={`font-black tracking-widest border-2 px-4 py-1 rounded-sm text-sm ${receiptModal.record.remainingDebt > 0 ? 'text-red-500 border-red-500' : 'text-green-500 border-green-500'}`}>
                   {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
@@ -444,7 +468,6 @@ export default function EntryPage({ products = [] }) {
                 <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
               </div>
 
-              {/* Actions */}
               <div className="mt-6 flex flex-col gap-2">
                 <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
                   <Printer size={18}/> Print Receipt
@@ -458,7 +481,7 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* 🌟 Professional Receipt Print Area (Thermal Printer အတွက် သီးသန့်) */}
+      {/* 🌟 Professional Receipt Print Area (Thermal) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">
@@ -468,7 +491,8 @@ export default function EntryPage({ products = [] }) {
              </div>
              
              <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
-                 <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.id.slice(-8).toUpperCase()}</span></div>
+                 {/* 🌟 Sequence Number ပြသခြင်း */}
+                 <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.voucherNo}</span></div>
                  <div className="flex justify-between"><span>Date:</span> <span>{receiptModal.record.date} {receiptModal.record.time}</span></div>
                  <div className="flex justify-between"><span>Cashier:</span> <span>{receiptModal.record.cashier}</span></div>
                  <div className="flex justify-between"><span>Customer:</span> <span>{receiptModal.record.personName}</span></div>

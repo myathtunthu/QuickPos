@@ -14,7 +14,7 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// 🌟 Memory Leak မဖြစ်စေသော Barcode Scanner Modal (Built-in)
+// 🌟 Memory Leak မဖြစ်စေသော Barcode Scanner Modal
 const ScannerModal = ({ onClose, onScan }) => {
   useEffect(() => {
     let html5QrCode;
@@ -73,6 +73,8 @@ export default function EntryPage({ products = [] }) {
   const shopName = profile?.shopName || 'QuickPOS';
   const shopPhone = profile?.phone || '09-123456789';
   const shopAddress = profile?.address || 'No.123, Yangon';
+  // Cashier Name ကို Profile မှ ယူမည်
+  const cashierName = profile?.name || profile?.email?.split('@')[0] || 'Admin';
 
   const todayISO = new Date().toISOString().split('T')[0];
   const [entryDate, setEntryDate] = useState(todayISO);
@@ -148,7 +150,9 @@ export default function EntryPage({ products = [] }) {
       
       batch.set(ref, { 
         type: 'Expense', tenantId, item: expenseTitle, 
-        amount: Number(expenseAmt) || 0, date: entryDate, createdAt: serverTimestamp() 
+        amount: Number(expenseAmt) || 0, date: entryDate, 
+        time: new Date().toLocaleTimeString(), cashier: cashierName,
+        createdAt: serverTimestamp() 
       });
       await batch.commit();
       setExpenseTitle(''); setExpenseAmt('');
@@ -163,12 +167,12 @@ export default function EntryPage({ products = [] }) {
     if (loading) return; 
     if (cart.length === 0 || !tenantId) return;
 
-    // အကြွေးစစ်ဆေးရန်အတွက် ကနဦး တွက်ချက်ခြင်း
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
     const remainingDebt = Math.max(0, total - paid);
+    // ပြန်အမ်းငွေ (Change) တွက်ချက်ခြင်း
+    const changeAmount = Math.max(0, paid - total);
 
-    // 🌟 🌟 🌟 BUG FIX: အကြွေးဖြင့် ရောင်းချ/ဝယ်ယူပါက နာမည် မဖြစ်မနေ ထည့်ခိုင်းခြင်း
     if (remainingDebt > 0 && !personName.trim()) {
       alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} ${entryTab === 'Sale' ? 'Customer' : 'Supplier'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
       return; 
@@ -191,9 +195,13 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
       
       const finalPersonName = personName || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
+      // အချိန် အတိအကျ ယူခြင်း
+      const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = { 
         id: ref.id, type: entryTab || 'Sale', tenantId, personName: finalPersonName, 
+        cashier: cashierName, // 🌟 Cashier ထည့်သွင်းခြင်း
+        time: currentTime,    // 🌟 အချိန် ထည့်သွင်းခြင်း
         itemsDetail: cart.map(i => ({ 
           productId: i.productId || '', name: i.name || 'Unknown Item', 
           quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, 
@@ -204,7 +212,8 @@ export default function EntryPage({ products = [] }) {
         amount: total, subtotal: Number(cartTotals.subtotal) || 0, 
         itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, 
         paymentMethod: paymentMethod || 'Cash', paidAmount: paid, remainingDebt: remainingDebt, 
-        date: entryDate || new Date().toISOString().split('T')[0], createdAt: serverTimestamp() 
+        changeAmount: changeAmount, // 🌟 Change ထည့်သွင်းခြင်း
+        date: entryDate || todayISO, createdAt: serverTimestamp() 
       };
       
       batch.set(ref, record);
@@ -240,7 +249,15 @@ export default function EntryPage({ products = [] }) {
         @media print {
           body * { visibility: hidden; }
           #receipt-print-area, #receipt-print-area * { visibility: visible; }
-          #receipt-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          #receipt-print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 80mm; /* Standard Thermal Printer Width */
+            margin: 0;
+            padding: 10px;
+          }
+          @page { margin: 0; }
         }
       `}</style>
 
@@ -284,14 +301,7 @@ export default function EntryPage({ products = [] }) {
               <input value={personName} onChange={e => setPersonName(e.target.value)} placeholder={entryTab === 'Sale' ? "Customer Name (Optional)" : "Supplier Name"} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none focus:border-cyan-400 transition-colors" />
             </div>
 
-            <ProductSearch 
-              categories={categories} 
-              selCategory={selCategory} 
-              setSelCategory={setSelCategory} 
-              prodSearch={prodSearch} 
-              setProdSearch={setProdSearch} 
-              setShowScanner={setShowScanner} 
-            />
+            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
 
             <div className="relative z-10">
               {debouncedSearch.length > 0 ? (
@@ -304,12 +314,7 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
               <h2 className="text-xs font-bold text-slate-400 mb-2 pl-1 uppercase tracking-wider">Current Order</h2>
               
-              <CartSection 
-                cart={cart} products={products} onUpdateQty={updateCartItemQty}
-                onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} 
-                onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} 
-                onRemove={removeCartItem}
-              />
+              <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
 
               {cart.length > 0 && (
                 <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-2 text-xs">
@@ -350,70 +355,183 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {receiptModal.show && (
+        {/* 🌟 Professional Receipt Modal (UI မျက်နှာပြင်ပေါ်တွင်ပြရန်) */}
+        {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-            <div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
-              <div className="text-center border-b-2 border-dashed border-gray-300 pb-4">
-                <h2 className="text-2xl font-black text-gray-800">{shopName}</h2>
-                <p className="text-xs text-gray-500 mt-1">📞 {shopPhone}</p>
-                <p className="text-xs text-gray-500">📍 {shopAddress}</p>
-              </div>
-              <div className="py-4 space-y-2 border-b-2 border-dashed border-gray-300">
-                {(receiptModal.record?.itemsDetail||[]).map((item,i) => (
-                  <div key={i} className="flex justify-between text-sm font-semibold text-gray-700">
-                    <span>{item.name} <span className="text-gray-400 text-xs">({item.quantity} {item.unitName})</span></span>
-                    <span>{Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}</span>
-                  </div>
-                ))}
+            <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
+              
+              {/* Header */}
+              <div className="text-center mb-4">
+                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopName}</h2>
+                <p className="text-xs text-gray-500 mt-1">{shopAddress}</p>
+                <p className="text-xs text-gray-500">Tel: {shopPhone}</p>
               </div>
               
-              <div className="pt-4 space-y-1 text-sm font-bold text-gray-600 border-b-2 border-dashed border-gray-300 pb-4">
-                 <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record?.subtotal).toLocaleString()} Ks</span></div>
-                 {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
-                    <div className="flex justify-between text-red-500"><span>Discount:</span><span>-{Number(receiptModal.record?.itemDiscount + receiptModal.record?.globalDiscount).toLocaleString()} Ks</span></div>
+              {/* Meta Info */}
+              <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.id.slice(-8).toUpperCase()}</span></div>
+                <div className="flex justify-between"><span>Date & Time:</span> <span className="text-gray-900">{receiptModal.record.date} | {receiptModal.record.time}</span></div>
+                <div className="flex justify-between"><span>Cashier:</span> <span className="text-gray-900">{receiptModal.record.cashier}</span></div>
+                <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
+              </div>
+
+              {/* Items Table */}
+              <div className="mb-4">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-300 text-gray-500">
+                      <th className="text-left py-2 font-bold uppercase tracking-wider">Description</th>
+                      <th className="text-right py-2 font-bold uppercase tracking-wider">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptModal.record.itemsDetail.map((item,i) => (
+                      <tr key={i} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2.5">
+                          <div className="font-bold text-gray-800">{item.name}</div>
+                          <div className="text-gray-500 text-[10px] mt-0.5">
+                            {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                            {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-right font-bold text-gray-800 align-top">
+                          {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Summary */}
+              <div className="border-t border-dashed border-gray-300 pt-3 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                 <div className="flex justify-between"><span>Subtotal:</span><span className="text-gray-900">{Number(receiptModal.record.subtotal).toLocaleString()} Ks</span></div>
+                 {(receiptModal.record.itemDiscount > 0 || receiptModal.record.globalDiscount > 0) && (
+                    <div className="flex justify-between text-red-500">
+                      <span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()} Ks</span>
+                    </div>
                  )}
               </div>
 
-              <div className="pt-4 flex justify-between text-xl font-black text-gray-800">
-                <span>GRAND TOTAL</span><span>{Number(receiptModal.record?.amount).toLocaleString()} Ks</span>
+              <div className="border-t border-gray-300 pt-3 mt-3 flex justify-between text-lg font-black text-gray-900">
+                <span>GRAND TOTAL</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span>
+              </div>
+
+              {/* Payment Details */}
+              <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
+                 <div className="flex justify-between">
+                   <span>Paid Amount ({receiptModal.record.paymentMethod}):</span>
+                   <span className="text-gray-900">{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span>
+                 </div>
+                 {receiptModal.record.remainingDebt > 0 ? (
+                   <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                     <span>Credit Balance (အကြွေး):</span>
+                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span>
+                   </div>
+                 ) : (
+                   <div className="flex justify-between text-green-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                     <span>Change (ပြန်အမ်းငွေ):</span>
+                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()} Ks</span>
+                   </div>
+                 )}
               </div>
               
+              {/* Footer Stamp */}
+              <div className="text-center mt-6 flex flex-col items-center gap-2">
+                <span className={`font-black tracking-widest border-2 px-4 py-1 rounded-sm text-sm ${receiptModal.record.remainingDebt > 0 ? 'text-red-500 border-red-500' : 'text-green-500 border-green-500'}`}>
+                  {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
+                </span>
+                <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
+              </div>
+
+              {/* Actions */}
               <div className="mt-6 flex flex-col gap-2">
-                <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30"><Printer size={18}/> Print Receipt</button>
-                <button onClick={() => setReceiptModal({show:false, record:null})} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors">New Transaction</button>
+                <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
+                  <Printer size={18}/> Print Receipt
+                </button>
+                <button onClick={() => setReceiptModal({show:false, record:null})} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors">
+                  New Transaction
+                </button>
               </div>
             </div>
           </div>
         )}
       </div>
 
+      {/* 🌟 Professional Receipt Print Area (Thermal Printer အတွက် သီးသန့်) */}
       {receiptModal.show && receiptModal.record && (
-         <div id="receipt-print-area" className="hidden print:block bg-white text-black text-xs font-mono p-4">
-             <div className="text-center mb-4">
-                 <h2 className="text-lg font-bold">{shopName}</h2>
-                 <p>📞 {shopPhone}</p><p>📍 {shopAddress}</p>
-                 <p>📅 {receiptModal.record.date}</p><p>🧾 {receiptModal.record.id.slice(-8)}</p>
+         <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
+             <div className="text-center mb-3">
+                 <h2 className="text-[18px] font-bold uppercase m-0">{shopName}</h2>
+                 <p className="m-0 mt-1">{shopAddress}</p>
+                 <p className="m-0">Tel: {shopPhone}</p>
              </div>
-             <table className="w-full border-collapse mb-2">
-                 <thead><tr className="border-b border-black"><th className="text-left py-1">Item</th><th className="text-center py-1">Qty</th><th className="text-right py-1">Total</th></tr></thead>
+             
+             <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
+                 <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.id.slice(-8).toUpperCase()}</span></div>
+                 <div className="flex justify-between"><span>Date:</span> <span>{receiptModal.record.date} {receiptModal.record.time}</span></div>
+                 <div className="flex justify-between"><span>Cashier:</span> <span>{receiptModal.record.cashier}</span></div>
+                 <div className="flex justify-between"><span>Customer:</span> <span>{receiptModal.record.personName}</span></div>
+             </div>
+
+             <table className="w-full border-collapse mb-3">
+                 <thead>
+                     <tr className="border-b border-black">
+                         <th className="text-left pb-1 font-bold">Item</th>
+                         <th className="text-right pb-1 font-bold">Amount</th>
+                     </tr>
+                 </thead>
                  <tbody>
                      {receiptModal.record.itemsDetail.map((item, i) => (
-                         <tr key={i} className="border-b border-gray-300">
-                             <td className="py-1">{item.name}<br/><span className="text-[10px] text-gray-600">{item.unitName}</span></td>
-                             <td className="text-center py-1">{item.quantity}</td>
-                             <td className="text-right py-1">{Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}</td>
+                         <tr key={i}>
+                             <td className="py-1.5 align-top">
+                                <div className="font-bold">{item.name}</div>
+                                <div className="text-[10px] mt-0.5">
+                                  {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                                  {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                                </div>
+                             </td>
+                             <td className="text-right py-1.5 align-top font-bold">
+                               {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
+                             </td>
                          </tr>
                      ))}
                  </tbody>
              </table>
-             <div className="border-t border-black pt-2 mb-2">
-                 <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record.subtotal).toLocaleString()} Ks</span></div>
+             
+             <div className="border-t border-dashed border-black pt-2 mb-2 space-y-1">
+                 <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record.subtotal).toLocaleString()}</span></div>
                  {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
-                    <div className="flex justify-between"><span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()} Ks</span></div>
+                    <div className="flex justify-between"><span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()}</span></div>
                  )}
              </div>
-             <div className="flex justify-between font-bold border-t-2 border-black pt-2 text-sm"><span>TOTAL:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
-             <div className="text-center mt-6 text-[10px]">Thank you for your purchase!</div>
+             
+             <div className="flex justify-between font-bold border-t border-black pt-2 mb-3 text-[14px]">
+               <span>TOTAL:</span><span>{Number(receiptModal.record.amount).toLocaleString()}</span>
+             </div>
+
+             <div className="border-t border-black pt-2 mb-4 space-y-1">
+                 <div className="flex justify-between">
+                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
+                   <span>{Number(receiptModal.record.paidAmount).toLocaleString()}</span>
+                 </div>
+                 {receiptModal.record.remainingDebt > 0 ? (
+                   <div className="flex justify-between font-bold">
+                     <span>Credit Balance:</span>
+                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()}</span>
+                   </div>
+                 ) : (
+                   <div className="flex justify-between font-bold">
+                     <span>Change:</span>
+                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()}</span>
+                   </div>
+                 )}
+             </div>
+
+             <div className="text-center font-bold text-[14px] mb-2">
+                {receiptModal.record.remainingDebt > 0 ? '*** CREDIT ***' : '*** PAID ***'}
+             </div>
+             <div className="text-center text-[10px]">Thank you for your business!</div>
          </div>
       )}
     </>

@@ -29,6 +29,9 @@ export const useCart = (products, entryTab) => {
           : x);
       }
 
+      // 🌟 BUG FIX: Inventory ထဲမှ အဝယ်ဈေး (cost သို့မဟုတ် costPrice) ကို Default အနေဖြင့် Auto ယူပေးမည်
+      const defaultPurchasePrice = Number(unit.cost) || Number(unit.costPrice) || 0;
+
       return [...prev, {
         id: Date.now() + Math.random(),
         productId: product.id,
@@ -36,7 +39,7 @@ export const useCart = (products, entryTab) => {
         unitName: unit.name,
         factor: Number(unit.factor) || 1,
         priceType: priceType,
-        unitPrice: entryTab === 'Sale' ? (unit.prices?.[priceType] || 0) : (unit.cost || 0),
+        unitPrice: entryTab === 'Sale' ? (Number(unit.prices?.[priceType]) || 0) : defaultPurchasePrice,
         quantity: qtyNum,
         baseQuantity: baseQty,
         itemDiscountAmt: 0
@@ -66,7 +69,10 @@ export const useCart = (products, entryTab) => {
         const product = products.find(p => p.id === item.productId);
         const newUnit = product?.packageUnits?.find(u => u.name === unitName);
         if (newUnit) {
-          const newPrice = entryTab === 'Sale' ? (newUnit.prices?.[item.priceType] || 0) : (newUnit.cost || 0);
+          // 🌟 BUG FIX: Unit ပြောင်းလျှင်လည်း ထို Unit ၏ Inventory အဝယ်ဈေးကို Auto ယူပေးမည်
+          const defaultPurchasePrice = Number(newUnit.cost) || Number(newUnit.costPrice) || 0;
+          const newPrice = entryTab === 'Sale' ? (Number(newUnit.prices?.[item.priceType]) || 0) : defaultPurchasePrice;
+          
           return {
             ...item,
             unitName: newUnit.name,
@@ -99,7 +105,7 @@ export const useCart = (products, entryTab) => {
     setCart(prev => prev.map(item => item.id === id ? { ...item, itemDiscountAmt: Number(amt) || 0 } : item));
   }, []);
 
-  // ၇။ အဝယ်ဈေး / Manual ဈေးနှုန်း ပြင်ဆင်ခြင်း 🌟 (Purchase အတွက် အရေးကြီးပါသည်)
+  // ၇။ အဝယ်ဈေး / Manual ဈေးနှုန်း ပြင်ဆင်ခြင်း 🌟 (UI မှ လက်ဖြင့်ပြင်ရိုက်လျှင် အလုပ်လုပ်မည်)
   const updateCartItemPrice = useCallback((id, newPrice) => {
     setCart(prev => prev.map(item => 
       item.id === id ? { ...item, unitPrice: Number(newPrice) || 0 } : item
@@ -124,7 +130,7 @@ export const useCart = (products, entryTab) => {
   return {
     cart, addToCart, removeCartItem, updateCartItemQty, 
     updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount, 
-    updateCartItemPrice, // 🌟 UI သို့ ထုတ်ပေးထားပါသည်
+    updateCartItemPrice,
     clearCart, cartTotals, globalDiscountAmt, setGlobalDiscountAmt, 
     globalDiscountType, setGlobalDiscountType
   };

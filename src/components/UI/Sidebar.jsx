@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShoppingCart, Package, BarChart3, Users, Settings, LogOut, FileText, Truck, PauseCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // လမ်းကြောင်းမှန်အောင် ပြင်ထားသည်
+// 🌟 ဤနေရာတွင် လမ်းကြောင်းကို ../ အစား ../../ ဖြင့် အမှန်ပြင်ဆင်ထားပါသည်
+import { useAuth } from '../../context/AuthContext'; 
 
 export default function Sidebar({ onCloseMobile }) {
   const location = useLocation();
@@ -20,10 +21,10 @@ export default function Sidebar({ onCloseMobile }) {
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/entry', icon: ShoppingCart, label: 'POS Entry' },
-    { path: '/drafts', icon: PauseCircle, label: 'Hold Invoices' }, // 🌟 အသစ်
+    { path: '/drafts', icon: PauseCircle, label: 'Hold Invoices' }, 
     { path: '/inventory', icon: Package, label: 'Inventory' },
-    { path: '/customers', icon: Users, label: 'Customers' }, // 🌟 အသစ်
-    { path: '/suppliers', icon: Truck, label: 'Suppliers' }, // 🌟 အသစ်
+    { path: '/customers', icon: Users, label: 'Customers' }, 
+    { path: '/suppliers', icon: Truck, label: 'Suppliers' }, 
     { path: '/records', icon: FileText, label: 'မှတ်တမ်းများ' }, 
     { path: '/reports', icon: BarChart3, label: 'Reports' },
     { path: '/admin', icon: Users, label: 'Admin', adminOnly: true },

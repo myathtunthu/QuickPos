@@ -3,7 +3,60 @@ import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/library';
 
+// ---------- Scanner Modal (ZXing) ----------
+const ScannerModal = ({ onClose, onScan }) => {
+  const videoRef = useRef(null);
+  const [cameraError, setCameraError] = useState(false);
+  const readerRef = useRef(null);
+
+  useEffect(() => {
+    const codeReader = new BrowserMultiFormatReader();
+    readerRef.current = codeReader;
+
+    codeReader
+      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
+        if (result) {
+          onScan(result.text);
+          codeReader.reset();
+          onClose();
+        }
+        // err is ignored (no barcode in frame)
+      })
+      .catch((err) => {
+        console.error('Camera error:', err);
+        setCameraError(true);
+      });
+
+    return () => {
+      if (readerRef.current) {
+        readerRef.current.reset();
+      }
+    };
+  }, [onScan, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
+      <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
+        <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
+          <h3 className="font-black text-gray-800">Scan Barcode</h3>
+          <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+        </div>
+        {cameraError ? (
+          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
+        ) : (
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
+        )}
+        <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
+          ကင်မရာကို Barcode သို့ ချိန်ပါ
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Inventory Page ----------
 export default function InventoryPage({ products = [] }) {
   const { profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,8 +65,6 @@ export default function InventoryPage({ products = [] }) {
   const [showScanner, setShowScanner] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
-  const scannerRef = useRef(null);
-  const isStopping = useRef(false);
 
   const [form, setForm] = useState({
     name: '', category: '', baseUnit: 'Bottle',
@@ -23,28 +74,19 @@ export default function InventoryPage({ products = [] }) {
     minStock: '5',
   });
 
-  // 🌟 Extract distinct categories from existing products
   const categories = useMemo(() => {
     const cats = new Set(products.map(p => p.category).filter(Boolean));
     return ['General', ...Array.from(cats).sort()];
   }, [products]);
 
   const fmt = n => (Number(n) || 0).toLocaleString();
-
-  const toggleRow = (id) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  // (All other helper functions unchanged: getUnitBreakdown, playBeep, scanner effect, etc.)
+  const toggleRow = (id) => setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
 
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
     const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
     let remain = stock;
-    return sorted.map(unit => ({
-      unit: unit.name,
-      qty: Math.floor(remain / unit.multiplier),
-    }));
+    return sorted.map(unit => ({ unit: unit.name, qty: Math.floor(remain / unit.multiplier) }));
   };
 
   const playBeep = (type = 'success') => {
@@ -59,30 +101,6 @@ export default function InventoryPage({ products = [] }) {
       osc.start(); osc.stop(ctx.currentTime + 0.3);
     } catch (e) {}
   };
-
-  useEffect(() => {
-    if (!showScanner) return;
-    let html5QrCode;
-    const startScanner = async () => {
-      try {
-        if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; }
-        html5QrCode = new window.Html5Qrcode("product-barcode-reader"); scannerRef.current = html5QrCode;
-        await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            setForm(prev => {
-              const newUnits = prev.packageUnits.map(u => ({ ...u, barcodes: { ...u.barcodes, retail: u.barcodes.retail || decodedText } }));
-              return { ...prev, packageUnits: newUnits };
-            });
-            playBeep('success');
-            (async () => { if (isStopping.current) return; isStopping.current = true; if (scannerRef.current) { await scannerRef.current.stop().catch(()=>{}); scannerRef.current = null; } isStopping.current = false; setShowScanner(false); })();
-          }, () => {}
-        );
-      } catch (err) { alert('Camera access denied'); setShowScanner(false); }
-    };
-    if (!window.Html5Qrcode) { const script = document.createElement('script'); script.src = "https://unpkg.com/html5-qrcode"; script.onload = startScanner; document.body.appendChild(script); }
-    else { startScanner(); }
-    return () => { isStopping.current = true; if (scannerRef.current) scannerRef.current.stop().catch(()=>{}); };
-  }, [showScanner]);
 
   const addPackageUnit = () => {
     setForm(prev => ({
@@ -131,7 +149,6 @@ export default function InventoryPage({ products = [] }) {
     if (!profile?.tenantId) { alert("No tenant ID found."); return; }
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
-
     const incomingBarcodes = validUnits.map(u => u.barcodes.retail).filter(b => b && b.trim() !== '');
     const isDuplicate = products.some(p => {
       if (editing && p.id === editing.id) return false;
@@ -139,14 +156,12 @@ export default function InventoryPage({ products = [] }) {
     });
 
     if (isDuplicate) {
-      alert("အမှား: ဤ Barcode သည် အခြားပစ္စည်းတွင် သုံးထားပြီးဖြစ်ပါသည်။ (Duplicate Barcode Error)");
+      alert("အမှား: ဤ Barcode သည် အခြားပစ္စည်းတွင် သုံးထားပြီးဖြစ်ပါသည်။");
       return;
     }
 
     const payload = {
-      name: form.name,
-      category: form.category || 'General',
-      baseUnit: form.baseUnit,
+      name: form.name, category: form.category || 'General', baseUnit: form.baseUnit,
       packageUnits: validUnits.map(u => ({
         name: u.name, multiplier: Number(u.multiplier) || 1,
         barcodes: { retail: u.barcodes.retail || '' },
@@ -159,12 +174,10 @@ export default function InventoryPage({ products = [] }) {
     try {
       if (editing) {
         await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true });
-        alert("Product updated!");
-        setEditing(null);
+        alert("Product updated!"); setEditing(null);
       } else {
         await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, stockBase: 0, createdAt: Date.now() });
-        alert("Product added!");
-        setAdding(false);
+        alert("Product added!"); setAdding(false);
       }
       resetForm();
     } catch (error) { alert("Error: " + error.message); }
@@ -221,37 +234,20 @@ export default function InventoryPage({ products = [] }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
             
-            {/* 🌟 Category Dropdown */}
+            {/* Category Dropdown */}
             <div>
               {showNewCategoryInput ? (
                 <div className="flex gap-1">
-                  <input
-                    value={form.category}
-                    onChange={e => setForm({...form, category: e.target.value})}
-                    placeholder="New Category"
-                    className="flex-1 bg-black border border-green-500/20 p-2 rounded-lg text-white outline-none text-sm"
-                    autoFocus
-                  />
+                  <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="New Category" className="flex-1 bg-black border border-green-500/20 p-2 rounded-lg text-white outline-none text-sm" autoFocus />
                   <button type="button" onClick={() => setShowNewCategoryInput(false)} className="px-2 py-1 bg-slate-700 rounded-lg text-xs">✕</button>
                 </div>
               ) : (
-                <select
-                  value={form.category}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (val === '__add_new__') {
-                      setShowNewCategoryInput(true);
-                      setForm(prev => ({...prev, category: ''}));
-                    } else {
-                      setForm({...form, category: val});
-                    }
-                  }}
-                  className="w-full bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"
-                >
+                <select value={form.category} onChange={e => {
+                  if (e.target.value === '__add_new__') { setShowNewCategoryInput(true); setForm(prev => ({...prev, category: ''})); }
+                  else setForm({...form, category: e.target.value});
+                }} className="w-full bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm">
                   <option value="">Select Category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   <option value="__add_new__">+ Add New Category</option>
                 </select>
               )}
@@ -260,7 +256,7 @@ export default function InventoryPage({ products = [] }) {
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
           </div>
 
-          {/* Package Units (unchanged) */}
+          {/* Package Units (same as before) */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
@@ -344,7 +340,7 @@ export default function InventoryPage({ products = [] }) {
         </form>
       )}
 
-      {/* Compact Table with Expandable Rows (unchanged) */}
+      {/* Product Table (expandable) same as before */}
       <div className="bg-[#0d1120] border border-cyan-500/15 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -409,12 +405,7 @@ export default function InventoryPage({ products = [] }) {
                               </div>
                               <div>
                                 <label className="text-slate-500">Stock (Base)</label>
-                                <input
-                                  type="number"
-                                  defaultValue={stockVal}
-                                  onBlur={e => updateStock(p.id, e.target.value)}
-                                  className="w-20 bg-black border border-cyan-500/30 rounded px-2 py-1 text-white mt-1"
-                                />
+                                <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-20 bg-black border border-cyan-500/30 rounded px-2 py-1 text-white mt-1" />
                               </div>
                             </div>
                             <div>
@@ -449,15 +440,17 @@ export default function InventoryPage({ products = [] }) {
 
       {/* Scanner Modal */}
       {showScanner && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 p-4">
-          <div className="bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/30 w-full max-w-lg">
-            <div className="flex justify-between mb-6">
-              <h3 className="font-black text-white text-xl">Scan Barcode</h3>
-              <button onClick={()=>setShowScanner(false)} className="text-slate-400"><X size={24}/></button>
-            </div>
-            <div id="product-barcode-reader" className="w-full rounded-2xl" style={{minHeight:'260px'}}></div>
-          </div>
-        </div>
+        <ScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(text) => {
+            setForm(prev => {
+              const newUnits = prev.packageUnits.map(u => ({ ...u, barcodes: { ...u.barcodes, retail: u.barcodes.retail || text } }));
+              return { ...prev, packageUnits: newUnits };
+            });
+            playBeep('success');
+            setShowScanner(false);
+          }}
+        />
       )}
     </div>
   );

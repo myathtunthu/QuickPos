@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@zxing/library": "^0.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "firebase": "^10.14.1",
@@ -16,8 +17,7 @@
     "react-window": "^1.8.10",
     "framer-motion": "^10.16.16",
     "lucide-react": "^0.344.0",
-    "recharts": "^2.12.0",
-    "html5-qrcode": "^2.3.8"
+    "recharts": "^2.12.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

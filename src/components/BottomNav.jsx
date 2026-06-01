@@ -1,13 +1,13 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, FileText, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, ShieldAlert, PauseCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dash' },
   { path: '/entry', icon: ShoppingCart, label: 'Entry' },
+  { path: '/drafts', icon: PauseCircle, label: 'Hold' }, // 🌟 အသစ်
   { path: '/inventory', icon: Package, label: 'Stock' },
-  { path: '/ledger', icon: FileText, label: 'Ledger' },
-  { path: '/admin', icon: ShieldAlert, label: 'Admin' },
+  { path: '/customers', icon: Users, label: 'People' }, // 🌟 လွယ်ကူစေရန် Customer သို့ ချိတ်ထားသည်
 ];
 
 export default function BottomNav() {

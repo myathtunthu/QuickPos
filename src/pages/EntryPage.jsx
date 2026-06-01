@@ -18,27 +18,43 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (ZXing version) ----------
+// ---------- Scanner Modal (ZXing Fixed) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const readerRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
+  const [devices, setDevices] = useState([]);
 
   useEffect(() => {
     const codeReader = new BrowserMultiFormatReader();
     readerRef.current = codeReader;
 
+    // ကင်မရာများကို ရှာပြီး ပထမဆုံး camera ID နဲ့ စဖတ်မယ်
     codeReader
-      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
-        if (result) {
-          onScan(result.text);
-          codeReader.reset();
-          onClose();
+      .listVideoInputDevices()
+      .then((videoDevices) => {
+        if (videoDevices.length === 0) {
+          setCameraError(true);
+          return;
         }
-        // ignore errors when no barcode in frame
+        setDevices(videoDevices);
+        // ပထမဆုံး camera ကို ရွေးမယ် (environment facing ကို ဦးစားပေးလို့ရတယ်)
+        const firstDeviceId = videoDevices[0].deviceId;
+        return codeReader.decodeFromVideoDevice(
+          firstDeviceId,
+          videoRef.current,
+          (result, err) => {
+            if (result) {
+              onScan(result.text);
+              codeReader.reset();
+              onClose();
+            }
+            // err ကို ignore (no barcode in frame)
+          }
+        );
       })
       .catch((err) => {
-        console.error('Camera error:', err);
+        console.error('Camera list error:', err);
         setCameraError(true);
       });
 
@@ -57,7 +73,10 @@ const ScannerModal = ({ onClose, onScan }) => {
           <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
-          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
+          <div className="p-6 text-center text-red-500">
+            Camera access denied or not available.<br/>
+            Please allow camera permissions.
+          </div>
         ) : (
           <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
         )}
@@ -68,7 +87,6 @@ const ScannerModal = ({ onClose, onScan }) => {
     </div>
   );
 };
-
 export default function EntryPage({ products = [] }) {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;

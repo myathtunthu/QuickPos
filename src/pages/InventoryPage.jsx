@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ export default function InventoryPage({ products = [] }) {
   const [editing, setEditing] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const scannerRef = useRef(null);
   const isStopping = useRef(false);
 
@@ -22,11 +23,19 @@ export default function InventoryPage({ products = [] }) {
     minStock: '5',
   });
 
+  // 🌟 Extract distinct categories from existing products
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category).filter(Boolean));
+    return ['General', ...Array.from(cats).sort()];
+  }, [products]);
+
   const fmt = n => (Number(n) || 0).toLocaleString();
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
+
+  // (All other helper functions unchanged: getUnitBreakdown, playBeep, scanner effect, etc.)
 
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
@@ -89,13 +98,16 @@ export default function InventoryPage({ products = [] }) {
     }));
   };
 
-  const resetForm = () => setForm({
-    name: '', category: '', baseUnit: 'Bottle',
-    packageUnits: [
-      { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
-    ],
-    minStock: '5',
-  });
+  const resetForm = () => {
+    setForm({
+      name: '', category: '', baseUnit: 'Bottle',
+      packageUnits: [
+        { name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' },
+      ],
+      minStock: '5',
+    });
+    setShowNewCategoryInput(false);
+  };
 
   const updatePackageUnit = (index, field, value) => {
     setForm(prev => {
@@ -132,7 +144,9 @@ export default function InventoryPage({ products = [] }) {
     }
 
     const payload = {
-      name: form.name, category: form.category || 'General', baseUnit: form.baseUnit,
+      name: form.name,
+      category: form.category || 'General',
+      baseUnit: form.baseUnit,
       packageUnits: validUnits.map(u => ({
         name: u.name, multiplier: Number(u.multiplier) || 1,
         barcodes: { retail: u.barcodes.retail || '' },
@@ -168,6 +182,7 @@ export default function InventoryPage({ products = [] }) {
       })),
       minStock: String(p.minStock || '5'),
     });
+    setShowNewCategoryInput(false);
   };
 
   const cancelEdit = () => { setEditing(null); setAdding(false); resetForm(); };
@@ -205,11 +220,47 @@ export default function InventoryPage({ products = [] }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
-            <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
+            
+            {/* 🌟 Category Dropdown */}
+            <div>
+              {showNewCategoryInput ? (
+                <div className="flex gap-1">
+                  <input
+                    value={form.category}
+                    onChange={e => setForm({...form, category: e.target.value})}
+                    placeholder="New Category"
+                    className="flex-1 bg-black border border-green-500/20 p-2 rounded-lg text-white outline-none text-sm"
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowNewCategoryInput(false)} className="px-2 py-1 bg-slate-700 rounded-lg text-xs">✕</button>
+                </div>
+              ) : (
+                <select
+                  value={form.category}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === '__add_new__') {
+                      setShowNewCategoryInput(true);
+                      setForm(prev => ({...prev, category: ''}));
+                    } else {
+                      setForm({...form, category: val});
+                    }
+                  }}
+                  className="w-full bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="__add_new__">+ Add New Category</option>
+                </select>
+              )}
+            </div>
+
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
           </div>
 
-          {/* Package Units */}
+          {/* Package Units (unchanged) */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
@@ -293,7 +344,7 @@ export default function InventoryPage({ products = [] }) {
         </form>
       )}
 
-      {/* Compact Table with Expandable Rows */}
+      {/* Compact Table with Expandable Rows (unchanged) */}
       <div className="bg-[#0d1120] border border-cyan-500/15 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -319,7 +370,6 @@ export default function InventoryPage({ products = [] }) {
                 const isExpanded = expandedRows[p.id] || false;
 
                 return (
-                  // ✅ Changed React.Fragment to <> shorthand
                   <React.Fragment key={p.id}>
                     <tr
                       onClick={() => toggleRow(p.id)}
@@ -343,7 +393,6 @@ export default function InventoryPage({ products = [] }) {
                       </td>
                     </tr>
 
-                    {/* Expanded Detail Row */}
                     {isExpanded && (
                       <tr className="bg-black/20">
                         <td colSpan={6} className="p-4">

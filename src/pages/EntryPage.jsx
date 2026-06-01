@@ -11,7 +11,7 @@ import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
 import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
-import PaymentSection from '../components/entry/PaymentSection'; // 🌟 အစ်ကိုရေးထားသော Component အသစ်
+import PaymentSection from '../components/entry/PaymentSection'; 
 
 const ScannerModal = ({ onClose, onScan }) => {
   useEffect(() => {
@@ -77,7 +77,6 @@ export default function EntryPage({ products = [] }) {
   const [entryDate, setEntryDate] = useState(todayISO);
   const [entryTab, setEntryTab] = useState('Sale'); 
   
-  // 🌟 Phase 2: Customers & Suppliers Ledger Integration
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState(null);
@@ -104,17 +103,21 @@ export default function EntryPage({ products = [] }) {
     setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType 
   } = useCart(products, entryTab);
 
-  // --- Fetch Database Persons (Customers/Suppliers) ---
-  useEffect(() => {
+  // DB မှ လူစာရင်းရယူခြင်း
+  const fetchPersons = async () => {
     if (!tenantId) return;
-    getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)))
-      .then(snap => setCustomers(snap.docs.map(d => ({id: d.id, ...d.data()})))).catch(console.error);
-    
-    getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)))
-      .then(snap => setSuppliers(snap.docs.map(d => ({id: d.id, ...d.data()})))).catch(console.error);
-  }, [tenantId]);
+    try {
+      const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+      setCustomers(custSnap.docs.map(d => ({id: d.id, ...d.data()})));
+      const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
+      setSuppliers(suppSnap.docs.map(d => ({id: d.id, ...d.data()})));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  // Tab ပြောင်းလျှင် Person အချက်အလက်များ ရှင်းပစ်မည်
+  useEffect(() => { fetchPersons(); }, [tenantId]);
+
   useEffect(() => {
     setPersonSearch('');
     setSelectedPerson(null);
@@ -155,7 +158,6 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // 🌟 Phase 2: Hold Invoice (Draft)
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
@@ -165,22 +167,13 @@ export default function EntryPage({ products = [] }) {
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
       await setDoc(draftRef, {
-        tenantId,
-        draftName: name,
-        type: entryTab,
-        cart: cart, 
-        cartTotals,
-        personSearch,
-        selectedPerson,
-        createdAt: serverTimestamp()
+        tenantId, draftName: name, type: entryTab, cart: cart, 
+        cartTotals, personSearch, selectedPerson, createdAt: serverTimestamp()
       });
       alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ (Hold Invoice Saved)။");
-      clearCart();
-      setPersonSearch('');
-      setSelectedPerson(null);
+      clearCart(); setPersonSearch(''); setSelectedPerson(null);
     } catch (err) {
-      console.error(err);
-      alert("Error saving draft!");
+      console.error(err); alert("Error saving draft!");
     }
     setLoading(false);
   };
@@ -223,9 +216,18 @@ export default function EntryPage({ products = [] }) {
     const remainingDebt = Math.max(0, total - paid);
     const changeAmount = Math.max(0, paid - total);
 
-    // 🌟 Phase 2: Ledger Validation - အကြွေးဖြစ်လျှင် Person ရွေးချယ်ရန် မဖြစ်မနေလိုအပ်သည်
-    if (remainingDebt > 0 && !selectedPerson) {
-      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} စာရင်းသွင်းပြီးသား ${entryTab === 'Sale' ? 'Customer' : 'Supplier'} ကို Dropdown မှ မဖြစ်မနေ ရွေးချယ်ပေးပါ။`);
+    // 🌟 🌟 🌟 PHASE 2 UPDATE: Auto Save New Customer/Supplier Logic
+    let personIdForRecord = selectedPerson?.id || null;
+    let personNameForRecord = selectedPerson?.name || personSearch.trim();
+
+    // အမည် မထည့်ထားလျှင် (Walk-in)
+    if (!personNameForRecord) {
+      personNameForRecord = entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier';
+    }
+
+    // အကြွေးဖြစ်ပြီး အမည်မပါလျှင် တားမည်
+    if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
+      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
       return; 
     }
 
@@ -239,22 +241,46 @@ export default function EntryPage({ products = [] }) {
 
     setLoading(true);
     try {
+      const batch = writeBatch(db);
+
+      // 🌟 အမည်ရိုက်ထည့်ထားပြီး ရှိပြီးသားလူ မဟုတ်ဘူးဆိုရင် အသစ်ဖန်တီးမည် (Auto Create Customer/Supplier)
+      if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
+        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+        const newPersonRef = doc(collection(db, collectionName));
+        personIdForRecord = newPersonRef.id;
+
+        batch.set(newPersonRef, {
+          tenantId: tenantId,
+          name: personNameForRecord,
+          phone: '',
+          address: '',
+          totalDebt: remainingDebt, // အကြွေးဆိုလျှင် တန်းပေါင်းထည့်မည်
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } else if (personIdForRecord && remainingDebt > 0) {
+        // ရှိပြီးသားလူဆိုလျှင် အကြွေးကိုသာ Update လုပ်မည်
+        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+        const personRef = doc(db, collectionName, personIdForRecord);
+        batch.update(personRef, { totalDebt: increment(remainingDebt) });
+      }
+
+      // Voucher Number
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
       const countField = `${entryTab.toLowerCase()}Count`; 
       const nextCount = (counterSnap.exists() ? (counterSnap.data()[countField] || 0) : 0) + 1;
       const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; 
 
-      const batch = writeBatch(db);
+      // Save Record
       const ref = doc(collection(db, 'pos_records'));
-      
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = { 
         id: ref.id, type: entryTab || 'Sale', tenantId, 
-        personName: selectedPerson?.name || personSearch || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier'), 
-        customerId: entryTab === 'Sale' ? (selectedPerson?.id || null) : null,
-        supplierId: entryTab === 'Purchase' ? (selectedPerson?.id || null) : null,
+        personName: personNameForRecord, 
+        customerId: entryTab === 'Sale' ? personIdForRecord : null,
+        supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
         cashier: cashierName, time: currentTime, voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({ 
           productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, 
@@ -268,12 +294,6 @@ export default function EntryPage({ products = [] }) {
         date: entryDate || todayISO, createdAt: serverTimestamp() 
       };
       batch.set(ref, record);
-
-      // 🌟 Phase 2: Update Customer / Supplier Debt in Ledger
-      if (remainingDebt > 0 && selectedPerson) {
-        const personRef = doc(db, entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers', selectedPerson.id);
-        batch.update(personRef, { totalDebt: increment(remainingDebt) });
-      }
 
       // Update Stock
       cart.forEach(item => {
@@ -290,6 +310,9 @@ export default function EntryPage({ products = [] }) {
       
       setReceiptModal({ show: true, record }); 
       clearCart(); setPersonSearch(''); setSelectedPerson(null); setPaidAmount(''); setPaymentMethod('Cash');
+      
+      // Update List locally for next transactions without reloading
+      fetchPersons();
 
     } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
     setLoading(false);
@@ -362,7 +385,7 @@ export default function EntryPage({ products = [] }) {
         ) : (
           <div className="space-y-4">
             
-            {/* 🌟 Phase 2: Person Dropdown Select (Customer/Supplier) */}
+            {/* Person Dropdown Select (Customer/Supplier) */}
             <div className="relative z-20">
               <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
               <input 
@@ -374,10 +397,10 @@ export default function EntryPage({ products = [] }) {
                 }} 
                 onFocus={() => setShowPersonDropdown(true)}
                 onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
-                placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ"} 
+                placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"} 
                 className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`} 
               />
-              {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
+              {showPersonDropdown && personSearch.length > 0 && (
                 <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
                   {filteredPersons.map(p => (
                     <div 
@@ -393,6 +416,12 @@ export default function EntryPage({ products = [] }) {
                       {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
                     </div>
                   ))}
+                  {/* မတွေ့ပါက အသစ်အဖြစ် မှတ်မည်ဟု ပြသရန် */}
+                  {filteredPersons.length === 0 && (
+                     <div className="px-4 py-2.5 bg-green-900/30 text-green-400 text-[11px] font-bold">
+                        "{personSearch}" အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                     </div>
+                  )}
                 </div>
               )}
             </div>
@@ -410,7 +439,6 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
               <div className="flex justify-between items-center mb-2 pl-1 pr-1">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
-                {/* 🌟 Phase 2: Hold Invoice Button */}
                 <button 
                   onClick={handleHoldInvoice} 
                   disabled={cart.length === 0}
@@ -455,7 +483,6 @@ export default function EntryPage({ products = [] }) {
               )}
             </div>
 
-            {/* 🌟 အစ်ကိုပေးထားသော Payment Section သစ်ကို ချိတ်ဆက်အသုံးပြုထားခြင်း */}
             {cart.length > 0 && (
               <PaymentSection 
                 paymentMethod={paymentMethod} 
@@ -470,7 +497,6 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* Professional Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
@@ -566,7 +592,6 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* Professional Receipt Print Area (Thermal) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

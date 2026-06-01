@@ -82,6 +82,10 @@ export default function EntryPage({ products = [] }) {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [personSearch, setPersonSearch] = useState('');
   const [showPersonDropdown, setShowPersonDropdown] = useState(false);
+  
+  // 🌟 Auto-create အတွက် ဖုန်းနှင့် လိပ်စာ အသစ်ထည့်ရန် State များ
+  const [newPersonPhone, setNewPersonPhone] = useState('');
+  const [newPersonAddress, setNewPersonAddress] = useState('');
 
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
@@ -103,7 +107,6 @@ export default function EntryPage({ products = [] }) {
     setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType 
   } = useCart(products, entryTab);
 
-  // DB မှ လူစာရင်းရယူခြင်း
   const fetchPersons = async () => {
     if (!tenantId) return;
     try {
@@ -121,6 +124,8 @@ export default function EntryPage({ products = [] }) {
   useEffect(() => {
     setPersonSearch('');
     setSelectedPerson(null);
+    setNewPersonPhone('');
+    setNewPersonAddress('');
   }, [entryTab]);
 
   const personList = entryTab === 'Sale' ? customers : suppliers;
@@ -171,7 +176,7 @@ export default function EntryPage({ products = [] }) {
         cartTotals, personSearch, selectedPerson, createdAt: serverTimestamp()
       });
       alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ (Hold Invoice Saved)။");
-      clearCart(); setPersonSearch(''); setSelectedPerson(null);
+      clearCart(); setPersonSearch(''); setSelectedPerson(null); setNewPersonPhone(''); setNewPersonAddress('');
     } catch (err) {
       console.error(err); alert("Error saving draft!");
     }
@@ -216,16 +221,13 @@ export default function EntryPage({ products = [] }) {
     const remainingDebt = Math.max(0, total - paid);
     const changeAmount = Math.max(0, paid - total);
 
-    // 🌟 🌟 🌟 PHASE 2 UPDATE: Auto Save New Customer/Supplier Logic
     let personIdForRecord = selectedPerson?.id || null;
     let personNameForRecord = selectedPerson?.name || personSearch.trim();
 
-    // အမည် မထည့်ထားလျှင် (Walk-in)
     if (!personNameForRecord) {
       personNameForRecord = entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier';
     }
 
-    // အကြွေးဖြစ်ပြီး အမည်မပါလျှင် တားမည်
     if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
       alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
       return; 
@@ -243,7 +245,6 @@ export default function EntryPage({ products = [] }) {
     try {
       const batch = writeBatch(db);
 
-      // 🌟 အမည်ရိုက်ထည့်ထားပြီး ရှိပြီးသားလူ မဟုတ်ဘူးဆိုရင် အသစ်ဖန်တီးမည် (Auto Create Customer/Supplier)
       if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const newPersonRef = doc(collection(db, collectionName));
@@ -252,27 +253,24 @@ export default function EntryPage({ products = [] }) {
         batch.set(newPersonRef, {
           tenantId: tenantId,
           name: personNameForRecord,
-          phone: '',
-          address: '',
-          totalDebt: remainingDebt, // အကြွေးဆိုလျှင် တန်းပေါင်းထည့်မည်
+          phone: newPersonPhone.trim(), // 🌟 ထည့်သွင်းထားသော ဖုန်းနံပါတ်ကို သိမ်းမည်
+          address: newPersonAddress.trim(), // 🌟 ထည့်သွင်းထားသော လိပ်စာကို သိမ်းမည်
+          totalDebt: remainingDebt,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
       } else if (personIdForRecord && remainingDebt > 0) {
-        // ရှိပြီးသားလူဆိုလျှင် အကြွေးကိုသာ Update လုပ်မည်
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const personRef = doc(db, collectionName, personIdForRecord);
         batch.update(personRef, { totalDebt: increment(remainingDebt) });
       }
 
-      // Voucher Number
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
       const countField = `${entryTab.toLowerCase()}Count`; 
       const nextCount = (counterSnap.exists() ? (counterSnap.data()[countField] || 0) : 0) + 1;
       const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; 
 
-      // Save Record
       const ref = doc(collection(db, 'pos_records'));
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -295,7 +293,6 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, record);
 
-      // Update Stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -309,9 +306,8 @@ export default function EntryPage({ products = [] }) {
       await batch.commit();
       
       setReceiptModal({ show: true, record }); 
-      clearCart(); setPersonSearch(''); setSelectedPerson(null); setPaidAmount(''); setPaymentMethod('Cash');
+      clearCart(); setPersonSearch(''); setSelectedPerson(null); setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
       
-      // Update List locally for next transactions without reloading
       fetchPersons();
 
     } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
@@ -385,43 +381,64 @@ export default function EntryPage({ products = [] }) {
         ) : (
           <div className="space-y-4">
             
-            {/* Person Dropdown Select (Customer/Supplier) */}
-            <div className="relative z-20">
-              <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
-              <input 
-                value={personSearch} 
-                onChange={e => {
-                  setPersonSearch(e.target.value);
-                  setSelectedPerson(null);
-                  setShowPersonDropdown(true);
-                }} 
-                onFocus={() => setShowPersonDropdown(true)}
-                onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
-                placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"} 
-                className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`} 
-              />
-              {showPersonDropdown && personSearch.length > 0 && (
-                <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
-                  {filteredPersons.map(p => (
-                    <div 
-                      key={p.id} 
-                      onClick={() => {
-                        setSelectedPerson(p);
-                        setPersonSearch(p.name);
-                        setShowPersonDropdown(false);
-                      }} 
-                      className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
-                    >
-                      <p className="text-sm font-bold text-white">{p.name}</p>
-                      {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
-                    </div>
-                  ))}
-                  {/* မတွေ့ပါက အသစ်အဖြစ် မှတ်မည်ဟု ပြသရန် */}
-                  {filteredPersons.length === 0 && (
-                     <div className="px-4 py-2.5 bg-green-900/30 text-green-400 text-[11px] font-bold">
-                        "{personSearch}" အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
-                     </div>
-                  )}
+            {/* Person Dropdown & New Fields Select */}
+            <div className="relative z-20 space-y-2">
+              <div className="relative">
+                <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
+                <input 
+                  value={personSearch} 
+                  onChange={e => {
+                    setPersonSearch(e.target.value);
+                    setSelectedPerson(null);
+                    setShowPersonDropdown(true);
+                  }} 
+                  onFocus={() => setShowPersonDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
+                  placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"} 
+                  className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`} 
+                />
+                {showPersonDropdown && personSearch.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                    {filteredPersons.map(p => (
+                      <div 
+                        key={p.id} 
+                        onMouseDown={() => {
+                          setSelectedPerson(p);
+                          setPersonSearch(p.name);
+                          setShowPersonDropdown(false);
+                          setNewPersonPhone('');
+                          setNewPersonAddress('');
+                        }} 
+                        className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
+                      >
+                        <p className="text-sm font-bold text-white">{p.name}</p>
+                        {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
+                      </div>
+                    ))}
+                    {filteredPersons.length === 0 && (
+                       <div className="px-4 py-2.5 bg-green-900/30 text-green-400 text-[11px] font-bold">
+                          "{personSearch}" အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                       </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 🌟 ဖုန်းနှင့် လိပ်စာ အသစ်ထည့်ရန် အကွက် (နာမည်အသစ်ရိုက်မှသာ ပေါ်မည်) */}
+              {!selectedPerson && personSearch.trim().length > 0 && (
+                <div className="flex gap-2 p-2 bg-green-900/10 rounded-xl border border-green-500/20">
+                  <input 
+                    value={newPersonPhone} 
+                    onChange={e => setNewPersonPhone(e.target.value)} 
+                    placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" 
+                    className="w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
+                  />
+                  <input 
+                    value={newPersonAddress} 
+                    onChange={e => setNewPersonAddress(e.target.value)} 
+                    placeholder="လိပ်စာ (မထည့်လည်းရသည်)" 
+                    className="w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
+                  />
                 </div>
               )}
             </div>

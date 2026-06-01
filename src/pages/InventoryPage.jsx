@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X } from 'lucide-react';
+import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function InventoryPage({ products = [] }) {
   const { profile } = useAuth();
@@ -10,6 +10,7 @@ export default function InventoryPage({ products = [] }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({}); // Track expanded row by product ID
   const scannerRef = useRef(null);
   const isStopping = useRef(false);
 
@@ -23,6 +24,10 @@ export default function InventoryPage({ products = [] }) {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
     const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
@@ -32,6 +37,9 @@ export default function InventoryPage({ products = [] }) {
       qty: Math.floor(remain / unit.multiplier),
     }));
   };
+
+  // ... (rest of the helper functions: playBeep, scanner effect, add/remove package unit, resetForm, updatePackageUnit, handleSaveProduct, startEdit, cancelEdit, updateStock)
+  // All kept exactly the same as original – just copy them in below.
 
   const playBeep = (type = 'success') => {
     try {
@@ -115,13 +123,10 @@ export default function InventoryPage({ products = [] }) {
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
 
-    // 🌟 PHASE 1 FIX: Duplicate Barcode Check (Barcode အတူတူ ထပ်နေပါက Save ခွင့်မပြုပါ)
     const incomingBarcodes = validUnits.map(u => u.barcodes.retail).filter(b => b && b.trim() !== '');
     const isDuplicate = products.some(p => {
-      if (editing && p.id === editing.id) return false; 
-      return p.packageUnits?.some(u => 
-        incomingBarcodes.includes(u.barcodes?.retail)
-      );
+      if (editing && p.id === editing.id) return false;
+      return p.packageUnits?.some(u => incomingBarcodes.includes(u.barcodes?.retail));
     });
 
     if (isDuplicate) {
@@ -141,15 +146,14 @@ export default function InventoryPage({ products = [] }) {
     };
 
     try {
-      if (editing) { 
-        await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true }); 
-        alert("Product updated!"); 
-        setEditing(null); 
-      }
-      else { 
-        await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, stockBase: 0, createdAt: Date.now() }); 
-        alert("Product added!"); 
-        setAdding(false); 
+      if (editing) {
+        await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true });
+        alert("Product updated!");
+        setEditing(null);
+      } else {
+        await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, stockBase: 0, createdAt: Date.now() });
+        alert("Product added!");
+        setAdding(false);
       }
       resetForm();
     } catch (error) { alert("Error: " + error.message); }
@@ -171,42 +175,50 @@ export default function InventoryPage({ products = [] }) {
 
   const cancelEdit = () => { setEditing(null); setAdding(false); resetForm(); };
 
-  // 🌟 PHASE 1 FIX: Stock ပြင်ဆင်ပါက stock ရော stockBase ပါ တစ်ပြိုင်နက် Update လုပ်ပေးမည်
   const updateStock = async (id, newStock) => {
     const s = Number(newStock);
-    if (!isNaN(s)) { 
-      await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true }); 
+    if (!isNaN(s)) {
+      await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
     }
   };
 
   const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border-2 border-cyan-500/15 shadow-xl gap-5">
-        <h3 className="font-black text-2xl flex items-center gap-3"><Boxes className="text-cyan-500"/> Inventory</h3>
-        <div className="flex flex-wrap md:flex-nowrap gap-4 w-full md:w-auto">
-          <div className="relative flex-1 min-w-[200px]"><Search size={20} className="absolute left-4 top-3.5 text-slate-500"/><input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-black/50 border-2 border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400"/></div>
-          <button onClick={()=>{setAdding(!adding);setEditing(null);}} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2"><Plus size={20}/> Add Item</button>
+    <div className="p-4 sm:p-6 text-white max-w-7xl mx-auto space-y-6 pb-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-2xl border border-cyan-500/15 gap-4">
+        <h3 className="font-black text-xl sm:text-2xl flex items-center gap-2"><Boxes className="text-cyan-500"/> Inventory</h3>
+        <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search size={18} className="absolute left-3 top-2.5 text-slate-500"/>
+            <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm"/>
+          </div>
+          <button onClick={()=>{setAdding(!adding);setEditing(null);}} className="bg-cyan-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 text-sm">
+            <Plus size={18}/> Add Item
+          </button>
         </div>
       </div>
 
+      {/* Add / Edit Form */}
       {(adding || editing) && (
-        <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-6 sm:p-8 rounded-3xl border-2 border-cyan-500/20 shadow-xl space-y-5">
+        <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-4 sm:p-6 rounded-2xl border border-cyan-500/20 space-y-4">
           <p className="text-sm font-black text-cyan-400 uppercase">{editing ? 'Edit Product' : 'New Product'}</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
-            <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
-            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
+            <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Product Name" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
+            <input value={form.category} onChange={e=>setForm({...form,category:e.target.value})} placeholder="Category" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
+            <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
           </div>
 
+          {/* Package Units - keep same structure */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
               <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> Add Unit</button>
             </div>
-
+            {/* ... (mobile/desktop table inputs kept as original) */}
             <div className="block sm:hidden space-y-3">
               {form.packageUnits.map((unit, idx) => (
                 <div key={idx} className="bg-black/30 border border-cyan-500/10 rounded-xl p-3 space-y-2">
@@ -274,44 +286,131 @@ export default function InventoryPage({ products = [] }) {
             </div>
           </div>
 
-          <div><label className="text-xs text-slate-500">Min Stock Alert (Base Unit)</label><input type="number" value={form.minStock} onChange={e=>setForm({...form,minStock:e.target.value})} placeholder="5" className="w-full bg-black border border-amber-500/15 p-3 rounded-lg text-amber-300 outline-none"/></div>
+          <div><label className="text-xs text-slate-500">Min Stock Alert (Base Unit)</label><input type="number" value={form.minStock} onChange={e=>setForm({...form,minStock:e.target.value})} placeholder="5" className="w-full bg-black border border-amber-500/15 p-2 rounded-lg text-amber-300 outline-none"/></div>
 
-          <div className="flex gap-3"><button type="submit" className="flex-1 bg-cyan-600 text-white p-4 rounded-xl font-black flex items-center justify-center gap-2"><Save size={20}/> Save</button><button type="button" onClick={cancelEdit} className="px-8 bg-slate-800 text-slate-400 rounded-xl font-black">Cancel</button></div>
+          <div className="flex gap-3">
+            <button type="submit" className="flex-1 bg-cyan-600 text-white p-2 rounded-xl font-black flex items-center justify-center gap-2"><Save size={18}/> Save</button>
+            <button type="button" onClick={cancelEdit} className="px-6 bg-slate-800 text-slate-400 rounded-xl font-black">Cancel</button>
+          </div>
         </form>
       )}
 
-      <div className="space-y-3">
-        {filteredProducts.length === 0 && <p className="text-center text-slate-500 py-14">No products found.</p>}
-        {filteredProducts.map(p => {
-          const isLowStock = (Number(p.stock) || 0) <= (Number(p.minStock) || 5);
-          const breakdown = getUnitBreakdown(p.stock || 0, p.packageUnits || []);
-          return (
-            <div key={p.id} className={`p-5 rounded-2xl border-2 ${isLowStock ? 'bg-amber-950/20 border-amber-500/30' : 'bg-[#0d1120] border-white/5'}`}>
-              <div className="flex flex-col md:flex-row justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-3"><p className="font-black text-white text-xl">{p.name}</p><span className="text-xs bg-slate-800 px-2 py-1 rounded">{p.category||'General'}</span></div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-slate-400">
-                    <span className="text-white font-bold">Stock: {p.stock || 0} {p.baseUnit}</span>
-                    {breakdown.filter(b => b.qty > 0).map((b, i) => (<span key={i}>• {b.qty} {b.unit}</span>))}
-                  </div>
-                  {(p.packageUnits || []).length > 0 && (
-                    <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-500">
-                      {p.packageUnits.map((u, i) => (<span key={i}>1 {u.name}: {fmt(u.prices?.retail)} Ks (Retail) | Cost: {fmt(u.costPrice)}</span>))}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col items-end"><span className="text-xs text-slate-500">Stock (Base)</span><input type="number" defaultValue={p.stock||0} onBlur={e=>updateStock(p.id,e.target.value)} className={`w-24 text-center font-black text-xl px-2 py-3 rounded-lg outline-none border ${isLowStock?'bg-amber-950/40 border-amber-500/50 text-amber-300':'bg-black/50 border-cyan-500/30 text-cyan-300'}`}/></div>
-                  <button onClick={()=>startEdit(p)} className="p-3 bg-indigo-950/50 border border-indigo-500/20 text-indigo-400 rounded-lg"><Edit3 size={20}/></button>
-                  <button onClick={()=>{if(window.confirm('Delete?')) deleteDoc(doc(db,'pos_products',p.id));}} className="p-3 bg-rose-950/50 border border-rose-500/20 text-rose-400 rounded-lg"><Trash2 size={20}/></button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {/* Compact Table with Expandable Rows */}
+      <div className="bg-[#0d1120] border border-cyan-500/15 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 text-xs uppercase bg-black/20">
+                <th className="p-3 text-left w-10"></th>
+                <th className="p-3 text-left">Product</th>
+                <th className="p-3 text-center">Base Unit</th>
+                <th className="p-3 text-center">Stock</th>
+                <th className="p-3 text-right">Retail (Smallest)</th>
+                <th className="p-3 text-center w-24">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.length === 0 && (
+                <tr><td colSpan={6} className="p-6 text-center text-slate-500">No products found.</td></tr>
+              )}
+              {filteredProducts.map(p => {
+                const isLowStock = (Number(p.stockBase) || Number(p.stock) || 0) <= (Number(p.minStock) || 5);
+                const baseUnitName = p.baseUnit || (p.packageUnits?.find(u => Number(u.multiplier) === 1)?.name) || 'unit';
+                const stockVal = p.stockBase ?? p.stock ?? 0;
+                const retailPrice = p.packageUnits?.find(u => Number(u.multiplier) === 1)?.prices?.retail ?? p.packageUnits?.[0]?.prices?.retail ?? 'N/A';
+                const isExpanded = expandedRows[p.id] || false;
+
+                return (
+                  <React.Fragment key={p.id}>
+                    <tr
+                      onClick={() => toggleRow(p.id)}
+                      className={`border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors ${isLowStock ? 'bg-amber-950/10' : ''}`}
+                    >
+                      <td className="p-3">
+                        {isExpanded ? <ChevronUp size={16} className="text-cyan-400"/> : <ChevronDown size={16} className="text-slate-500"/>}
+                      </td>
+                      <td className="p-3 font-bold text-white flex items-center gap-2">
+                        {p.name}
+                        {isLowStock && <span className="text-[10px] bg-amber-600/20 text-amber-400 px-1.5 py-0.5 rounded-full">Low</span>}
+                      </td>
+                      <td className="p-3 text-center text-slate-400">{baseUnitName}</td>
+                      <td className={`p-3 text-center font-bold ${isLowStock ? 'text-amber-400' : 'text-white'}`}>{stockVal}</td>
+                      <td className="p-3 text-right font-mono text-cyan-400">{fmt(retailPrice)} Ks</td>
+                      <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-1.5 bg-indigo-950/50 rounded text-indigo-400"><Edit3 size={14}/></button>
+                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete?')) deleteDoc(doc(db,'pos_products',p.id)); }} className="p-1.5 bg-rose-950/50 rounded text-rose-400"><Trash2 size={14}/></button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Expanded Detail Row */}
+                    {isExpanded && (
+                      <tr className="bg-black/20">
+                        <td colSpan={6} className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                            <div>
+                              <p className="text-slate-500 font-bold mb-2">Stock Breakdown</p>
+                              <div className="space-y-1 mb-2">
+                                {getUnitBreakdown(stockVal, p.packageUnits || []).filter(b => b.qty > 0).map((b, i) => (
+                                  <div key={i} className="flex justify-between bg-black/30 px-2 py-1 rounded">
+                                    <span>{b.unit}</span>
+                                    <span className="font-bold text-cyan-400">{b.qty}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div>
+                                <label className="text-slate-500">Stock (Base)</label>
+                                <input
+                                  type="number"
+                                  defaultValue={stockVal}
+                                  onBlur={e => updateStock(p.id, e.target.value)}
+                                  className="w-20 bg-black border border-cyan-500/30 rounded px-2 py-1 text-white mt-1"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-bold mb-2">Package Units & Prices</p>
+                              {p.packageUnits?.map((u, i) => (
+                                <div key={i} className="flex justify-between bg-black/30 px-2 py-1 rounded mb-0.5">
+                                  <span>1 {u.name} (x{u.multiplier})</span>
+                                  <span className="text-cyan-400">{fmt(u.prices?.retail)} Ks</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-bold mb-2">Details</p>
+                              <p>Category: {p.category || 'General'}</p>
+                              <div className="space-y-0.5 mt-1">
+                                {p.packageUnits?.map((u, i) => (
+                                  u.barcodes?.retail ? <p key={i} className="text-[10px] text-slate-400">Barcode ({u.name}): {u.barcodes.retail}</p> : null
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {showScanner && (<div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 p-4"><div className="bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/30 w-full max-w-lg"><div className="flex justify-between mb-6"><h3 className="font-black text-white text-xl">Scan Barcode</h3><button onClick={()=>setShowScanner(false)} className="text-slate-400"><X size={24}/></button></div><div id="product-barcode-reader" className="w-full rounded-2xl" style={{minHeight:'260px'}}></div></div></div>)}
+      {/* Scanner Modal */}
+      {showScanner && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/90 p-4">
+          <div className="bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/30 w-full max-w-lg">
+            <div className="flex justify-between mb-6">
+              <h3 className="font-black text-white text-xl">Scan Barcode</h3>
+              <button onClick={()=>setShowScanner(false)} className="text-slate-400"><X size={24}/></button>
+            </div>
+            <div id="product-barcode-reader" className="w-full rounded-2xl" style={{minHeight:'260px'}}></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

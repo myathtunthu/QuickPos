@@ -23,7 +23,6 @@ export default function InventoryPage({ products = [] }) {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
 
-  // Unit Breakdown Helper
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
     const sorted = [...packageUnits].sort((a, b) => b.multiplier - a.multiplier);
@@ -71,7 +70,6 @@ export default function InventoryPage({ products = [] }) {
     return () => { isStopping.current = true; if (scannerRef.current) scannerRef.current.stop().catch(()=>{}); };
   }, [showScanner]);
 
-  // ✅ Dynamic Unit Functions
   const addPackageUnit = () => {
     setForm(prev => ({
       ...prev,
@@ -117,6 +115,20 @@ export default function InventoryPage({ products = [] }) {
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
 
+    // 🌟 PHASE 1 FIX: Duplicate Barcode Check (Barcode အတူတူ ထပ်နေပါက Save ခွင့်မပြုပါ)
+    const incomingBarcodes = validUnits.map(u => u.barcodes.retail).filter(b => b && b.trim() !== '');
+    const isDuplicate = products.some(p => {
+      if (editing && p.id === editing.id) return false; 
+      return p.packageUnits?.some(u => 
+        incomingBarcodes.includes(u.barcodes?.retail)
+      );
+    });
+
+    if (isDuplicate) {
+      alert("အမှား: ဤ Barcode သည် အခြားပစ္စည်းတွင် သုံးထားပြီးဖြစ်ပါသည်။ (Duplicate Barcode Error)");
+      return;
+    }
+
     const payload = {
       name: form.name, category: form.category || 'General', baseUnit: form.baseUnit,
       packageUnits: validUnits.map(u => ({
@@ -129,8 +141,16 @@ export default function InventoryPage({ products = [] }) {
     };
 
     try {
-      if (editing) { await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true }); alert("Product updated!"); setEditing(null); }
-      else { await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, createdAt: Date.now() }); alert("Product added!"); setAdding(false); }
+      if (editing) { 
+        await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true }); 
+        alert("Product updated!"); 
+        setEditing(null); 
+      }
+      else { 
+        await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, stockBase: 0, createdAt: Date.now() }); 
+        alert("Product added!"); 
+        setAdding(false); 
+      }
       resetForm();
     } catch (error) { alert("Error: " + error.message); }
   };
@@ -151,16 +171,18 @@ export default function InventoryPage({ products = [] }) {
 
   const cancelEdit = () => { setEditing(null); setAdding(false); resetForm(); };
 
+  // 🌟 PHASE 1 FIX: Stock ပြင်ဆင်ပါက stock ရော stockBase ပါ တစ်ပြိုင်နက် Update လုပ်ပေးမည်
   const updateStock = async (id, newStock) => {
     const s = Number(newStock);
-    if (!isNaN(s)) { await setDoc(doc(db, 'pos_products', id), { stock: s }, { merge: true }); }
+    if (!isNaN(s)) { 
+      await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true }); 
+    }
   };
 
   const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border-2 border-cyan-500/15 shadow-xl gap-5">
         <h3 className="font-black text-2xl flex items-center gap-3"><Boxes className="text-cyan-500"/> Inventory</h3>
         <div className="flex flex-wrap md:flex-nowrap gap-4 w-full md:w-auto">
@@ -169,7 +191,6 @@ export default function InventoryPage({ products = [] }) {
         </div>
       </div>
 
-      {/* Add/Edit Form */}
       {(adding || editing) && (
         <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-6 sm:p-8 rounded-3xl border-2 border-cyan-500/20 shadow-xl space-y-5">
           <p className="text-sm font-black text-cyan-400 uppercase">{editing ? 'Edit Product' : 'New Product'}</p>
@@ -180,14 +201,12 @@ export default function InventoryPage({ products = [] }) {
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-3 rounded-lg text-white outline-none"/>
           </div>
 
-          {/* ✅ Responsive Package Table */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
               <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> Add Unit</button>
             </div>
 
-            {/* Mobile: Card Style */}
             <div className="block sm:hidden space-y-3">
               {form.packageUnits.map((unit, idx) => (
                 <div key={idx} className="bg-black/30 border border-cyan-500/10 rounded-xl p-3 space-y-2">
@@ -217,7 +236,6 @@ export default function InventoryPage({ products = [] }) {
               ))}
             </div>
 
-            {/* Desktop: Horizontal Scroll Table */}
             <div className="hidden sm:block overflow-x-auto -mx-2 px-2">
               <div className="min-w-[700px]">
                 <table className="w-full text-sm">
@@ -262,7 +280,6 @@ export default function InventoryPage({ products = [] }) {
         </form>
       )}
 
-      {/* Product List */}
       <div className="space-y-3">
         {filteredProducts.length === 0 && <p className="text-center text-slate-500 py-14">No products found.</p>}
         {filteredProducts.map(p => {

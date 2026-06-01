@@ -1,20 +1,18 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { collection, doc, writeBatch, serverTimestamp, increment, getDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, serverTimestamp, increment, getDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
-import { Calendar, User, ShoppingCart, Printer } from 'lucide-react';
+import { Calendar, User, ShoppingCart, Printer, PauseCircle } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode'; 
 
-// Components များကို လှမ်းခေါ်ခြင်း
 import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
 import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
-import PaymentSection from '../components/entry/PaymentSection';
+import PaymentSection from '../components/entry/PaymentSection'; // 🌟 အစ်ကိုရေးထားသော Component အသစ်
 
-// 🌟 Memory Leak မဖြစ်စေသော Barcode Scanner Modal
 const ScannerModal = ({ onClose, onScan }) => {
   useEffect(() => {
     let html5QrCode;
@@ -78,7 +76,13 @@ export default function EntryPage({ products = [] }) {
   const todayISO = new Date().toISOString().split('T')[0];
   const [entryDate, setEntryDate] = useState(todayISO);
   const [entryTab, setEntryTab] = useState('Sale'); 
-  const [personName, setPersonName] = useState(''); 
+  
+  // 🌟 Phase 2: Customers & Suppliers Ledger Integration
+  const [customers, setCustomers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [personSearch, setPersonSearch] = useState('');
+  const [showPersonDropdown, setShowPersonDropdown] = useState(false);
 
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
@@ -96,24 +100,42 @@ export default function EntryPage({ products = [] }) {
   const { 
     cart, addToCart, removeCartItem, updateCartItemQty,
     updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount,
-    updateCartItemPrice, 
-    clearCart, cartTotals, globalDiscountAmt, setGlobalDiscountAmt, 
-    globalDiscountType, setGlobalDiscountType 
+    updateCartItemPrice, clearCart, cartTotals, globalDiscountAmt, 
+    setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType 
   } = useCart(products, entryTab);
+
+  // --- Fetch Database Persons (Customers/Suppliers) ---
+  useEffect(() => {
+    if (!tenantId) return;
+    getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)))
+      .then(snap => setCustomers(snap.docs.map(d => ({id: d.id, ...d.data()})))).catch(console.error);
+    
+    getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)))
+      .then(snap => setSuppliers(snap.docs.map(d => ({id: d.id, ...d.data()})))).catch(console.error);
+  }, [tenantId]);
+
+  // Tab ပြောင်းလျှင် Person အချက်အလက်များ ရှင်းပစ်မည်
+  useEffect(() => {
+    setPersonSearch('');
+    setSelectedPerson(null);
+  }, [entryTab]);
+
+  const personList = entryTab === 'Sale' ? customers : suppliers;
+  const filteredPersons = personList.filter(p => 
+    p.name.toLowerCase().includes(personSearch.toLowerCase()) || 
+    p.phone?.includes(personSearch)
+  );
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
   
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
-    
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.toLowerCase();
       result = result.filter(p => {
         const hasBarcode = p.packageUnits?.some(u => 
-          u.barcodes?.retail?.toLowerCase().includes(q) || 
-          u.barcodes?.wholesale?.toLowerCase().includes(q) ||
-          u.barcode?.toLowerCase().includes(q) 
+          u.barcodes?.retail?.toLowerCase().includes(q) || u.barcodes?.wholesale?.toLowerCase().includes(q) || u.barcode?.toLowerCase().includes(q) 
         );
         return (p.name || '').toLowerCase().includes(q) || hasBarcode;
       });
@@ -124,20 +146,43 @@ export default function EntryPage({ products = [] }) {
   const handleSelectProduct = useCallback((product) => {
     const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 }};
     const response = addToCart(product, defaultUnit, 'retail', 1);
-    
-    if (response.success) {
-      setProdSearch(''); 
-    } else {
-      alert(response.message); 
-    }
+    if (response.success) setProdSearch(''); else alert(response.message); 
   }, [addToCart]);
 
   const handleTabChange = (tab) => {
-    if (cart.length > 0) {
-      if (!window.confirm("Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?")) return;
-    }
+    if (cart.length > 0 && !window.confirm("Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?")) return;
     setEntryTab(tab);
     clearCart();
+  };
+
+  // 🌟 Phase 2: Hold Invoice (Draft)
+  const handleHoldInvoice = async () => {
+    if (cart.length === 0) return;
+    const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
+    if (name === null) return; 
+
+    setLoading(true);
+    try {
+      const draftRef = doc(collection(db, 'pos_drafts'));
+      await setDoc(draftRef, {
+        tenantId,
+        draftName: name,
+        type: entryTab,
+        cart: cart, 
+        cartTotals,
+        personSearch,
+        selectedPerson,
+        createdAt: serverTimestamp()
+      });
+      alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ (Hold Invoice Saved)။");
+      clearCart();
+      setPersonSearch('');
+      setSelectedPerson(null);
+    } catch (err) {
+      console.error(err);
+      alert("Error saving draft!");
+    }
+    setLoading(false);
   };
 
   const submitExpense = async () => {
@@ -146,33 +191,23 @@ export default function EntryPage({ products = [] }) {
     try {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
-      let currentCount = 0;
-      if (counterSnap.exists()) {
-        currentCount = counterSnap.data().expenseCount || 0;
-      }
-      const nextCount = currentCount + 1;
+      const nextCount = (counterSnap.exists() ? (counterSnap.data().expenseCount || 0) : 0) + 1;
       const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`;
 
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
       batch.set(ref, { 
-        type: 'Expense', tenantId, item: expenseTitle, 
-        amount: Number(expenseAmt) || 0, date: entryDate, 
+        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate, 
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }), 
-        cashier: cashierName,
-        voucherNo: voucherNo,
-        createdAt: serverTimestamp() 
+        cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp() 
       });
 
       batch.set(counterRef, { expenseCount: increment(1) }, { merge: true });
-
       await batch.commit();
       setExpenseTitle(''); setExpenseAmt('');
       alert("Expense Saved!");
-    } catch (err) { 
-      console.error(err); alert("Error saving expense");
-    }
+    } catch (err) { console.error(err); alert("Error saving expense"); }
     setLoading(false);
   };
 
@@ -180,20 +215,17 @@ export default function EntryPage({ products = [] }) {
     if (loading) return; 
     if (cart.length === 0 || !tenantId) return;
 
-    // 🌟 PHASE 1 FIX: Cart ထဲတွင် အရေအတွက် (Qty) 0 သို့မဟုတ် အလွတ် ဖြစ်နေသော ပစ္စည်းများကို စစ်ဆေးခြင်း
     const invalidItem = cart.find(item => Number(item.quantity) <= 0);
-    if (invalidItem) {
-      alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။ (အနည်းဆုံး ၁ ခု ဖြစ်ရမည်)`);
-      return;
-    }
+    if (invalidItem) return alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။`);
 
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
     const remainingDebt = Math.max(0, total - paid);
     const changeAmount = Math.max(0, paid - total);
 
-    if (remainingDebt > 0 && !personName.trim()) {
-      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} ${entryTab === 'Sale' ? 'Customer' : 'Supplier'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
+    // 🌟 Phase 2: Ledger Validation - အကြွေးဖြစ်လျှင် Person ရွေးချယ်ရန် မဖြစ်မနေလိုအပ်သည်
+    if (remainingDebt > 0 && !selectedPerson) {
+      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} စာရင်းသွင်းပြီးသား ${entryTab === 'Sale' ? 'Customer' : 'Supplier'} ကို Dropdown မှ မဖြစ်မနေ ရွေးချယ်ပေးပါ။`);
       return; 
     }
 
@@ -201,10 +233,7 @@ export default function EntryPage({ products = [] }) {
       for (const item of cart) {
         const prodData = products.find(p => p.id === item.productId);
         const currentStockBase = Number(prodData?.stockBase) || Number(prodData?.stock) || 0;
-        if (item.baseQuantity > currentStockBase) {
-           alert(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`);
-           return;
-        }
+        if (item.baseQuantity > currentStockBase) return alert(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`);
       }
     }
 
@@ -212,63 +241,57 @@ export default function EntryPage({ products = [] }) {
     try {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
-      let currentCount = 0;
       const countField = `${entryTab.toLowerCase()}Count`; 
-      if (counterSnap.exists()) {
-        currentCount = counterSnap.data()[countField] || 0;
-      }
-      const nextCount = currentCount + 1;
+      const nextCount = (counterSnap.exists() ? (counterSnap.data()[countField] || 0) : 0) + 1;
       const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; 
 
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
       
-      const finalPersonName = personName || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = { 
-        id: ref.id, type: entryTab || 'Sale', tenantId, personName: finalPersonName, 
-        cashier: cashierName, 
-        time: currentTime,    
-        voucherNo: voucherNo,
+        id: ref.id, type: entryTab || 'Sale', tenantId, 
+        personName: selectedPerson?.name || personSearch || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier'), 
+        customerId: entryTab === 'Sale' ? (selectedPerson?.id || null) : null,
+        supplierId: entryTab === 'Purchase' ? (selectedPerson?.id || null) : null,
+        cashier: cashierName, time: currentTime, voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({ 
-          productId: i.productId || '', name: i.name || 'Unknown Item', 
-          quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, 
-          itemDiscountAmt: Number(i.itemDiscountAmt) || 0, unitName: i.unitName || 'ခု', 
-          multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
+          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, 
+          unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0, 
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
           baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
         })), 
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0, 
-        itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, 
-        paymentMethod: paymentMethod || 'Cash', paidAmount: paid, remainingDebt: remainingDebt, 
-        changeAmount: changeAmount, 
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0, 
+        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash', 
+        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount, 
         date: entryDate || todayISO, createdAt: serverTimestamp() 
       };
-      
       batch.set(ref, record);
 
+      // 🌟 Phase 2: Update Customer / Supplier Debt in Ledger
+      if (remainingDebt > 0 && selectedPerson) {
+        const personRef = doc(db, entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers', selectedPerson.id);
+        batch.update(personRef, { totalDebt: increment(remainingDebt) });
+      }
+
+      // Update Stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
         const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
         
         const prodRef = doc(db, 'pos_products', item.productId);
-        batch.set(prodRef, { 
-          stockBase: increment(stockChange),
-          stock: increment(stockChange) 
-        }, { merge: true });
+        batch.set(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) }, { merge: true });
       });
 
       batch.set(counterRef, { [countField]: increment(1) }, { merge: true });
-
       await batch.commit();
       
       setReceiptModal({ show: true, record }); 
-      clearCart(); setPersonName(''); setPaidAmount(''); setPaymentMethod('Cash');
+      clearCart(); setPersonSearch(''); setSelectedPerson(null); setPaidAmount(''); setPaymentMethod('Cash');
 
-    } catch (err) { 
-      console.error("Firebase Save Error: ", err); alert("Error saving transaction!");
-    }
+    } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
     setLoading(false);
   };
 
@@ -280,14 +303,7 @@ export default function EntryPage({ products = [] }) {
         @media print {
           body * { visibility: hidden; }
           #receipt-print-area, #receipt-print-area * { visibility: visible; }
-          #receipt-print-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 80mm; 
-            margin: 0;
-            padding: 10px;
-          }
+          #receipt-print-area { position: absolute; left: 0; top: 0; width: 80mm; margin: 0; padding: 10px; }
           @page { margin: 0; }
         }
       `}</style>
@@ -296,42 +312,25 @@ export default function EntryPage({ products = [] }) {
         <ScannerModal 
           onClose={() => setShowScanner(false)}
           onScan={(text) => {
-             // 🌟 PHASE 1 FIX: Barcode Fast Sale - Scan ဖတ်လိုက်သည်နှင့် Search မနေဘဲ Cart ထဲ တန်းထည့်မည်
-             let foundProduct = null;
-             let foundUnit = null;
-
+             let foundProduct = null; let foundUnit = null;
              for (const p of products) {
-               const u = p.packageUnits?.find(unit => 
-                 unit.barcodes?.retail === text || 
-                 unit.barcodes?.wholesale === text ||
-                 unit.barcode === text
-               );
-               if (u) {
-                 foundProduct = p;
-                 foundUnit = u;
-                 break;
-               }
+               const u = p.packageUnits?.find(unit => unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text);
+               if (u) { foundProduct = p; foundUnit = u; break; }
              }
-
              if (foundProduct && foundUnit) {
                const res = addToCart(foundProduct, foundUnit, 'retail', 1);
-               if (!res.success) {
-                 alert(res.message);
-               } else {
-                 // Scan အောင်မြင်ပါက အသံမည်ရန် (ရွေးချယ်စရာ)
+               if (!res.success) alert(res.message);
+               else {
                  try {
                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
                    const osc = ctx.createOscillator(); const gain = ctx.createGain();
                    osc.connect(gain); gain.connect(ctx.destination);
                    osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
-                   gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                   gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                   gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
                    osc.start(); osc.stop(ctx.currentTime + 0.3);
                  } catch (e) {}
                }
-             } else {
-               alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
-             }
+             } else alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
              setShowScanner(false); 
           }}
         />
@@ -362,9 +361,40 @@ export default function EntryPage({ products = [] }) {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="relative">
-              <User className="absolute left-3 top-3 text-cyan-500" size={16}/>
-              <input value={personName} onChange={e => setPersonName(e.target.value)} placeholder={entryTab === 'Sale' ? "Customer Name (Optional)" : "Supplier Name"} className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none focus:border-cyan-400 transition-colors" />
+            
+            {/* 🌟 Phase 2: Person Dropdown Select (Customer/Supplier) */}
+            <div className="relative z-20">
+              <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
+              <input 
+                value={personSearch} 
+                onChange={e => {
+                  setPersonSearch(e.target.value);
+                  setSelectedPerson(null);
+                  setShowPersonDropdown(true);
+                }} 
+                onFocus={() => setShowPersonDropdown(true)}
+                onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
+                placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ"} 
+                className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`} 
+              />
+              {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
+                <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                  {filteredPersons.map(p => (
+                    <div 
+                      key={p.id} 
+                      onClick={() => {
+                        setSelectedPerson(p);
+                        setPersonSearch(p.name);
+                        setShowPersonDropdown(false);
+                      }} 
+                      className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
+                    >
+                      <p className="text-sm font-bold text-white">{p.name}</p>
+                      {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
@@ -378,7 +408,17 @@ export default function EntryPage({ products = [] }) {
             </div>
 
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
-              <h2 className="text-xs font-bold text-slate-400 mb-2 pl-1 uppercase tracking-wider">Current Order</h2>
+              <div className="flex justify-between items-center mb-2 pl-1 pr-1">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
+                {/* 🌟 Phase 2: Hold Invoice Button */}
+                <button 
+                  onClick={handleHoldInvoice} 
+                  disabled={cart.length === 0}
+                  className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
+                >
+                  <PauseCircle size={12}/> Pause / Hold
+                </button>
+              </div>
               
               <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
 
@@ -415,8 +455,17 @@ export default function EntryPage({ products = [] }) {
               )}
             </div>
 
+            {/* 🌟 အစ်ကိုပေးထားသော Payment Section သစ်ကို ချိတ်ဆက်အသုံးပြုထားခြင်း */}
             {cart.length > 0 && (
-              <PaymentSection paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} paidAmount={paidAmount} setPaidAmount={setPaidAmount} submitTransaction={submitTransaction} loading={loading} entryTab={entryTab} />
+              <PaymentSection 
+                paymentMethod={paymentMethod} 
+                setPaymentMethod={setPaymentMethod} 
+                paidAmount={paidAmount} 
+                setPaidAmount={setPaidAmount} 
+                submitTransaction={submitTransaction} 
+                loading={loading} 
+                entryTab={entryTab} 
+              />
             )}
           </div>
         )}
@@ -481,7 +530,7 @@ export default function EntryPage({ products = [] }) {
 
               <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
                  <div className="flex justify-between">
-                   <span>Paid Amount ({receiptModal.record.paymentMethod}):</span>
+                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
                    <span className="text-gray-900">{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span>
                  </div>
                  {receiptModal.record.remainingDebt > 0 ? (

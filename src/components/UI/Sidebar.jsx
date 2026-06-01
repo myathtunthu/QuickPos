@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Users, Settings, LogOut, FileText } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Users, Settings, LogOut, FileText, Truck, PauseCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'; // လမ်းကြောင်းမှန်အောင် ပြင်ထားသည်
 
 export default function Sidebar({ onCloseMobile }) {
   const location = useLocation();
@@ -18,10 +18,13 @@ export default function Sidebar({ onCloseMobile }) {
   };
 
   const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/entry', icon: ShoppingCart, label: 'POS Entry' },
+    { path: '/drafts', icon: PauseCircle, label: 'Hold Invoices' }, // 🌟 အသစ်
     { path: '/inventory', icon: Package, label: 'Inventory' },
-    { path: '/records', icon: FileText, label: 'မှတ်တမ်းများ' }, // 🌟 ထည့်သွင်းထားသော စာမျက်နှာအသစ်
+    { path: '/customers', icon: Users, label: 'Customers' }, // 🌟 အသစ်
+    { path: '/suppliers', icon: Truck, label: 'Suppliers' }, // 🌟 အသစ်
+    { path: '/records', icon: FileText, label: 'မှတ်တမ်းများ' }, 
     { path: '/reports', icon: BarChart3, label: 'Reports' },
     { path: '/admin', icon: Users, label: 'Admin', adminOnly: true },
     { path: '/settings', icon: Settings, label: 'Settings' },
@@ -29,7 +32,7 @@ export default function Sidebar({ onCloseMobile }) {
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
-      <nav className="flex-1 overflow-y-auto py-4">
+      <nav className="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <ul className="space-y-2 px-3">
           {navItems.map((item) => {
             if (item.adminOnly && userData?.role !== 'admin') return null;

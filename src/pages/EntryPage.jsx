@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { 
-  collection, doc, writeBatch, serverTimestamp, increment, 
-  getDoc, getDocs, query, where, orderBy, limit, setDoc, updateDoc, deleteDoc 
+import {
+  collection, doc, writeBatch, serverTimestamp, increment,
+  getDoc, getDocs, query, where, orderBy, limit, setDoc, updateDoc, deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
-import { Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X } from 'lucide-react';
+import {
+  Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X
+} from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 import ProductSearch from '../components/entry/ProductSearch';
@@ -41,7 +43,6 @@ const ScannerModal = ({ onClose, onScan }) => {
         );
       } catch (err) {
         console.error("Scanner Error:", err);
-        // If error (e.g., no camera) auto close
         onClose();
       }
     };
@@ -129,7 +130,7 @@ export default function EntryPage({ products = [] }) {
     } catch (err) { console.error(err); }
   };
 
-  // Fetch drafts (hold invoices)
+  // Fetch drafts
   const fetchDrafts = async () => {
     if (!tenantId) return;
     const q = query(
@@ -166,7 +167,9 @@ export default function EntryPage({ products = [] }) {
       const q = debouncedSearch.toLowerCase();
       result = result.filter(p => {
         const hasBarcode = p.packageUnits?.some(u =>
-          u.barcodes?.retail?.toLowerCase().includes(q) || u.barcodes?.wholesale?.toLowerCase().includes(q) || u.barcode?.toLowerCase().includes(q)
+          u.barcodes?.retail?.toLowerCase().includes(q) ||
+          u.barcodes?.wholesale?.toLowerCase().includes(q) ||
+          u.barcode?.toLowerCase().includes(q)
         );
         return (p.name || '').toLowerCase().includes(q) || hasBarcode;
       });
@@ -175,7 +178,9 @@ export default function EntryPage({ products = [] }) {
   }, [products, debouncedSearch, selCategory]);
 
   const handleSelectProduct = useCallback((product) => {
-    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
+    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) ||
+                        product.packageUnits?.[0] ||
+                        { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
     const response = addToCart(product, defaultUnit, 'retail', 1);
     if (response.success) setProdSearch('');
     else alert(response.message);
@@ -187,7 +192,7 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // ---------- Hold Invoice (Save Draft) ----------
+  // ---------- Hold Invoice (Save Draft) FIXED ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
@@ -196,40 +201,48 @@ export default function EntryPage({ products = [] }) {
     setLoading(true);
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
+      // ✅ Sanitize cart: replace all possible undefined values with null/empty/zero
+      const sanitizedCart = cart.map(item => ({
+        productId: item.productId || null,
+        productSnapshot: products.find(p => p.id === item.productId) || null,
+        unitName: item.unitName || '',
+        multiplier: Number(item.multiplier) || 1,
+        priceType: item.priceType || 'retail',
+        unitPrice: Number(item.unitPrice) || 0,
+        quantity: Number(item.quantity) || 1,
+        baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
+        itemDiscountAmt: Number(item.itemDiscountAmt) || 0,
+        notes: item.notes || ''
+      }));
+
       await setDoc(draftRef, {
-        tenantId,
-        draftName: name,
-        type: entryTab,
-        cart: cart.map(item => ({
-          // Store enough info to restore (product data snapshot, unit, priceType, etc.)
-          productId: item.productId,
-          productSnapshot: products.find(p => p.id === item.productId) || null,
-          unitName: item.unitName,
-          multiplier: item.multiplier,
-          priceType: item.priceType,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-          baseQuantity: item.baseQuantity,
-          itemDiscountAmt: item.itemDiscountAmt,
-          notes: item.notes,
-        })),
-        cartTotals,
-        personSearch,
-        selectedPerson,
-        newPersonPhone,
-        newPersonAddress,
-        globalDiscountAmt,
-        globalDiscountType,
-        paymentMethod,
-        paidAmount,
+        tenantId: tenantId || '',
+        draftName: name || 'No Name',
+        type: entryTab || 'Sale',
+        cart: sanitizedCart,
+        cartTotals: {
+          subtotal: Number(cartTotals.subtotal) || 0,
+          itemDiscounts: Number(cartTotals.itemDiscounts) || 0,
+          globalDisc: Number(cartTotals.globalDisc) || 0,
+          total: Number(cartTotals.total) || 0
+        },
+        personSearch: personSearch || '',
+        selectedPerson: selectedPerson || null,
+        newPersonPhone: newPersonPhone || '',
+        newPersonAddress: newPersonAddress || '',
+        globalDiscountAmt: globalDiscountAmt || '',
+        globalDiscountType: globalDiscountType || '%',
+        paymentMethod: paymentMethod || 'Cash',
+        paidAmount: paidAmount || '',
         createdAt: serverTimestamp()
       });
       alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။");
-      clearCart(); setPersonSearch(''); setSelectedPerson(null); setNewPersonPhone(''); setNewPersonAddress('');
+      clearCart(); setPersonSearch(''); setSelectedPerson(null);
+      setNewPersonPhone(''); setNewPersonAddress('');
       fetchDrafts();
     } catch (err) {
       console.error(err);
-      alert("Error saving draft!");
+      alert("Error saving draft: " + err.message);
     }
     setLoading(false);
   };
@@ -249,7 +262,6 @@ export default function EntryPage({ products = [] }) {
     setPaymentMethod(draft.paymentMethod || 'Cash');
     setPaidAmount(draft.paidAmount || '');
 
-    // Restore cart items using stored productSnapshot to reconstruct unit object
     if (draft.cart && Array.isArray(draft.cart)) {
       draft.cart.forEach(item => {
         const prod = item.productSnapshot || products.find(p => p.id === item.productId);
@@ -259,20 +271,12 @@ export default function EntryPage({ products = [] }) {
                        prod.packageUnits?.[0];
           if (unit) {
             addToCart(prod, unit, item.priceType, item.quantity);
-            // Discount will be applied after, but we need to apply per item discounts if any.
-            // For simplicity, we'll call updateCartItemDiscount later (not directly here).
-            // Better: addToCart returns the item id, then we can set discounts.
-            // But useCart might not expose item ids easily; we can store the new cart and then update discounts.
-            // We'll use a timeout to ensure state updated, or we can restructure.
-            // Quick fix: after all items added, we'll map cart and apply discounts.
-            // We'll do it inside a useEffect after cart changes.
-            // For now, we'll just add without discounts; user can reapply manually.
+            // discount / notes can be updated manually later if needed
           }
         }
       });
     }
 
-    // Delete draft after restore
     await deleteDoc(doc(db, 'pos_drafts', draft.id));
     fetchDrafts();
     setShowDrafts(false);
@@ -299,12 +303,17 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
 
       batch.set(ref, {
-        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
+        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0,
+        date: entryDate,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
         cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
       });
 
-      batch.update(counterRef, { expenseCount: increment(1) }); // assume counter exists; else create
+      if (counterSnap.exists()) {
+        batch.update(counterRef, { expenseCount: increment(1) });
+      } else {
+        batch.set(counterRef, { expenseCount: 1 });
+      }
       await batch.commit();
       setExpenseTitle(''); setExpenseAmt('');
       alert("Expense Saved!");
@@ -385,17 +394,20 @@ export default function EntryPage({ products = [] }) {
         itemsDetail: cart.map(i => ({
           productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
           unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1,
+          priceType: i.priceType || 'retail',
           baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
         })),
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
-        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0,
+        itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+        globalDiscount: Number(cartTotals.globalDisc) || 0,
+        paymentMethod: paymentMethod || 'Cash',
         paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
         date: entryDate || todayISO, createdAt: serverTimestamp()
       };
       batch.set(ref, record);
 
-      // Update stock using updateDoc (will fail if product doesn't exist, which is safe)
+      // Stock update using update (safe)
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -404,18 +416,18 @@ export default function EntryPage({ products = [] }) {
         batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
       });
 
-      // Update counter
       if (counterSnap.exists()) {
         batch.update(counterRef, { [countField]: increment(1) });
       } else {
-        // create counter doc if not exist
         batch.set(counterRef, { [countField]: 1 });
       }
 
       await batch.commit();
 
       setReceiptModal({ show: true, record });
-      clearCart(); setPersonSearch(''); setSelectedPerson(null); setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
+      clearCart(); setPersonSearch(''); setSelectedPerson(null);
+      setNewPersonPhone(''); setNewPersonAddress('');
+      setPaidAmount(''); setPaymentMethod('Cash');
 
       fetchPersons();
     } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
@@ -441,7 +453,9 @@ export default function EntryPage({ products = [] }) {
           onScan={(text) => {
             let foundProduct = null; let foundUnit = null;
             for (const p of products) {
-              const u = p.packageUnits?.find(unit => unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text);
+              const u = p.packageUnits?.find(unit =>
+                unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text
+              );
               if (u) { foundProduct = p; foundUnit = u; break; }
             }
             if (foundProduct && foundUnit) {
@@ -453,7 +467,8 @@ export default function EntryPage({ products = [] }) {
                   const osc = ctx.createOscillator(); const gain = ctx.createGain();
                   osc.connect(gain); gain.connect(ctx.destination);
                   osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
-                  gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                  gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
                   osc.start(); osc.stop(ctx.currentTime + 0.3);
                 } catch (e) {}
               }
@@ -465,16 +480,22 @@ export default function EntryPage({ products = [] }) {
 
       <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2"><ShoppingCart size={22}/> POS ENTRY</h1>
+          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2">
+            <ShoppingCart size={22}/> POS ENTRY
+          </h1>
           <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-xl px-3 py-1.5 shadow-inner">
             <Calendar size={14} className="text-cyan-400"/>
-            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
+            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
+              className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
           {['Sale', 'Purchase', 'Expense'].map(tab => (
-            <button key={tab} onClick={() => handleTabChange(tab)} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>{tab}</button>
+            <button key={tab} onClick={() => handleTabChange(tab)}
+              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>
+              {tab}
+            </button>
           ))}
         </div>
 
@@ -510,9 +531,14 @@ export default function EntryPage({ products = [] }) {
         {entryTab === 'Expense' ? (
           <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
             <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
-            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
+            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)"
+              className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)"
+              className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <button onClick={submitExpense} disabled={loading}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">
+              {loading ? 'Saving...' : 'Save Expense'}
+            </button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -522,11 +548,7 @@ export default function EntryPage({ products = [] }) {
                 <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
                 <input
                   value={personSearch}
-                  onChange={e => {
-                    setPersonSearch(e.target.value);
-                    setSelectedPerson(null);
-                    setShowPersonDropdown(true);
-                  }}
+                  onChange={e => { setPersonSearch(e.target.value); setSelectedPerson(null); setShowPersonDropdown(true); }}
                   onFocus={() => setShowPersonDropdown(true)}
                   onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
                   placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"}
@@ -577,7 +599,8 @@ export default function EntryPage({ products = [] }) {
               )}
             </div>
 
-            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory}
+              prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
 
             <div className="relative z-10">
               {debouncedSearch.length > 0 ? (
@@ -599,7 +622,16 @@ export default function EntryPage({ products = [] }) {
                 </button>
               </div>
 
-              <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
+              <CartSection
+                cart={cart}
+                products={products}
+                onUpdateQty={updateCartItemQty}
+                onUpdateUnit={updateCartItemUnit}
+                onUpdatePriceType={updateCartItemPriceType}
+                onUpdateDiscount={updateCartItemDiscount}
+                onUpdatePrice={updateCartItemPrice}
+                onRemove={removeCartItem}
+              />
 
               {cart.length > 0 && (
                 <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-2 text-xs">
@@ -612,14 +644,18 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
                       <span className="flex items-center gap-1">
                         Invoice Discount
-                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)} className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
+                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)}
+                          className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
                           <option value="%">%</option>
                           <option value="flat">Ks</option>
                         </select>
                       </span>
                       <input
-                        type="number" value={globalDiscountAmt} onChange={e => setGlobalDiscountAmt(e.target.value)}
-                        placeholder="0" className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400"
+                        type="number"
+                        value={globalDiscountAmt}
+                        onChange={e => setGlobalDiscountAmt(e.target.value)}
+                        placeholder="0"
+                        className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400"
                       />
                     </div>
                   )}
@@ -648,9 +684,10 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* Receipt Modal */}
+        {/* Receipt Modal (same as before) */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+            {/* ... receipt modal content ... */}
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
               <div className="text-center mb-4">
                 <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopName}</h2>
@@ -736,10 +773,9 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* Thermal Print Area */}
+      {/* Thermal Print Area (hidden, shows only when printing) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
-             {/* same as before */}
              <div className="text-center mb-3">
                  <h2 className="text-[18px] font-bold uppercase m-0">{shopName}</h2>
                  <p className="m-0 mt-1">{shopAddress}</p>

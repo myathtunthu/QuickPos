@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,7 @@ export default function InventoryPage({ products = [] }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [expandedRows, setExpandedRows] = useState({}); // Track expanded row by product ID
+  const [expandedRows, setExpandedRows] = useState({});
   const scannerRef = useRef(null);
   const isStopping = useRef(false);
 
@@ -37,9 +37,6 @@ export default function InventoryPage({ products = [] }) {
       qty: Math.floor(remain / unit.multiplier),
     }));
   };
-
-  // ... (rest of the helper functions: playBeep, scanner effect, add/remove package unit, resetForm, updatePackageUnit, handleSaveProduct, startEdit, cancelEdit, updateStock)
-  // All kept exactly the same as original – just copy them in below.
 
   const playBeep = (type = 'success') => {
     try {
@@ -212,13 +209,13 @@ export default function InventoryPage({ products = [] }) {
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
           </div>
 
-          {/* Package Units - keep same structure */}
+          {/* Package Units */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
               <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> Add Unit</button>
             </div>
-            {/* ... (mobile/desktop table inputs kept as original) */}
+            {/* Mobile view */}
             <div className="block sm:hidden space-y-3">
               {form.packageUnits.map((unit, idx) => (
                 <div key={idx} className="bg-black/30 border border-cyan-500/10 rounded-xl p-3 space-y-2">
@@ -248,6 +245,7 @@ export default function InventoryPage({ products = [] }) {
               ))}
             </div>
 
+            {/* Desktop view */}
             <div className="hidden sm:block overflow-x-auto -mx-2 px-2">
               <div className="min-w-[700px]">
                 <table className="w-full text-sm">
@@ -321,6 +319,7 @@ export default function InventoryPage({ products = [] }) {
                 const isExpanded = expandedRows[p.id] || false;
 
                 return (
+                  // ✅ Changed React.Fragment to <> shorthand
                   <React.Fragment key={p.id}>
                     <tr
                       onClick={() => toggleRow(p.id)}

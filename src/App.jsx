@@ -17,6 +17,11 @@ import LedgerPage from './pages/LedgerPage';
 import RecordsPage from './pages/RecordsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
 
+// 🌟 Phase 2: Pages အသစ်များ လှမ်းခေါ်ခြင်း
+import CustomersPage from './pages/CustomersPage';
+import SuppliersPage from './pages/SuppliersPage';
+import DraftsPage from './pages/DraftsPage';
+
 // Layout
 import Layout from './components/UI/Layout';
 
@@ -51,7 +56,6 @@ function AppContent() {
     return () => { unsubRecords(); unsubProducts(); };
   }, [profile?.tenantId]);
 
-  // ✅ Old flat product → new package-unit system mapping
   const mappedProducts = useMemo(() => {
     return allProducts.map(prod => {
       if (prod.packageUnits?.length > 0) return prod;
@@ -86,6 +90,12 @@ function AppContent() {
           <Route path="dashboard" element={<DashboardPage records={allRecords} />} />
           <Route path="entry" element={<EntryPage products={mappedProducts} />} />
           <Route path="inventory" element={<InventoryPage products={mappedProducts} />} />
+          
+          {/* 🌟 Phase 2: Routes အသစ်များ */}
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
+          <Route path="drafts" element={<DraftsPage />} />
+
           <Route path="reports" element={<ReportsPage records={allRecords} />} />
           <Route path="ledger" element={<LedgerPage records={allRecords} />} />
           <Route path="admin" element={<AdminPage />} />

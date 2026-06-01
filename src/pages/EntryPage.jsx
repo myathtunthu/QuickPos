@@ -18,49 +18,73 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (ZXing Fixed) ----------
+// ---------- Scanner Modal (Fully Fixed) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const readerRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
-  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const codeReader = new BrowserMultiFormatReader();
     readerRef.current = codeReader;
 
-    // ကင်မရာများကို ရှာပြီး ပထမဆုံး camera ID နဲ့ စဖတ်မယ်
-    codeReader
-      .listVideoInputDevices()
-      .then((videoDevices) => {
-        if (videoDevices.length === 0) {
-          setCameraError(true);
-          return;
-        }
-        setDevices(videoDevices);
-        // ပထမဆုံး camera ကို ရွေးမယ် (environment facing ကို ဦးစားပေးလို့ရတယ်)
-        const firstDeviceId = videoDevices[0].deviceId;
-        return codeReader.decodeFromVideoDevice(
-          firstDeviceId,
-          videoRef.current,
-          (result, err) => {
+    const startCamera = async () => {
+      try {
+        // 1. အနောက်ကင်မရာကို ဦးစားပေးဖွင့်ပါ
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+        if (!isMounted) return;
+
+        streamRef.current = stream;
+        const video = videoRef.current;
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.muted = true; // Autoplay policy အတွက်
+
+        // 2. Video က data ဝင်လာမှ scanner စမယ်
+        video.onloadedmetadata = () => {
+          if (!isMounted) return;
+          video.play().catch(err => {
+            console.warn("Video play failed, but still scanning...", err);
+          });
+          setLoading(false);
+
+          // 3. ZXing scanner ကို video element ပေါ်တင်ပြီး စဖတ်မယ်
+          codeReader.decodeFromVideoElement(video, (result, err) => {
             if (result) {
               onScan(result.text);
+              // Cleanup & close
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+              }
               codeReader.reset();
               onClose();
             }
             // err ကို ignore (no barcode in frame)
-          }
-        );
-      })
-      .catch((err) => {
-        console.error('Camera list error:', err);
-        setCameraError(true);
-      });
+          });
+        };
+      } catch (err) {
+        console.error("Camera access error:", err);
+        if (isMounted) setCameraError(true);
+        setLoading(false);
+      }
+    };
+
+    startCamera();
 
     return () => {
+      isMounted = false;
       if (readerRef.current) {
         readerRef.current.reset();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
       }
     };
   }, [onScan, onClose]);
@@ -75,10 +99,17 @@ const ScannerModal = ({ onClose, onScan }) => {
         {cameraError ? (
           <div className="p-6 text-center text-red-500">
             Camera access denied or not available.<br/>
-            Please allow camera permissions.
+            Please allow camera permissions in your browser.
           </div>
         ) : (
-          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
+          <div className="relative bg-black min-h-[250px]">
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center text-white text-sm z-10 bg-black/60">
+                Opening camera...
+              </div>
+            )}
+            <video ref={videoRef} className="w-full h-auto" />
+          </div>
         )}
         <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
           ကင်မရာကို Barcode သို့ ချိန်ပါ
@@ -87,6 +118,8 @@ const ScannerModal = ({ onClose, onScan }) => {
     </div>
   );
 };
+
+// ---------- Main EntryPage Component ----------
 export default function EntryPage({ products = [] }) {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;

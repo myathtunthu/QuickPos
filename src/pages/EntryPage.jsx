@@ -10,7 +10,7 @@ import useDebounce from '../hooks/useDebounce';
 import {
   Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { BrowserMultiFormatReader } from '@zxing/library';
 
 import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
@@ -18,41 +18,33 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// Scanner Modal (unchanged)
+// ---------- Scanner Modal (ZXing version) ----------
 const ScannerModal = ({ onClose, onScan }) => {
-  const scannerRef = useRef(null);
-  const isScanning = useRef(false);
+  const videoRef = useRef(null);
+  const readerRef = useRef(null);
+  const [cameraError, setCameraError] = useState(false);
 
   useEffect(() => {
-    const startScanner = async () => {
-      try {
-        const qr = new Html5Qrcode("barcode-reader");
-        scannerRef.current = qr;
-        isScanning.current = true;
-        await qr.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            if (isScanning.current) {
-              isScanning.current = false;
-              qr.stop().then(() => qr.clear()).catch(() => {});
-              onScan(decodedText);
-            }
-          },
-          () => {}
-        );
-      } catch (err) {
-        console.error("Scanner Error:", err);
-        onClose();
-      }
-    };
-    startScanner();
+    const codeReader = new BrowserMultiFormatReader();
+    readerRef.current = codeReader;
+
+    codeReader
+      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
+        if (result) {
+          onScan(result.text);
+          codeReader.reset();
+          onClose();
+        }
+        // ignore errors when no barcode in frame
+      })
+      .catch((err) => {
+        console.error('Camera error:', err);
+        setCameraError(true);
+      });
 
     return () => {
-      isScanning.current = false;
-      if (scannerRef.current) {
-        scannerRef.current.stop().then(() => scannerRef.current.clear()).catch(() => {});
-        scannerRef.current = null;
+      if (readerRef.current) {
+        readerRef.current.reset();
       }
     };
   }, [onScan, onClose]);
@@ -64,9 +56,13 @@ const ScannerModal = ({ onClose, onScan }) => {
           <h3 className="font-black text-gray-800">Scan Barcode</h3>
           <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
-        <div id="barcode-reader" className="w-full bg-black min-h-[250px]"></div>
+        {cameraError ? (
+          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
+        ) : (
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
+        )}
         <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
-          ကင်မရာကို Barcode တည့်တည့်သို့ ချိန်ပါ
+          ကင်မရာကို Barcode သို့ ချိန်ပါ
         </div>
       </div>
     </div>
@@ -107,7 +103,6 @@ export default function EntryPage({ products = [] }) {
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmt, setExpenseAmt] = useState('');
 
-  // Draft state
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
 
@@ -129,7 +124,6 @@ export default function EntryPage({ products = [] }) {
     } catch (err) { console.error(err); }
   };
 
-  // Fetch drafts
   const fetchDrafts = async () => {
     if (!tenantId) return;
     const q = query(
@@ -187,7 +181,7 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // ---------- Hold Invoice (Save Draft) ----------
+  // ---------- Hold Invoice (Save Draft) FIXED ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
@@ -241,7 +235,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ---------- Restore Draft (Fixed) ----------
+  // ---------- Restore Draft (Direct) ----------
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
 
@@ -270,13 +264,11 @@ export default function EntryPage({ products = [] }) {
       });
     }
 
-    // Delete draft after restore
     await deleteDoc(doc(db, 'pos_drafts', draft.id));
     fetchDrafts();
     setShowDrafts(false);
   };
 
-  // Delete draft
   const deleteDraft = async (id) => {
     if (window.confirm('Draft ကိုဖျက်မှာ သေချာပါသလား?')) {
       await deleteDoc(doc(db, 'pos_drafts', id));
@@ -398,7 +390,6 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, record);
 
-      // Stock update using updateDoc (safe)
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -427,6 +418,30 @@ export default function EntryPage({ products = [] }) {
 
   const doPrint = () => { window.print(); };
 
+  const handleBarcodeScanned = (text) => {
+    let foundProduct = null; let foundUnit = null;
+    for (const p of products) {
+      const u = p.packageUnits?.find(unit =>
+        unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text
+      );
+      if (u) { foundProduct = p; foundUnit = u; break; }
+    }
+    if (foundProduct && foundUnit) {
+      const res = addToCart(foundProduct, foundUnit, 'retail', 1);
+      if (!res.success) alert(res.message);
+      else {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator(); const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          osc.start(); osc.stop(ctx.currentTime + 0.3);
+        } catch (e) {}
+      }
+    } else alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
+  };
+
   return (
     <>
       <style>{`
@@ -441,28 +456,7 @@ export default function EntryPage({ products = [] }) {
       {showScanner && (
         <ScannerModal
           onClose={() => setShowScanner(false)}
-          onScan={(text) => {
-            let foundProduct = null; let foundUnit = null;
-            for (const p of products) {
-              const u = p.packageUnits?.find(unit => unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text);
-              if (u) { foundProduct = p; foundUnit = u; break; }
-            }
-            if (foundProduct && foundUnit) {
-              const res = addToCart(foundProduct, foundUnit, 'retail', 1);
-              if (!res.success) alert(res.message);
-              else {
-                try {
-                  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                  const osc = ctx.createOscillator(); const gain = ctx.createGain();
-                  osc.connect(gain); gain.connect(ctx.destination);
-                  osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
-                  gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                  osc.start(); osc.stop(ctx.currentTime + 0.3);
-                } catch (e) {}
-              }
-            } else alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
-            setShowScanner(false);
-          }}
+          onScan={handleBarcodeScanned}
         />
       )}
 
@@ -478,11 +472,12 @@ export default function EntryPage({ products = [] }) {
         <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
           {['Sale', 'Purchase', 'Expense'].map(tab => (
             <button key={tab} onClick={() => handleTabChange(tab)}
-              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>{tab}</button>
+              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>
+              {tab}
+            </button>
           ))}
         </div>
 
-        {/* Drafts retrieval section */}
         <div className="flex justify-end">
           <button
             onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }}
@@ -503,7 +498,6 @@ export default function EntryPage({ products = [] }) {
                   <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate().toLocaleString()}</p>
                 </div>
                 <div className="flex gap-1">
-                  {/* ✅ Restore Button - now calls restoreDraft directly */}
                   <button onClick={() => restoreDraft(d)} className="px-3 py-1 bg-cyan-600 rounded text-xs font-bold text-white">Restore</button>
                   <button onClick={() => deleteDraft(d.id)} className="px-2 py-1 bg-red-600 rounded text-xs text-white"><X size={14}/></button>
                 </div>
@@ -521,7 +515,6 @@ export default function EntryPage({ products = [] }) {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Person selection */}
             <div className="relative z-20 space-y-2">
               <div className="relative">
                 <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
@@ -588,12 +581,7 @@ export default function EntryPage({ products = [] }) {
                 </button>
               </div>
 
-              <CartSection
-                cart={cart} products={products}
-                onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit}
-                onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount}
-                onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem}
-              />
+              <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
 
               {cart.length > 0 && (
                 <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-2 text-xs">
@@ -636,7 +624,6 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
@@ -724,7 +711,6 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* Thermal Print Area */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

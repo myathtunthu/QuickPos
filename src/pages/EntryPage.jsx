@@ -18,7 +18,7 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Fixed) ----------
+// Scanner Modal (unchanged)
 const ScannerModal = ({ onClose, onScan }) => {
   const scannerRef = useRef(null);
   const isScanning = useRef(false);
@@ -107,10 +107,9 @@ export default function EntryPage({ products = [] }) {
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmt, setExpenseAmt] = useState('');
 
-  // Draft retrieval
+  // Draft state
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
-  const draftRef = useRef(null);
 
   const {
     cart, addToCart, removeCartItem, updateCartItemQty,
@@ -167,9 +166,7 @@ export default function EntryPage({ products = [] }) {
       const q = debouncedSearch.toLowerCase();
       result = result.filter(p => {
         const hasBarcode = p.packageUnits?.some(u =>
-          u.barcodes?.retail?.toLowerCase().includes(q) ||
-          u.barcodes?.wholesale?.toLowerCase().includes(q) ||
-          u.barcode?.toLowerCase().includes(q)
+          u.barcodes?.retail?.toLowerCase().includes(q) || u.barcodes?.wholesale?.toLowerCase().includes(q) || u.barcode?.toLowerCase().includes(q)
         );
         return (p.name || '').toLowerCase().includes(q) || hasBarcode;
       });
@@ -178,9 +175,7 @@ export default function EntryPage({ products = [] }) {
   }, [products, debouncedSearch, selCategory]);
 
   const handleSelectProduct = useCallback((product) => {
-    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) ||
-                        product.packageUnits?.[0] ||
-                        { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
+    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
     const response = addToCart(product, defaultUnit, 'retail', 1);
     if (response.success) setProdSearch('');
     else alert(response.message);
@@ -192,7 +187,7 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // ---------- Hold Invoice (Save Draft) FIXED ----------
+  // ---------- Hold Invoice (Save Draft) ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
@@ -201,7 +196,6 @@ export default function EntryPage({ products = [] }) {
     setLoading(true);
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
-      // ✅ Sanitize cart: replace all possible undefined values with null/empty/zero
       const sanitizedCart = cart.map(item => ({
         productId: item.productId || null,
         productSnapshot: products.find(p => p.id === item.productId) || null,
@@ -247,7 +241,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ---------- Restore Draft ----------
+  // ---------- Restore Draft (Fixed) ----------
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
 
@@ -271,12 +265,12 @@ export default function EntryPage({ products = [] }) {
                        prod.packageUnits?.[0];
           if (unit) {
             addToCart(prod, unit, item.priceType, item.quantity);
-            // discount / notes can be updated manually later if needed
           }
         }
       });
     }
 
+    // Delete draft after restore
     await deleteDoc(doc(db, 'pos_drafts', draft.id));
     fetchDrafts();
     setShowDrafts(false);
@@ -394,20 +388,17 @@ export default function EntryPage({ products = [] }) {
         itemsDetail: cart.map(i => ({
           productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
           unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1,
-          priceType: i.priceType || 'retail',
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
           baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
         })),
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0,
-        itemDiscount: Number(cartTotals.itemDiscounts) || 0,
-        globalDiscount: Number(cartTotals.globalDisc) || 0,
-        paymentMethod: paymentMethod || 'Cash',
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
         paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
         date: entryDate || todayISO, createdAt: serverTimestamp()
       };
       batch.set(ref, record);
 
-      // Stock update using update (safe)
+      // Stock update using updateDoc (safe)
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -453,9 +444,7 @@ export default function EntryPage({ products = [] }) {
           onScan={(text) => {
             let foundProduct = null; let foundUnit = null;
             for (const p of products) {
-              const u = p.packageUnits?.find(unit =>
-                unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text
-              );
+              const u = p.packageUnits?.find(unit => unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text);
               if (u) { foundProduct = p; foundUnit = u; break; }
             }
             if (foundProduct && foundUnit) {
@@ -467,8 +456,7 @@ export default function EntryPage({ products = [] }) {
                   const osc = ctx.createOscillator(); const gain = ctx.createGain();
                   osc.connect(gain); gain.connect(ctx.destination);
                   osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
-                  gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                  gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
                   osc.start(); osc.stop(ctx.currentTime + 0.3);
                 } catch (e) {}
               }
@@ -480,22 +468,17 @@ export default function EntryPage({ products = [] }) {
 
       <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2">
-            <ShoppingCart size={22}/> POS ENTRY
-          </h1>
+          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2"><ShoppingCart size={22}/> POS ENTRY</h1>
           <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-xl px-3 py-1.5 shadow-inner">
             <Calendar size={14} className="text-cyan-400"/>
-            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
-              className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
+            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
           {['Sale', 'Purchase', 'Expense'].map(tab => (
             <button key={tab} onClick={() => handleTabChange(tab)}
-              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>
-              {tab}
-            </button>
+              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>{tab}</button>
           ))}
         </div>
 
@@ -520,6 +503,7 @@ export default function EntryPage({ products = [] }) {
                   <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate().toLocaleString()}</p>
                 </div>
                 <div className="flex gap-1">
+                  {/* ✅ Restore Button - now calls restoreDraft directly */}
                   <button onClick={() => restoreDraft(d)} className="px-3 py-1 bg-cyan-600 rounded text-xs font-bold text-white">Restore</button>
                   <button onClick={() => deleteDraft(d.id)} className="px-2 py-1 bg-red-600 rounded text-xs text-white"><X size={14}/></button>
                 </div>
@@ -531,14 +515,9 @@ export default function EntryPage({ products = [] }) {
         {entryTab === 'Expense' ? (
           <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
             <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
-            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)"
-              className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)"
-              className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <button onClick={submitExpense} disabled={loading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">
-              {loading ? 'Saving...' : 'Save Expense'}
-            </button>
+            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -582,25 +561,14 @@ export default function EntryPage({ products = [] }) {
                     <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
                   </p>
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      value={newPersonPhone}
-                      onChange={e => setNewPersonPhone(e.target.value)}
-                      placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)"
-                      className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors"
-                    />
-                    <input
-                      value={newPersonAddress}
-                      onChange={e => setNewPersonAddress(e.target.value)}
-                      placeholder="လိပ်စာ (မထည့်လည်းရသည်)"
-                      className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors"
-                    />
+                    <input value={newPersonPhone} onChange={e => setNewPersonPhone(e.target.value)} placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
+                    <input value={newPersonAddress} onChange={e => setNewPersonAddress(e.target.value)} placeholder="လိပ်စာ (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
                   </div>
                 </div>
               )}
             </div>
 
-            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory}
-              prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
 
             <div className="relative z-10">
               {debouncedSearch.length > 0 ? (
@@ -613,9 +581,7 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
               <div className="flex justify-between items-center mb-2 pl-1 pr-1">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
-                <button
-                  onClick={handleHoldInvoice}
-                  disabled={cart.length === 0}
+                <button onClick={handleHoldInvoice} disabled={cart.length === 0}
                   className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
                 >
                   <PauseCircle size={12}/> Pause / Hold
@@ -623,14 +589,10 @@ export default function EntryPage({ products = [] }) {
               </div>
 
               <CartSection
-                cart={cart}
-                products={products}
-                onUpdateQty={updateCartItemQty}
-                onUpdateUnit={updateCartItemUnit}
-                onUpdatePriceType={updateCartItemPriceType}
-                onUpdateDiscount={updateCartItemDiscount}
-                onUpdatePrice={updateCartItemPrice}
-                onRemove={removeCartItem}
+                cart={cart} products={products}
+                onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit}
+                onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount}
+                onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem}
               />
 
               {cart.length > 0 && (
@@ -644,19 +606,12 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
                       <span className="flex items-center gap-1">
                         Invoice Discount
-                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)}
-                          className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
+                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)} className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
                           <option value="%">%</option>
                           <option value="flat">Ks</option>
                         </select>
                       </span>
-                      <input
-                        type="number"
-                        value={globalDiscountAmt}
-                        onChange={e => setGlobalDiscountAmt(e.target.value)}
-                        placeholder="0"
-                        className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400"
-                      />
+                      <input type="number" value={globalDiscountAmt} onChange={e => setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400" />
                     </div>
                   )}
                   {cartTotals.globalDisc > 0 && (
@@ -672,22 +627,18 @@ export default function EntryPage({ products = [] }) {
 
             {cart.length > 0 && (
               <PaymentSection
-                paymentMethod={paymentMethod}
-                setPaymentMethod={setPaymentMethod}
-                paidAmount={paidAmount}
-                setPaidAmount={setPaidAmount}
-                submitTransaction={submitTransaction}
-                loading={loading}
+                paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+                paidAmount={paidAmount} setPaidAmount={setPaidAmount}
+                submitTransaction={submitTransaction} loading={loading}
                 entryTab={entryTab}
               />
             )}
           </div>
         )}
 
-        {/* Receipt Modal (same as before) */}
+        {/* Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-            {/* ... receipt modal content ... */}
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
               <div className="text-center mb-4">
                 <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopName}</h2>
@@ -773,7 +724,7 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* Thermal Print Area (hidden, shows only when printing) */}
+      {/* Thermal Print Area */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

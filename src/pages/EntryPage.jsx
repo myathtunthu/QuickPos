@@ -144,7 +144,6 @@ export default function EntryPage({ products = [] }) {
     if (!expenseTitle || !expenseAmt || !tenantId || loading) return;
     setLoading(true);
     try {
-      // 🌟 Voucher Number Counter (Expense အတွက်)
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
       let currentCount = 0;
@@ -152,7 +151,7 @@ export default function EntryPage({ products = [] }) {
         currentCount = counterSnap.data().expenseCount || 0;
       }
       const nextCount = currentCount + 1;
-      const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`; // ဥပမာ: Expense 00001
+      const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`;
 
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
@@ -162,11 +161,10 @@ export default function EntryPage({ products = [] }) {
         amount: Number(expenseAmt) || 0, date: entryDate, 
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }), 
         cashier: cashierName,
-        voucherNo: voucherNo, // ဘောက်ချာနံပါတ် အသစ်
+        voucherNo: voucherNo,
         createdAt: serverTimestamp() 
       });
 
-      // Update Counter
       batch.set(counterRef, { expenseCount: increment(1) }, { merge: true });
 
       await batch.commit();
@@ -181,6 +179,13 @@ export default function EntryPage({ products = [] }) {
   const submitTransaction = async () => {
     if (loading) return; 
     if (cart.length === 0 || !tenantId) return;
+
+    // 🌟 PHASE 1 FIX: Cart ထဲတွင် အရေအတွက် (Qty) 0 သို့မဟုတ် အလွတ် ဖြစ်နေသော ပစ္စည်းများကို စစ်ဆေးခြင်း
+    const invalidItem = cart.find(item => Number(item.quantity) <= 0);
+    if (invalidItem) {
+      alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။ (အနည်းဆုံး ၁ ခု ဖြစ်ရမည်)`);
+      return;
+    }
 
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -205,16 +210,15 @@ export default function EntryPage({ products = [] }) {
 
     setLoading(true);
     try {
-      // 🌟 Voucher Number Counter (Sale/Purchase အတွက်)
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
       let currentCount = 0;
-      const countField = `${entryTab.toLowerCase()}Count`; // saleCount or purchaseCount
+      const countField = `${entryTab.toLowerCase()}Count`; 
       if (counterSnap.exists()) {
         currentCount = counterSnap.data()[countField] || 0;
       }
       const nextCount = currentCount + 1;
-      const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; // ဥပမာ: Sale 00001 / Purchase 00001
+      const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`; 
 
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
@@ -226,7 +230,7 @@ export default function EntryPage({ products = [] }) {
         id: ref.id, type: entryTab || 'Sale', tenantId, personName: finalPersonName, 
         cashier: cashierName, 
         time: currentTime,    
-        voucherNo: voucherNo, // ဘောက်ချာနံပါတ် အသစ်
+        voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({ 
           productId: i.productId || '', name: i.name || 'Unknown Item', 
           quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, 
@@ -243,7 +247,6 @@ export default function EntryPage({ products = [] }) {
       
       batch.set(ref, record);
 
-      // Update Stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -256,7 +259,6 @@ export default function EntryPage({ products = [] }) {
         }, { merge: true });
       });
 
-      // Update Counter
       batch.set(counterRef, { [countField]: increment(1) }, { merge: true });
 
       await batch.commit();
@@ -282,7 +284,7 @@ export default function EntryPage({ products = [] }) {
             position: absolute; 
             left: 0; 
             top: 0; 
-            width: 80mm; /* Standard Thermal Printer Width */
+            width: 80mm; 
             margin: 0;
             padding: 10px;
           }
@@ -294,7 +296,42 @@ export default function EntryPage({ products = [] }) {
         <ScannerModal 
           onClose={() => setShowScanner(false)}
           onScan={(text) => {
-             setProdSearch(text); 
+             // 🌟 PHASE 1 FIX: Barcode Fast Sale - Scan ဖတ်လိုက်သည်နှင့် Search မနေဘဲ Cart ထဲ တန်းထည့်မည်
+             let foundProduct = null;
+             let foundUnit = null;
+
+             for (const p of products) {
+               const u = p.packageUnits?.find(unit => 
+                 unit.barcodes?.retail === text || 
+                 unit.barcodes?.wholesale === text ||
+                 unit.barcode === text
+               );
+               if (u) {
+                 foundProduct = p;
+                 foundUnit = u;
+                 break;
+               }
+             }
+
+             if (foundProduct && foundUnit) {
+               const res = addToCart(foundProduct, foundUnit, 'retail', 1);
+               if (!res.success) {
+                 alert(res.message);
+               } else {
+                 // Scan အောင်မြင်ပါက အသံမည်ရန် (ရွေးချယ်စရာ)
+                 try {
+                   const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                   const osc = ctx.createOscillator(); const gain = ctx.createGain();
+                   osc.connect(gain); gain.connect(ctx.destination);
+                   osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                   gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                   gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                   osc.start(); osc.stop(ctx.currentTime + 0.3);
+                 } catch (e) {}
+               }
+             } else {
+               alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
+             }
              setShowScanner(false); 
           }}
         />
@@ -384,7 +421,7 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* 🌟 Professional Receipt Modal (UI) */}
+        {/* Professional Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
@@ -396,7 +433,6 @@ export default function EntryPage({ products = [] }) {
               </div>
               
               <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
-                {/* 🌟 Sequence Number ပြသခြင်း */}
                 <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
                 <div className="flex justify-between"><span>Date & Time:</span> <span className="text-gray-900">{receiptModal.record.date} | {receiptModal.record.time}</span></div>
                 <div className="flex justify-between"><span>Cashier:</span> <span className="text-gray-900">{receiptModal.record.cashier}</span></div>
@@ -481,7 +517,7 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* 🌟 Professional Receipt Print Area (Thermal) */}
+      {/* Professional Receipt Print Area (Thermal) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">
@@ -491,7 +527,6 @@ export default function EntryPage({ products = [] }) {
              </div>
              
              <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
-                 {/* 🌟 Sequence Number ပြသခြင်း */}
                  <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.voucherNo}</span></div>
                  <div className="flex justify-between"><span>Date:</span> <span>{receiptModal.record.date} {receiptModal.record.time}</span></div>
                  <div className="flex justify-between"><span>Cashier:</span> <span>{receiptModal.record.cashier}</span></div>

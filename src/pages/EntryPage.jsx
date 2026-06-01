@@ -83,7 +83,6 @@ export default function EntryPage({ products = [] }) {
   const [personSearch, setPersonSearch] = useState('');
   const [showPersonDropdown, setShowPersonDropdown] = useState(false);
   
-  // 🌟 Auto-create အတွက် ဖုန်းနှင့် လိပ်စာ အသစ်ထည့်ရန် State များ
   const [newPersonPhone, setNewPersonPhone] = useState('');
   const [newPersonAddress, setNewPersonAddress] = useState('');
 
@@ -253,8 +252,8 @@ export default function EntryPage({ products = [] }) {
         batch.set(newPersonRef, {
           tenantId: tenantId,
           name: personNameForRecord,
-          phone: newPersonPhone.trim(), // 🌟 ထည့်သွင်းထားသော ဖုန်းနံပါတ်ကို သိမ်းမည်
-          address: newPersonAddress.trim(), // 🌟 ထည့်သွင်းထားသော လိပ်စာကို သိမ်းမည်
+          phone: newPersonPhone.trim(), 
+          address: newPersonAddress.trim(), 
           totalDebt: remainingDebt,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
@@ -381,7 +380,7 @@ export default function EntryPage({ products = [] }) {
         ) : (
           <div className="space-y-4">
             
-            {/* Person Dropdown & New Fields Select */}
+            {/* 🌟 Person Dropdown & New Fields Select */}
             <div className="relative z-20 space-y-2">
               <div className="relative">
                 <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
@@ -397,8 +396,9 @@ export default function EntryPage({ products = [] }) {
                   placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"} 
                   className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`} 
                 />
-                {showPersonDropdown && personSearch.length > 0 && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                {/* Dropdown တွင် ရှိပြီးသားနာမည်များကိုသာ ပြမည် */}
+                {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar z-50">
                     {filteredPersons.map(p => (
                       <div 
                         key={p.id} 
@@ -415,30 +415,30 @@ export default function EntryPage({ products = [] }) {
                         {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
                       </div>
                     ))}
-                    {filteredPersons.length === 0 && (
-                       <div className="px-4 py-2.5 bg-green-900/30 text-green-400 text-[11px] font-bold">
-                          "{personSearch}" အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
-                       </div>
-                    )}
                   </div>
                 )}
               </div>
 
-              {/* 🌟 ဖုန်းနှင့် လိပ်စာ အသစ်ထည့်ရန် အကွက် (နာမည်အသစ်ရိုက်မှသာ ပေါ်မည်) */}
+              {/* 🌟 ဖြေရှင်းချက်: Overlap မဖြစ်စေရန် "အသစ်ထည့်ရန်" စာသားအား အောက်သို့ရွှေ့ထားသည် */}
               {!selectedPerson && personSearch.trim().length > 0 && (
-                <div className="flex gap-2 p-2 bg-green-900/10 rounded-xl border border-green-500/20">
-                  <input 
-                    value={newPersonPhone} 
-                    onChange={e => setNewPersonPhone(e.target.value)} 
-                    placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" 
-                    className="w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
-                  />
-                  <input 
-                    value={newPersonAddress} 
-                    onChange={e => setNewPersonAddress(e.target.value)} 
-                    placeholder="လိပ်စာ (မထည့်လည်းရသည်)" 
-                    className="w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
-                  />
+                <div className="p-3 bg-green-900/10 rounded-xl border border-green-500/20 shadow-inner">
+                  <p className="text-[11px] font-bold text-green-400 mb-2">
+                    <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input 
+                      value={newPersonPhone} 
+                      onChange={e => setNewPersonPhone(e.target.value)} 
+                      placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" 
+                      className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
+                    />
+                    <input 
+                      value={newPersonAddress} 
+                      onChange={e => setNewPersonAddress(e.target.value)} 
+                      placeholder="လိပ်စာ (မထည့်လည်းရသည်)" 
+                      className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" 
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -514,6 +514,7 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
+        {/* Professional Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
@@ -609,6 +610,7 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
+      {/* Professional Receipt Print Area (Thermal) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

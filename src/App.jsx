@@ -5,6 +5,9 @@ import { db } from './firebase/config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 
+// Components
+import ErrorBoundary from './components/ErrorBoundary'; // 🌟 Added ErrorBoundary
+
 // Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -27,6 +30,7 @@ import Layout from './components/UI/Layout';
 
 const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
@@ -34,6 +38,7 @@ const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
+  
   if (!user || !profile) return <Navigate to="/login" replace />;
   return children;
 };
@@ -45,17 +50,26 @@ function AppContent() {
 
   useEffect(() => {
     if (!profile?.tenantId) return;
+    
+    // Realtime Sync for Records
     const unsubRecords = onSnapshot(
       query(collection(db, 'pos_records'), where('tenantId', '==', profile.tenantId)),
       snap => setAllRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
+    
+    // Realtime Sync for Products
     const unsubProducts = onSnapshot(
       query(collection(db, 'pos_products'), where('tenantId', '==', profile.tenantId)),
       snap => setAllProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    return () => { unsubRecords(); unsubProducts(); };
+    
+    return () => { 
+      unsubRecords(); 
+      unsubProducts(); 
+    };
   }, [profile?.tenantId]);
 
+  // 🌟 Auto-map missing packageUnits for backward compatibility
   const mappedProducts = useMemo(() => {
     return allProducts.map(prod => {
       if (prod.packageUnits?.length > 0) return prod;
@@ -85,6 +99,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/mttadminacc" element={<SuperAdminPage />} />
+        
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage records={allRecords} />} />
@@ -102,6 +117,7 @@ function AppContent() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="records" element={<RecordsPage />} />
         </Route>
+        
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
@@ -110,11 +126,14 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <LanguageProvider>
-        <AppContent />
-      </LanguageProvider>
-    </AuthProvider>
+    // 🌟 Wrapped entire App with ErrorBoundary to prevent White Screen of Death
+    <ErrorBoundary>
+      <AuthProvider>
+        <LanguageProvider>
+          <AppContent />
+        </LanguageProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

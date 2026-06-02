@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Printer, X, Calendar, Search, FileQuestion } from 'lucide-react'; // 🌟 Added FileQuestion
+import { FileText, Printer, X, Calendar, Search, FileQuestion, Download } from 'lucide-react'; // 🌟 Added Download icon
 
-// 🌟 UI Components များ လှမ်းခေါ်ခြင်း (Components ဖိုင်များ ဖန်တီးထားရန် လိုအပ်ပါသည်)
+// 🌟 UI Components များ လှမ်းခေါ်ခြင်း
 import EmptyState from '../components/UI/EmptyState';
 import { RecordSkeleton } from '../components/UI/Skeleton';
+
+// 🌟 Export Utility လှမ်းခေါ်ခြင်း (src/utils/exportData.js ဖန်တီးထားရန်လိုပါသည်)
+import { exportToCSV } from '../utils/exportData';
 
 // ─── Professional Print Voucher (EntryPage ပုံစံအတိုင်း) ───
 const doPrint = (record, shopName = 'QuickPOS') => {
@@ -76,22 +79,52 @@ export default function RecordsPage() {
 
   const filteredRecords = filterType === 'All' ? records : records.filter(r => r.type === filterType);
 
+  // 🌟 Excel/CSV ထုတ်ရန် Function
+  const handleExport = () => {
+    const exportData = filteredRecords.map(r => ({
+      Voucher_No: r.voucherNo || r.id,
+      Date: r.date,
+      Time: r.time || '',
+      Type: r.type,
+      Customer_Or_Supplier: r.personName || 'Walk-in',
+      Items_Summary: r.itemsDetail ? r.itemsDetail.map(i => `${i.name} (${i.quantity})`).join(' | ') : r.item,
+      Total_Amount: r.amount,
+      Discount: r.discount || 0,
+      Payment_Method: r.paymentType || 'Cash',
+      Cashier: r.cashier || 'Admin'
+    }));
+
+    exportToCSV(exportData, `Transactions_${filterType}`);
+  };
+
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
       
-      {/* HEADER & FILTER */}
+      {/* HEADER, FILTER & EXPORT */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-5">
         <h3 className="font-black text-2xl flex items-center gap-3"><FileText className="text-cyan-500"/> Transactions History</h3>
-        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
-          {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
-            <button 
-              key={type} 
-              onClick={() => setFilterType(type)} 
-              className={`px-5 py-3 rounded-xl text-sm font-black transition-all whitespace-nowrap ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}
-            >
-              {type}
-            </button>
-          ))}
+        
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar flex-1">
+            {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
+              <button 
+                key={type} 
+                onClick={() => setFilterType(type)} 
+                className={`px-5 py-3 rounded-xl text-sm font-black transition-all whitespace-nowrap ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+
+          {/* 🌟 Export CSV Button အသစ်ထည့်သွင်းခြင်း */}
+          <button 
+            onClick={handleExport}
+            disabled={filteredRecords.length === 0 || isLoading}
+            className="px-4 py-3 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-black transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            <Download size={16}/> Export 
+          </button>
         </div>
       </div>
 
@@ -134,7 +167,7 @@ export default function RecordsPage() {
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-[#080c14]/95 backdrop-blur-sm animate-in fade-in" onClick={() => setReceiptModal({show:false, record:null})}>
           <div className="bg-white text-black w-full max-w-sm p-6 shadow-2xl rounded-lg font-mono text-sm scale-in-95" onClick={e => e.stopPropagation()} style={{backgroundImage:'repeating-linear-gradient(transparent,transparent 28px,#f0f0f0 28px,#f0f0f0 29px)'}}>
             <div className="text-center mb-5 border-b-2 border-dashed border-gray-400 pb-5 pt-2">
-              <h2 className="text-2xl font-black uppercase tracking-widest">{shopName}</h2> {/* 🌟 Dynamic Shop Name */}
+              <h2 className="text-2xl font-black uppercase tracking-widest">{shopName}</h2>
               <p className="text-xs font-bold mt-2">{receiptModal.record.type === 'Sale' ? 'SALE RECEIPT' : 'RECORD VOUCHER'}</p>
               <p className="text-[10px] mt-1">NO: {receiptModal.record.voucherNo || '-'}</p>
               <p className="text-[10px]">{receiptModal.record.date}</p>

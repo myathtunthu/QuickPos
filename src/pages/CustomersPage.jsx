@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment, orderBy, or } from 'firebase/firestore'; // 🌟 Added 'or' for better ledger query
+import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
-import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, Save, Phone } from 'lucide-react'; // 🌟 Added Phone icon
+import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, Save, Phone } from 'lucide-react';
 
 export default function CustomersPage() {
   const { profile } = useAuth();
@@ -112,7 +112,6 @@ export default function CustomersPage() {
     const payAmount = Number(paymentForm.amount);
     if (!payAmount || payAmount <= 0) return alert("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။");
     
-    // 🌟 Error ကင်းစေရန် အနည်းငယ် ပိုဆပ်ခွင့်ပြုလိုက်သည် (Rounding error များအတွက်)
     if (payAmount > selectedCustomer.totalDebt + 10) return alert(`ဆပ်သည့်ငွေသည် ကျန်ရှိသောအကြွေး (${selectedCustomer.totalDebt.toLocaleString()}) ထက် များနေပါသည်။`);
 
     setLoading(true);
@@ -129,7 +128,7 @@ export default function CustomersPage() {
         type: 'Customer Payment',
         tenantId: tenantId,
         customerId: selectedCustomer.id,
-        personName: selectedCustomer.name, // 🌟 Legacy data အတွက် နာမည်ပါ သိမ်းပေးမည်
+        personName: selectedCustomer.name, 
         amount: payAmount,
         note: paymentForm.note || 'အကြွေးလာဆပ်သည်',
         date: new Date().toISOString().split('T')[0],
@@ -149,31 +148,33 @@ export default function CustomersPage() {
     setLoading(false);
   };
 
-  // --- View Ledger (မှတ်တမ်းကြည့်ခြင်း) ---
+  // --- View Ledger (မှတ်တမ်းကြည့်ခြင်း) 🌟 FIXED: Firebase Index Errors ---
   const viewLedger = async (customer) => {
     setSelectedCustomer(customer);
     setLedgerModalOpen(true);
     setLedgers([]); 
     
     try {
-      // 🌟 FIXED: Data အဟောင်းရော အသစ်ပါ ပေါ်စေရန် customerId သို့မဟုတ် personName ဖြင့် ရှာမည်
+      // 🌟 Firebase Index Error မတက်စေရန် Tenant နဲ့သက်ဆိုင်သမျှ အရင်ဆွဲထုတ်မည်
       const q = query(
         collection(db, 'pos_records'), 
-        where('tenantId', '==', tenantId),
-        or(
-          where('customerId', '==', customer.id),
-          where('personName', '==', customer.name)
-        ),
-        orderBy('createdAt', 'desc')
+        where('tenantId', '==', tenantId)
       );
       const snap = await getDocs(q);
-      
-      // Filter out transactions that don't involve debt/payment
       const allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 🌟 Frontend (Client-side) ဘက်တွင် လိုအပ်သည်များကိုသာ ပြန်လည်စစ်ထုတ်မည် (အလွန်မြန်ဆန်ပါသည်)
       const relevantLedgers = allRecords.filter(r => 
-        r.type === 'Customer Payment' || 
-        (r.type === 'Sale' && r.remainingDebt > 0) // ပြေစာပြတ်မဟုတ်သော အကြွေးကျန်သည့် Sale မှတ်တမ်းများသာ
+        (r.customerId === customer.id || r.personName === customer.name) &&
+        (r.type === 'Customer Payment' || (r.type === 'Sale' && r.remainingDebt > 0))
       );
+
+      // 🌟 အချိန်အစဉ်လိုက် အသစ်ဆုံးကို အပေါ်ရောက်အောင် စီမည် (Sort)
+      relevantLedgers.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
+        return timeB - timeA;
+      });
       
       setLedgers(relevantLedgers);
     } catch (error) {
@@ -237,10 +238,9 @@ export default function CustomersPage() {
          </div>
       </div>
 
-      {/* 🌟 Mobile Responsive Card View / Table View */}
       <div className="bg-[#0d1120] rounded-3xl border border-white/5 overflow-hidden shadow-xl">
         
-        {/* Desktop Table View (Hidden on small screens) */}
+        {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-black/40 text-slate-400">
@@ -283,7 +283,7 @@ export default function CustomersPage() {
           </table>
         </div>
 
-        {/* Mobile Card View (Visible only on small screens) */}
+        {/* Mobile Card View */}
         <div className="block md:hidden p-4 space-y-4">
           {loading && <p className="text-center text-slate-500 py-4">Loading customers...</p>}
           {!loading && filteredCustomers.length === 0 && <p className="text-center text-slate-500 py-4">Customer မတွေ့ပါ။</p>}

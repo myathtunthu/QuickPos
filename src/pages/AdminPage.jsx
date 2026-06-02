@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
-import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { Users, Plus, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 
-// ─── PERMISSIONS & HASH FUNCTION ───
+import ConfirmDialog from '../components/UI/ConfirmDialog';
+
 const PERMISSION_OPTIONS = [
   { key: 'create_sale', label: 'အရောင်းလုပ်ခွင့်' },
   { key: 'view_sales', label: 'အရောင်းမှတ်တမ်းကြည့်ခွင့်' },
@@ -36,36 +37,54 @@ export default function AdminPage() {
   const [posUsers, setPosUsers] = useState([]);
   
   const [adding, setAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
   const [form, setForm] = useState({ username: '', password: '', role: 'staff' });
   const [showPwd, setShowPwd] = useState(false);
+  
+  // 🌟 Admin Password အတွက် State ပြန်လည်ထည့်သွင်းခြင်း
   const [adminPassword, setAdminPassword] = useState('');
+  
   const [editingPerms, setEditingPerms] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
-  // Users ဆွဲထုတ်ခြင်း
   useEffect(() => {
     if (!userData?.tenantId) return;
-    const unsub = onSnapshot(collection(db, 'pos_users'), (snap) => {
+    const q = query(collection(db, 'pos_users'), where('tenantId', '==', userData.tenantId));
+    
+    const unsub = onSnapshot(q, (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setPosUsers(all.filter(u => u.tenantId === userData.tenantId));
+      setPosUsers(all);
+    }, (error) => {
+      console.error("Error fetching users:", error);
     });
+    
     return () => unsub();
   }, [userData]);
 
-  // User အသစ်ထည့်ခြင်း
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!form.username.trim() || !form.password.trim()) return;
-    if (!adminPassword.trim()) return alert("Admin password ထည့်ရန် လိုအပ်ပါသည်။");
     
-    // လက်ရှိ Admin ရဲ့ Password မှန်/မမှန် စစ်ဆေးခြင်း
-    if (userData.password !== simpleHash(adminPassword)) {
-      return alert("Admin password မှားနေပါသည်။");
+    // 🌟 Admin Password စစ်ဆေးသည့်စနစ် (Enhanced & Secured)
+    if (!adminPassword.trim()) return alert("Admin password ထည့်ရန် လိုအပ်ပါသည်။");
+
+    if (!userData.password) {
+      return alert("System Error: သင့် Admin အကောင့်အတွက် Database တွင် Password မှတ်တမ်း မရှိပါ။ Database သို့သွား၍ 'pos_users' တွင် password ထည့်သွင်းပေးပါ။");
+    }
+
+    const hashedInput = simpleHash(adminPassword);
+    
+    // Database ထဲတွင် Hash စနစ်ဖြင့် သိမ်းထားသည်ဖြစ်စေ၊ ရိုးရိုးစာသားဖြင့် သိမ်းထားသည်ဖြစ်စေ ၂ မျိုးလုံးကို တိုက်စစ်ပေးမည်
+    if (userData.password !== hashedInput && userData.password !== adminPassword) {
+      return alert("Admin Password မှားနေပါသည်။ ပြန်လည်စစ်ဆေးပေးပါ။");
     }
     
-    if (posUsers.some(u => u.username === form.username.trim())) {
+    if (posUsers.some(u => u.username.toLowerCase() === form.username.trim().toLowerCase())) {
       return alert("ဒီနာမည်ဖြင့် User ရှိပြီးသားပါ။");
     }
 
+    setIsSaving(true);
     try {
       await addDoc(collection(db, 'pos_users'), {
         tenantId: userData.tenantId, 
@@ -75,48 +94,61 @@ export default function AdminPage() {
         permissions: form.role === 'staff' ? DEFAULT_STAFF_PERMS : [],
         createdAt: Date.now(),
       });
-      alert("User အသစ်ဖန်တီးပြီးပါပြီ။");
       setForm({ username: '', password: '', role: 'staff' }); 
-      setAdminPassword(''); 
+      setAdminPassword(''); // ဖောင်တင်ပြီးပါက Password အကွက်ကို ပြန်လွတ်ပေးမည်
       setAdding(false);
     } catch (error) {
+      console.error("Error adding user:", error);
       alert("User ဖန်တီးရာတွင် အမှားအယွင်းဖြစ်နေပါသည်။");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // လုပ်ပိုင်ခွင့် အဖွင့်အပိတ် လုပ်ခြင်း
   const togglePermission = async (user, permKey) => {
-    const newPerms = user.permissions?.includes(permKey) 
-      ? user.permissions.filter(p => p !== permKey) 
-      : [...(user.permissions || []), permKey];
-    await setDoc(doc(db, 'pos_users', user.id), { permissions: newPerms }, { merge: true });
+    try {
+      const newPerms = user.permissions?.includes(permKey) 
+        ? user.permissions.filter(p => p !== permKey) 
+        : [...(user.permissions || []), permKey];
+      await setDoc(doc(db, 'pos_users', user.id), { permissions: newPerms }, { merge: true });
+    } catch (error) {
+      console.error("Error updating permissions:", error);
+      alert("လုပ်ပိုင်ခွင့် ပြင်ဆင်ခြင်း မအောင်မြင်ပါ။");
+    }
   };
 
-  const handleDelete = async (u) => {
+  const executeDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      await deleteDoc(doc(db, 'pos_users', confirmDelete.id));
+      setConfirmDelete(null);
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      alert("User ဖျက်သိမ်းခြင်း မအောင်မြင်ပါ။");
+    }
+  };
+
+  const handleDeleteRequest = (u) => {
     if (u.role === 'admin' && posUsers.filter(x => x.role === 'admin').length <= 1) {
       return alert("နောက်ဆုံး Admin ကို ဖျက်ခွင့်မပြုပါ။");
     }
-    if (window.confirm(`${u.username} ကို ဖျက်ရန် သေချာပါသလား?`)) {
-      await deleteDoc(doc(db, 'pos_users', u.id));
-    }
+    setConfirmDelete(u);
   };
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 text-white pb-10 space-y-6">
       
-      {/* ─── HEADER ─── */}
-      <div className="bg-[#0d1120] border-2 border-indigo-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex justify-between items-center animate-fade-in">
+      <div className="bg-[#0d1120] border-2 border-indigo-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex justify-between items-center animate-in fade-in">
         <h3 className="font-black text-white flex items-center gap-4 text-2xl">
-          <Users size={30} className="text-indigo-500"/> Staff
+          <Users size={30} className="text-indigo-500"/> Staff Management
         </h3>
-        <button onClick={() => setAdding(!adding)} className="bg-indigo-900/40 text-indigo-400 px-5 sm:px-6 py-3 sm:py-4 rounded-xl font-black text-lg flex items-center gap-2 hover:bg-indigo-900/60 transition-all">
+        <button onClick={() => setAdding(!adding)} className="bg-indigo-900/40 text-indigo-400 px-5 sm:px-6 py-3 sm:py-4 rounded-xl font-black text-lg flex items-center gap-2 hover:bg-indigo-900/60 transition-all active:scale-95">
           <Plus size={24}/> Add
         </button>
       </div>
 
-      {/* ─── ADD USER FORM ─── */}
       {adding && (
-        <form onSubmit={handleAdd} className="bg-black/40 p-6 sm:p-8 rounded-3xl border-2 border-indigo-500/15 space-y-5 shadow-lg animate-fade-in">
+        <form onSubmit={handleAdd} className="bg-black/40 p-6 sm:p-8 rounded-3xl border-2 border-indigo-500/15 space-y-5 shadow-lg animate-in slide-in-from-top-4">
           <input required value={form.username} onChange={e => setForm({...form, username: e.target.value})} placeholder="Username အသစ်" className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50" />
           
           <div className="relative">
@@ -126,8 +158,9 @@ export default function AdminPage() {
             </button>
           </div>
           
+          {/* 🌟 Admin Password တောင်းသည့် အကွက် ပြန်လည်ထည့်သွင်းခြင်း */}
           <div className="relative">
-            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="သင့် (Admin) ရဲ့ Password" className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
+            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="သင့် (Admin) ရဲ့ Password ထည့်ပါ" className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
           </div>
           
           <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50">
@@ -136,14 +169,15 @@ export default function AdminPage() {
           </select>
           
           <div className="flex gap-4 sm:gap-5 pt-2">
-            <button type="submit" className="flex-1 py-4 sm:py-5 bg-indigo-600 hover:bg-indigo-500 transition-colors text-white rounded-xl font-black text-lg sm:text-xl">Create</button>
-            <button type="button" onClick={() => setAdding(false)} className="px-6 sm:px-8 py-4 sm:py-5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-400 rounded-xl font-black text-lg sm:text-xl">Cancel</button>
+            <button type="submit" disabled={isSaving} className="flex-1 py-4 sm:py-5 bg-indigo-600 hover:bg-indigo-500 transition-colors text-white rounded-xl font-black text-lg sm:text-xl flex justify-center items-center disabled:opacity-50 active:scale-95">
+              {isSaving ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Create User'}
+            </button>
+            <button type="button" onClick={() => setAdding(false)} disabled={isSaving} className="px-6 sm:px-8 py-4 sm:py-5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-400 rounded-xl font-black text-lg sm:text-xl disabled:opacity-50">Cancel</button>
           </div>
         </form>
       )}
 
-      {/* ─── USERS LIST ─── */}
-      <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-2">
+      <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
         {posUsers.map(u => (
           <div key={u.id} className="bg-black/30 p-5 sm:p-6 rounded-2xl border-2 border-indigo-500/10 hover:border-indigo-500/30 transition-colors group">
             
@@ -165,16 +199,15 @@ export default function AdminPage() {
                   <ShieldCheck size={20}/> {editingPerms === u.id ? 'Close' : 'Permissions'}
                 </button>
                 {u.username !== userData?.username && (
-                  <button onClick={() => handleDelete(u)} className="text-rose-500 hover:text-white hover:bg-rose-500 bg-rose-500/10 border-2 border-rose-500/20 p-3 rounded-xl transition-all">
+                  <button onClick={() => handleDeleteRequest(u)} className="text-rose-500 hover:text-white hover:bg-rose-500 bg-rose-500/10 border-2 border-rose-500/20 p-3 rounded-xl transition-all">
                     <Trash2 size={22} sm:size={24}/>
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Permissions Panel */}
             {editingPerms === u.id && (
-              <div className="mt-5 sm:mt-6 p-5 sm:p-6 bg-black/60 rounded-2xl border-2 border-indigo-500/20 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 animate-fade-in shadow-inner">
+              <div className="mt-5 sm:mt-6 p-5 sm:p-6 bg-black/60 rounded-2xl border-2 border-indigo-500/20 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 animate-in fade-in shadow-inner">
                 {PERMISSION_OPTIONS.map(perm => (
                   <label key={perm.key} className={`flex items-center gap-3 sm:gap-4 text-base sm:text-lg font-bold ${u.role === 'admin' ? 'text-slate-600' : 'text-slate-300 hover:text-white'} cursor-pointer transition-colors p-2 rounded-lg hover:bg-white/5`}>
                     <input 
@@ -193,6 +226,16 @@ export default function AdminPage() {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog 
+        isOpen={!!confirmDelete}
+        title="User အား ဖျက်သိမ်းရန်"
+        message={`"${confirmDelete?.username}" ကို ဖျက်သိမ်းရန် သေချာပါသလား? ဤလုပ်ဆောင်ချက်ကို နောက်ပြန်ဆုတ်၍ မရပါ။`}
+        isDangerous={true}
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
     </div>
   );
 }

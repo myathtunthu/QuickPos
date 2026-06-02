@@ -11,7 +11,6 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid
 } from 'recharts';
-import AIChat from '../components/AIChat';
 
 export default function DashboardPage() {
   const { profile } = useAuth();
@@ -99,10 +98,10 @@ export default function DashboardPage() {
 
   const orderCount = salesRecs.length;
 
-  // 🌟 Cash Flow Drawer Balance (True Cash Flow)
+  // 🌟 Cash Flow Drawer Balance
   const balance = totalSales - totalPurchases - totalExpenses + totalPayments;
 
-  // 🌟 စစ်မှန်သော အမြတ်ထွက်စေရန် ရောင်းရသည့် ပစ္စည်းများ၏ ရင်းနှီးစရိတ် (COGS) ဖြင့်သာ တွက်ချက်ခြင်း
+  // 🌟 Cost of Goods Sold (COGS)
   const totalCOGS = useMemo(() => {
     return salesRecs.reduce((sum, r) => {
       const items = r.itemsDetail || r.items || [];
@@ -117,7 +116,7 @@ export default function DashboardPage() {
   const profit = totalSales - totalCOGS - totalExpenses;
   const profitMargin = totalSales > 0 ? ((profit / totalSales) * 100).toFixed(1) : 0;
   
-  // Today's growth calculation (compare with yesterday)
+  // Today's growth comparison calculation
   const todaySales = useMemo(() => {
     const todayStr = new Date().toDateString();
     return records.filter(r => {
@@ -143,7 +142,6 @@ export default function DashboardPage() {
     const bestHourEntry = Object.entries(hourCount).sort((a, b) => b[1] - a[1])[0];
     const bestHour = bestHourEntry ? `${bestHourEntry[0]}:00` : '-';
     
-    // 🌟 Live Category Mapping Lookup from products state
     const categorySales = {};
     salesRecs.forEach(r => {
       const items = r.itemsDetail || r.items || [];
@@ -185,7 +183,7 @@ export default function DashboardPage() {
     return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [salesRecs, products]);
 
-  // ✅ Low Stock Alert Improvements
+  // ✅ Low Stock Alert Section
   const lowStock = useMemo(() => products.filter(p => (Number(p.stockBase) ?? Number(p.stock) ?? 0) <= (Number(p.minStock) || 5)), [products]);
   
   const getStockColor = (stock) => {
@@ -194,7 +192,6 @@ export default function DashboardPage() {
     return 'text-[#06b6d4] bg-[#06b6d4]/10 border-[#06b6d4]/20';
   };
   
-  // Calculate average daily usage for each product
   const avgDailyUsage = useMemo(() => {
     const usage = {};
     const last30Days = records.filter(r => {
@@ -219,7 +216,7 @@ export default function DashboardPage() {
     return Math.floor(stock / usageVal);
   };
 
-  // ✅ Chart Improvements (Real data grouping by Date)
+  // ✅ Chart Grouping Data (7 Days Trend)
   const chartData = useMemo(() => {
     const days = [];
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -249,10 +246,8 @@ export default function DashboardPage() {
     return days;
   }, [records, products, getTimestamp]);
 
-  // ✅ Recent Sales Section
   const recentSales = useMemo(() => salesRecs.slice(0, 5), [salesRecs]);
 
-  // Animations
   const containerVars = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
   const itemVars = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } };
 
@@ -261,9 +256,6 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-[#060816] flex items-center justify-center overflow-x-hidden">
         <div className="relative">
           <div className="w-16 h-16 border-4 border-[#06b6d4] border-t-transparent rounded-full animate-spin" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-8 h-8 bg-[#06b6d4] rounded-full animate-ping opacity-75" />
-          </div>
         </div>
       </div>
     );
@@ -277,7 +269,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
           <h1 className="text-2xl font-black text-[#06b6d4] tracking-wider flex items-center gap-2">
             <Zap size={24} className="text-[#06b6d4] drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] animate-pulse"/>
-            POSIFY<span className="text-white">DASH</span>
+            <span className="font-black text-white">Quick POS</span>DASH
           </h1>
           
           {/* Search Bar */}
@@ -498,7 +490,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
             {/* Inventory Low Stock Alerts */}
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
               <h2 className="text-sm font-black mb-4 flex items-center gap-2"><AlertTriangle size={16} className="text-[#f59e0b]"/> Inventory Stock Alerts</h2>
@@ -508,7 +499,7 @@ export default function DashboardPage() {
                   All product inventory levels are healthy.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-hide pr-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto scrollbar-hide pr-2">
                   {lowStock.map(p => {
                     const stockBaseVal = Number(p.stockBase) ?? Number(p.stock) ?? 0;
                     const daysLeft = getDaysRemaining(stockBaseVal, avgDailyUsage[p.name]);
@@ -531,7 +522,7 @@ export default function DashboardPage() {
               )}
             </motion.div>
 
-            {/* AI Insights Platform */}
+            {/* 🌟 AI Insights Platform (Predictive Data Forecast မူလအတိုင်း ထည့်သွင်းထားပါသည်) */}
             <motion.div variants={itemVars} className="bg-gradient-to-br from-indigo-900/30 to-[#0f172a] rounded-2xl p-5 border border-indigo-500/30 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-10"><Zap size={100} className="text-indigo-400"/></div>
               <h2 className="text-sm font-black text-indigo-400 mb-4 relative z-10 flex items-center gap-2">🧠 AI Predictive Data Forecast</h2>
@@ -561,10 +552,8 @@ export default function DashboardPage() {
               </div>
             </motion.div>
           </div>
-        </motion.div>
 
-        {/* AI Chat Bot Component */}
-        <AIChat records={records} products={products} />
+        </motion.div>
       </div>
     </div>
   );

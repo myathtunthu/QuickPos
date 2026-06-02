@@ -6,15 +6,14 @@ import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, 
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import useDebounce from '../hooks/useDebounce';
 
-// ---------- Scanner Modal (ZXing Refactored - Bug 4 & 11 Fixes) ----------
+// ---------- Scanner Modal (High-Resolution HD Fix) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
-  const streamRef = useRef(null);
 
   useEffect(() => {
-    // 🌟 Bug 4 Fix: Barcode formats ပေါင်းစုံအား တိကျမြန်ဆန်စွာ ဖတ်နိုင်ရန် Hints သတ်မှတ်ခြင်း
+    // Barcode formats စုံလင်စွာ ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.CODE_128,
@@ -30,32 +29,31 @@ const ScannerModal = ({ onClose, onScan }) => {
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        codeReader.decodeFromVideoDevice(null, videoRef.current, (result) => {
-          if (result) {
-            onScan(result.text);
-            codeReader.reset();
-            onClose();
-          }
-        });
-      })
-      .catch((err) => {
-        console.error('Camera error:', err);
-        setCameraError(true);
-      });
+    // 🌟 ဖြေရှင်းချက် - ကင်မရာလိုင်းစိပ်သမျှ အပြတ်ဖတ်နိုင်ရန် HD Resolution နှင့် အနောက်ကင်မရာကို Force လုပ်ခြင်း
+    const constraints = {
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
 
-    // 🌟 Bug 11 Fix: Video tracks များအားလုံးကို ပိတ်သိမ်း၍ Memory Leak ကာကွယ်ခြင်း
+    codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+      if (result) {
+        onScan(result.text);
+        codeReader.reset();
+        onClose();
+      }
+    })
+    .catch((err) => {
+      console.error('Camera error:', err);
+      setCameraError(true);
+    });
+
+    // Unmount ဖြစ်ချိန်တွင် ကင်မရာ Hardware Stream အား အလိုအလျောက် ပိတ်သိမ်းခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [onScan, onClose]);

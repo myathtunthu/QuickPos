@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Printer, X, Calendar, Search } from 'lucide-react';
+import { FileText, Printer, X, Calendar, Search, FileQuestion } from 'lucide-react'; // 🌟 Added FileQuestion
+
+// 🌟 UI Components များ လှမ်းခေါ်ခြင်း (Components ဖိုင်များ ဖန်တီးထားရန် လိုအပ်ပါသည်)
+import EmptyState from '../components/UI/EmptyState';
+import { RecordSkeleton } from '../components/UI/Skeleton';
 
 // ─── Professional Print Voucher (EntryPage ပုံစံအတိုင်း) ───
 const doPrint = (record, shopName = 'QuickPOS') => {
@@ -39,19 +43,34 @@ export default function RecordsPage() {
   const [records, setRecords] = useState([]);
   const [filterType, setFilterType] = useState('All');
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
+  
+  // 🌟 Loading State ထည့်သွင်းခြင်း
+  const [isLoading, setIsLoading] = useState(true);
+  
   const fmt = n => (Number(n) || 0).toLocaleString();
 
   useEffect(() => {
-    if (!userData?.tenantId) return;
+    if (!userData?.tenantId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true); // Data စတင်ဆွဲယူချိန်တွင် Loading ဖွင့်မည်
     const q = query(
       collection(db, 'pos_records'), 
       where('tenantId', '==', userData.tenantId), 
       orderBy('createdAt', 'desc')
     );
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecords(data);
+      setIsLoading(false); // Data ရလာချိန်တွင် Loading ပိတ်မည်
+    }, (error) => {
+      console.error(error);
+      setIsLoading(false);
     });
+    
     return () => unsubscribe();
   }, [userData]);
 
@@ -63,39 +82,57 @@ export default function RecordsPage() {
       {/* HEADER & FILTER */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-5">
         <h3 className="font-black text-2xl flex items-center gap-3"><FileText className="text-cyan-500"/> Transactions History</h3>
-        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+        <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
           {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
-            <button key={type} onClick={() => setFilterType(type)} className={`px-5 py-3 rounded-xl text-sm font-black transition-all ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}>
+            <button 
+              key={type} 
+              onClick={() => setFilterType(type)} 
+              className={`px-5 py-3 rounded-xl text-sm font-black transition-all whitespace-nowrap ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}
+            >
               {type}
             </button>
           ))}
         </div>
       </div>
 
-      {/* RECORD LIST */}
+      {/* 🌟 RECORD LIST with Skeletons & Empty States */}
       <div className="space-y-4">
-        {filteredRecords.length === 0 && <p className="text-center text-slate-500 text-xl py-14 font-bold">မှတ်တမ်းများ မရှိသေးပါ။</p>}
-        {filteredRecords.map(r => (
-          <div key={r.id} onClick={() => setReceiptModal({ show: true, record: r })} className="bg-[#0d1120] p-6 rounded-2xl border border-white/5 hover:border-cyan-500/30 cursor-pointer transition-all flex justify-between items-center gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className={`px-3 py-1 rounded-lg text-xs font-black uppercase ${r.type === 'Sale' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>{r.type}</span>
-                <span className="text-slate-400 text-xs font-mono">{r.voucherNo || r.id.slice(0,8)}</span>
+        {isLoading ? (
+          // ⏳ Loading ဖြစ်နေချိန် RecordSkeleton ပြမည်
+          [1, 2, 3, 4, 5].map((i) => <RecordSkeleton key={i} />)
+        ) : filteredRecords.length === 0 ? (
+          // 📭 Data မရှိချိန် EmptyState UI ပြမည်
+          <EmptyState 
+            icon={FileQuestion}
+            title="မှတ်တမ်း မရှိသေးပါ"
+            message={filterType === 'All' 
+              ? "ယခုစနစ်တွင် မည်သည့် အရောင်းအဝယ်မှတ်တမ်းမျှ မရှိသေးပါ။" 
+              : `ယခုစနစ်တွင် "${filterType}" နှင့် သက်ဆိုင်သော မှတ်တမ်းများ မရှိသေးပါ။`}
+          />
+        ) : (
+          // 📝 Data ရှိချိန် ပုံမှန် List ပြမည်
+          filteredRecords.map(r => (
+            <div key={r.id} onClick={() => setReceiptModal({ show: true, record: r })} className="bg-[#0d1120] p-6 rounded-2xl border border-white/5 hover:border-cyan-500/30 cursor-pointer transition-all flex justify-between items-center gap-4 hover:scale-[1.01]">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className={`px-3 py-1 rounded-lg text-xs font-black uppercase ${r.type === 'Sale' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>{r.type}</span>
+                  <span className="text-slate-400 text-xs font-mono">{r.voucherNo || r.id.slice(0,8)}</span>
+                </div>
+                <p className="font-bold text-lg text-slate-200">{r.personName || r.item || 'Walk-in'}</p>
+                <p className="text-slate-500 text-sm flex items-center gap-2 mt-1"><Calendar size={14}/> {r.date || '-'}</p>
               </div>
-              <p className="font-bold text-lg text-slate-200">{r.personName || r.item || 'Walk-in'}</p>
-              <p className="text-slate-500 text-sm flex items-center gap-2 mt-1"><Calendar size={14}/> {r.date || '-'}</p>
+              <p className={`font-black text-2xl ${r.type === 'Sale' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {r.type === 'Sale' ? '+' : '-'}{fmt(r.amount)}
+              </p>
             </div>
-            <p className={`font-black text-2xl ${r.type === 'Sale' ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {r.type === 'Sale' ? '+' : '-'}{fmt(r.amount)}
-            </p>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* PROFESSIONAL RECEIPT MODAL */}
       {receiptModal.show && receiptModal.record && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-[#080c14]/95 backdrop-blur-sm" onClick={() => setReceiptModal({show:false, record:null})}>
-          <div className="bg-white text-black w-full max-w-sm p-6 shadow-2xl rounded-lg font-mono text-sm" onClick={e => e.stopPropagation()} style={{backgroundImage:'repeating-linear-gradient(transparent,transparent 28px,#f0f0f0 28px,#f0f0f0 29px)'}}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-[#080c14]/95 backdrop-blur-sm animate-in fade-in" onClick={() => setReceiptModal({show:false, record:null})}>
+          <div className="bg-white text-black w-full max-w-sm p-6 shadow-2xl rounded-lg font-mono text-sm scale-in-95" onClick={e => e.stopPropagation()} style={{backgroundImage:'repeating-linear-gradient(transparent,transparent 28px,#f0f0f0 28px,#f0f0f0 29px)'}}>
             <div className="text-center mb-5 border-b-2 border-dashed border-gray-400 pb-5 pt-2">
               <h2 className="text-2xl font-black uppercase tracking-widest">{shopName}</h2> {/* 🌟 Dynamic Shop Name */}
               <p className="text-xs font-bold mt-2">{receiptModal.record.type === 'Sale' ? 'SALE RECEIPT' : 'RECORD VOUCHER'}</p>
@@ -118,8 +155,8 @@ export default function RecordsPage() {
             <div className="border-t-2 border-gray-800 pt-2 text-right font-black text-lg">TOTAL: {fmt(receiptModal.record.amount)} Ks</div>
             
             <div className="flex gap-3 mt-6">
-              <button onClick={() => doPrint(receiptModal.record, shopName)} className="flex-1 py-3 bg-cyan-600 text-white rounded font-black">Print</button>
-              <button onClick={() => setReceiptModal({show:false, record:null})} className="flex-1 py-3 bg-gray-200 rounded font-black">Close</button>
+              <button onClick={() => doPrint(receiptModal.record, shopName)} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded font-black active:scale-95 transition-all">Print</button>
+              <button onClick={() => setReceiptModal({show:false, record:null})} className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 rounded font-black active:scale-95 transition-all">Close</button>
             </div>
           </div>
         </div>

@@ -18,73 +18,33 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Fully Fixed) ----------
+// ---------- Scanner Modal (Same as Inventory - Working) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const readerRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const readerRef = useRef(null);
 
   useEffect(() => {
-    let isMounted = true;
     const codeReader = new BrowserMultiFormatReader();
     readerRef.current = codeReader;
 
-    const startCamera = async () => {
-      try {
-        // 1. အနောက်ကင်မရာကို ဦးစားပေးဖွင့်ပါ
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false,
-        });
-        if (!isMounted) return;
-
-        streamRef.current = stream;
-        const video = videoRef.current;
-        video.srcObject = stream;
-        video.setAttribute("playsinline", true);
-        video.muted = true; // Autoplay policy အတွက်
-
-        // 2. Video က data ဝင်လာမှ scanner စမယ်
-        video.onloadedmetadata = () => {
-          if (!isMounted) return;
-          video.play().catch(err => {
-            console.warn("Video play failed, but still scanning...", err);
-          });
-          setLoading(false);
-
-          // 3. ZXing scanner ကို video element ပေါ်တင်ပြီး စဖတ်မယ်
-          codeReader.decodeFromVideoElement(video, (result, err) => {
-            if (result) {
-              onScan(result.text);
-              // Cleanup & close
-              if (streamRef.current) {
-                streamRef.current.getTracks().forEach(t => t.stop());
-              }
-              codeReader.reset();
-              onClose();
-            }
-            // err ကို ignore (no barcode in frame)
-          });
-        };
-      } catch (err) {
-        console.error("Camera access error:", err);
-        if (isMounted) setCameraError(true);
-        setLoading(false);
-      }
-    };
-
-    startCamera();
+    codeReader
+      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
+        if (result) {
+          onScan(result.text);
+          codeReader.reset();
+          onClose();
+        }
+        // err is ignored (no barcode in frame)
+      })
+      .catch((err) => {
+        console.error('Camera error:', err);
+        setCameraError(true);
+      });
 
     return () => {
-      isMounted = false;
       if (readerRef.current) {
         readerRef.current.reset();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
       }
     };
   }, [onScan, onClose]);
@@ -97,19 +57,9 @@ const ScannerModal = ({ onClose, onScan }) => {
           <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
-          <div className="p-6 text-center text-red-500">
-            Camera access denied or not available.<br/>
-            Please allow camera permissions in your browser.
-          </div>
+          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
         ) : (
-          <div className="relative bg-black min-h-[250px]">
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center text-white text-sm z-10 bg-black/60">
-                Opening camera...
-              </div>
-            )}
-            <video ref={videoRef} className="w-full h-auto" />
-          </div>
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
         )}
         <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
           ကင်မရာကို Barcode သို့ ချိန်ပါ
@@ -232,7 +182,7 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // ---------- Hold Invoice (Save Draft) FIXED ----------
+  // ---------- Hold Invoice (Save Draft) ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
@@ -286,7 +236,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ---------- Restore Draft (Direct) ----------
+  // ---------- Restore Draft ----------
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
 
@@ -469,6 +419,7 @@ export default function EntryPage({ products = [] }) {
 
   const doPrint = () => { window.print(); };
 
+  // Barcode scanned handler (same as before)
   const handleBarcodeScanned = (text) => {
     let foundProduct = null; let foundUnit = null;
     for (const p of products) {

@@ -95,7 +95,6 @@ export default function EntryPage({ products = [] }) {
   const tenantId = profile?.tenantId;
   const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
 
-  // 🌟 Shop Settings State (pos_settings မှ တိုက်ရိုက်ဆွဲယူရန်)
   const [shopSettings, setShopSettings] = useState({
     shopName: profile?.shopName || 'QuickPOS',
     phone: '',
@@ -154,13 +153,11 @@ export default function EntryPage({ products = [] }) {
     return map;
   }, [products]);
 
-  // 🌟 Shop Settings & Persons & Drafts အားလုံးဆွဲယူခြင်း
   useEffect(() => {
     if (!tenantId) return;
 
     const fetchAllData = async () => {
       try {
-        // 1. Settings ဆွဲယူခြင်း (ဖုန်းနံပါတ်နှင့် လိပ်စာ အတိအကျရရန်)
         const settingsSnap = await getDoc(doc(db, 'pos_settings', tenantId));
         if (settingsSnap.exists()) {
           const sData = settingsSnap.data();
@@ -170,13 +167,10 @@ export default function EntryPage({ products = [] }) {
             address: sData.address || ''
           });
         }
-
-        // 2. Customers & Suppliers
         const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
         setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
         setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
       } catch (err) { console.error(err); }
     };
 
@@ -298,13 +292,17 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
 
       batch.set(ref, {
-        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
+        type: 'Expense', tenantId: tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
         cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
       });
 
-      if (counterSnap.exists()) batch.update(counterRef, { expenseCount: increment(1) });
-      else batch.set(counterRef, { expenseCount: 1 });
+      // 🌟 FIXED: tenantId ကို မဖြစ်မနေ ထည့်သွင်းပေးပြီး { merge: true } အသုံးပြုထားပါသည်
+      if (counterSnap.exists()) {
+        batch.set(counterRef, { expenseCount: increment(1), tenantId: tenantId }, { merge: true });
+      } else {
+        batch.set(counterRef, { expenseCount: 1, tenantId: tenantId });
+      }
       
       await batch.commit();
       setExpenseTitle(''); setExpenseAmt(''); alert("Expense Saved!");
@@ -353,9 +351,10 @@ export default function EntryPage({ products = [] }) {
           totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
       } else if (personIdForRecord && remainingDebt > 0) {
+        // 🌟 FIXED: Customer/Supplier အကြွေးတိုးရာတွင် tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const personRef = doc(db, collectionName, personIdForRecord);
-        batch.update(personRef, { totalDebt: increment(remainingDebt) });
+        batch.set(personRef, { totalDebt: increment(remainingDebt), tenantId: tenantId }, { merge: true });
       }
 
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
@@ -368,7 +367,7 @@ export default function EntryPage({ products = [] }) {
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = {
-        id: ref.id, type: entryTab || 'Sale', tenantId, personName: personNameForRecord, customerId: entryTab === 'Sale' ? personIdForRecord : null, supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
+        id: ref.id, type: entryTab || 'Sale', tenantId: tenantId, personName: personNameForRecord, customerId: entryTab === 'Sale' ? personIdForRecord : null, supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
         cashier: cashierName, time: currentTime, voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({
           productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
@@ -384,11 +383,16 @@ export default function EntryPage({ products = [] }) {
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
         const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
         const prodRef = doc(db, 'pos_products', item.productId);
-        batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
+        // 🌟 FIXED: Product Stock အတိုးအလျှော့လုပ်ရာတွင်လည်း tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
+        batch.set(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange), tenantId: tenantId }, { merge: true });
       });
 
-      if (counterSnap.exists()) batch.update(counterRef, { [countField]: increment(1) });
-      else batch.set(counterRef, { [countField]: 1 });
+      // 🌟 FIXED: Voucher Counter တိုးရာတွင် tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
+      if (counterSnap.exists()) {
+        batch.set(counterRef, { [countField]: increment(1), tenantId: tenantId }, { merge: true });
+      } else {
+        batch.set(counterRef, { [countField]: 1, tenantId: tenantId });
+      }
 
       await batch.commit();
 
@@ -396,11 +400,13 @@ export default function EntryPage({ products = [] }) {
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
       
-      // Data အသစ်များကို Background တွင် ပြန်လည်ဆွဲယူမည်
       const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       
-    } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
+    } catch (err) { 
+      console.error("Firebase Save Error: ", err); 
+      alert("Error saving transaction! Please check your internet connection and try again."); 
+    }
     
     submitLock.current = false; setLoading(false);
   };
@@ -595,7 +601,7 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
-        {/* 🌟 View Receipt Modal (Using fetched shopSettings) */}
+        {/* View Receipt Modal */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
@@ -683,7 +689,7 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* 🌟 ACTUAL PRINT AREA (Hidden in UI, only visible when printing) */}
+      {/* ACTUAL PRINT AREA */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

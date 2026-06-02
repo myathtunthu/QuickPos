@@ -18,15 +18,14 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Bug 7 & Bug 11 Fixes Included) ----------
+// ---------- Scanner Modal (High-Resolution HD Fix) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
-  const streamRef = useRef(null);
 
   useEffect(() => {
-    // 🌟 Bug 7 Fix: Barcode formats အကုန်ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
+    // Barcode formats စုံလင်စွာ ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.CODE_128,
@@ -42,32 +41,31 @@ const ScannerModal = ({ onClose, onScan }) => {
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        codeReader.decodeFromVideoDevice(null, videoRef.current, (result) => {
-          if (result) {
-            onScan(result.text);
-            codeReader.reset();
-            onClose();
-          }
-        });
-      })
-      .catch((err) => {
-        console.error('Camera error:', err);
-        setCameraError(true);
-      });
+    // 🌟 ဖြေရှင်းချက် - ကင်မရာလိုင်းစိပ်သမျှ အပြတ်ဖတ်နိုင်ရန် HD Resolution နှင့် အနောက်ကင်မရာကို Force လုပ်ခြင်း
+    const constraints = {
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
 
-    // 🌟 Bug 11 Fix: Memory Leak နှင့် Camera Stream မပိတ်ဘဲကျန်ခြင်းမှ ကာကွယ်ခြင်း
+    codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+      if (result) {
+        onScan(result.text);
+        codeReader.reset();
+        onClose();
+      }
+    })
+    .catch((err) => {
+      console.error('Camera error:', err);
+      setCameraError(true);
+    });
+
+    // Unmount ဖြစ်ချိန်တွင် ကင်မရာ Hardware Stream အား အလိုအလျောက် ပိတ်သိမ်းခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [onScan, onClose]);
@@ -77,7 +75,7 @@ const ScannerModal = ({ onClose, onScan }) => {
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
         <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
           <h3 className="font-black text-gray-800">Scan Barcode</h3>
-          <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+          <button type="button" onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
           <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>

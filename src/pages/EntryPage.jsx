@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   collection, doc, writeBatch, serverTimestamp, increment,
-  getDoc, getDocs, query, where, orderBy, limit, setDoc, updateDoc, deleteDoc
+  getDoc, getDocs, query, where, orderBy, limit, setDoc, deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,7 @@ import useDebounce from '../hooks/useDebounce';
 import {
   Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X
 } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
@@ -18,33 +18,56 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Same as Inventory - Working) ----------
+// ---------- Scanner Modal (Bug 7 & Bug 11 Fixes Included) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
-    const codeReader = new BrowserMultiFormatReader();
+    // 🌟 Bug 7 Fix: Barcode formats အကုန်ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF,
+      BarcodeFormat.QR_CODE
+    ]);
+
+    const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    codeReader
-      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
-        if (result) {
-          onScan(result.text);
-          codeReader.reset();
-          onClose();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
-        // err is ignored (no barcode in frame)
+        codeReader.decodeFromVideoDevice(null, videoRef.current, (result) => {
+          if (result) {
+            onScan(result.text);
+            codeReader.reset();
+            onClose();
+          }
+        });
       })
       .catch((err) => {
         console.error('Camera error:', err);
         setCameraError(true);
       });
 
+    // 🌟 Bug 11 Fix: Memory Leak နှင့် Camera Stream မပိတ်ဘဲကျန်ခြင်းမှ ကာကွယ်ခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [onScan, onClose]);
@@ -57,9 +80,9 @@ const ScannerModal = ({ onClose, onScan }) => {
           <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
-          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
+          <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
         ) : (
-          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
         )}
         <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
           ကင်မရာကို Barcode သို့ ချိန်ပါ
@@ -107,12 +130,31 @@ export default function EntryPage({ products = [] }) {
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
 
+  // 🌟 Bug 9 Fix: Double Click ကာကွယ်ရန် Submit Lock Ref ဆောက်ခြင်း
+  const submitLock = useRef(false);
+
   const {
-    cart, addToCart, removeCartItem, updateCartItemQty,
+    cart, setCart, addToCart, removeCartItem, updateCartItemQty,
     updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount,
     updateCartItemPrice, clearCart, cartTotals, globalDiscountAmt,
     setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType
   } = useCart(products, entryTab);
+
+  // 🌟 Bug 6 Fix: Barcode search နှုန်း အလွန်မြန်ဆန်စေရန် Map Lookup ဆောက်ခြင်း
+  const barcodeMap = useMemo(() => {
+    const map = new Map();
+    if (!products || !Array.isArray(products)) return map;
+    
+    products.forEach(p => {
+      if (p.barcode) map.set(p.barcode.trim().toLowerCase(), { product: p, unit: p.packageUnits?.[0] });
+      p.packageUnits?.forEach(u => {
+        if (u.barcode) map.set(u.barcode.trim().toLowerCase(), { product: p, unit: u });
+        if (u.barcodes?.retail) map.set(u.barcodes.retail.trim().toLowerCase(), { product: p, unit: u });
+        if (u.barcodes?.wholesale) map.set(u.barcodes.wholesale.trim().toLowerCase(), { product: p, unit: u });
+      });
+    });
+    return map;
+  }, [products]);
 
   // Fetch customers/suppliers
   const fetchPersons = async () => {
@@ -127,14 +169,16 @@ export default function EntryPage({ products = [] }) {
 
   const fetchDrafts = async () => {
     if (!tenantId) return;
-    const q = query(
-      collection(db, 'pos_drafts'),
-      where('tenantId', '==', tenantId),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-    const snap = await getDocs(q);
-    setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    try {
+      const q = query(
+        collection(db, 'pos_drafts'),
+        where('tenantId', '==', tenantId),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      );
+      const snap = await getDocs(q);
+      setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => { fetchPersons(); fetchDrafts(); }, [tenantId]);
@@ -154,6 +198,7 @@ export default function EntryPage({ products = [] }) {
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
 
+  // 🌟 Bug 4 Fix: Dropdown Crash ကာကွယ်ရန် products.length စစ်ဆေးခြင်း
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
@@ -185,6 +230,14 @@ export default function EntryPage({ products = [] }) {
   // ---------- Hold Invoice (Save Draft) ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
+    
+    // 🌟 Bug 5 Fix: Qty အလွတ် ဖြစ်နေလျှင် Hold ခွင့်မပြုပါ
+    const hasInvalidQty = cart.some(x => x.quantity === '' || Number(x.quantity) <= 0);
+    if (hasInvalidQty) {
+      alert("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။");
+      return;
+    }
+
     const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
     if (name === null) return;
 
@@ -192,6 +245,7 @@ export default function EntryPage({ products = [] }) {
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
       const sanitizedCart = cart.map(item => ({
+        id: item.id,
         productId: item.productId || null,
         productSnapshot: products.find(p => p.id === item.productId) || null,
         unitName: item.unitName || '',
@@ -236,7 +290,7 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ---------- Restore Draft ----------
+  // ---------- Restore Draft (Bug 2 Fix) ----------
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
 
@@ -251,23 +305,22 @@ export default function EntryPage({ products = [] }) {
     setPaymentMethod(draft.paymentMethod || 'Cash');
     setPaidAmount(draft.paidAmount || '');
 
+    // 🌟 Bug 2 Fix: ပြင်ဆင်ထားသည့် စျေးနှုန်းများနှင့် row discount များ အတိအကျ ပေါ်လာစေရန် setCart ကို တိုက်ရိုက်သုံးသည်
     if (draft.cart && Array.isArray(draft.cart)) {
-      draft.cart.forEach(item => {
-        const prod = item.productSnapshot || products.find(p => p.id === item.productId);
-        if (prod) {
-          const unit = prod.packageUnits?.find(u => u.name === item.unitName) ||
-                       prod.packageUnits?.find(u => u.multiplier === item.multiplier) ||
-                       prod.packageUnits?.[0];
-          if (unit) {
-            addToCart(prod, unit, item.priceType, item.quantity);
-          }
-        }
-      });
+      setCart(draft.cart.map(item => ({
+        ...item,
+        id: item.id || Date.now() + Math.random()
+      })));
     }
 
-    await deleteDoc(doc(db, 'pos_drafts', draft.id));
-    fetchDrafts();
-    setShowDrafts(false);
+    try {
+      await deleteDoc(doc(db, 'pos_drafts', draft.id));
+      fetchDrafts();
+      setShowDrafts(false);
+      alert("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const deleteDraft = async (id) => {
@@ -278,7 +331,11 @@ export default function EntryPage({ products = [] }) {
   };
 
   const submitExpense = async () => {
-    if (!expenseTitle || !expenseAmt || !tenantId || loading) return;
+    // 🌟 Bug 9 Fix: Double Click ကာကွယ်ခြင်း Lock စစ်ဆေးချက်
+    if (submitLock.current) return;
+    if (!expenseTitle || !expenseAmt || !tenantId) return;
+
+    submitLock.current = true;
     setLoading(true);
     try {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
@@ -305,15 +362,19 @@ export default function EntryPage({ products = [] }) {
       setExpenseTitle(''); setExpenseAmt('');
       alert("Expense Saved!");
     } catch (err) { console.error(err); alert("Error saving expense"); }
+    
+    submitLock.current = false;
     setLoading(false);
   };
 
   const submitTransaction = async () => {
-    if (loading) return;
+    // 🌟 Bug 9 Fix: Double Click တားဆီးရန် ထိပ်ဆုံးမှ Lock ချခြင်း
+    if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
 
-    const invalidItem = cart.find(item => Number(item.quantity) <= 0);
-    if (invalidItem) return alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။`);
+    // 🌟 Bug 5 Fix: Qty အလွတ် ဖြစ်နေလျှင် သိမ်းခွင့်မပြုပါ
+    const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
+    if (invalidItem) return alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`);
 
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -340,6 +401,7 @@ export default function EntryPage({ products = [] }) {
       }
     }
 
+    submitLock.current = true;
     setLoading(true);
     try {
       const batch = writeBatch(db);
@@ -414,22 +476,21 @@ export default function EntryPage({ products = [] }) {
 
       fetchPersons();
     } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
+    
+    submitLock.current = false;
     setLoading(false);
   };
 
   const doPrint = () => { window.print(); };
 
-  // Barcode scanned handler (same as before)
+  // 🌟 Bug 6 Fix: Map Lookups အသုံးပြု၍ Barcode အား Instant ရှာဖွေခြင်း
   const handleBarcodeScanned = (text) => {
-    let foundProduct = null; let foundUnit = null;
-    for (const p of products) {
-      const u = p.packageUnits?.find(unit =>
-        unit.barcodes?.retail === text || unit.barcodes?.wholesale === text || unit.barcode === text
-      );
-      if (u) { foundProduct = p; foundUnit = u; break; }
-    }
-    if (foundProduct && foundUnit) {
-      const res = addToCart(foundProduct, foundUnit, 'retail', 1);
+    const cleanText = text.trim().toLowerCase();
+    const match = barcodeMap.get(cleanText);
+
+    if (match) {
+      const { product, unit } = match;
+      const res = addToCart(product, unit, 'retail', 1);
       if (!res.success) alert(res.message);
       else {
         try {
@@ -441,7 +502,9 @@ export default function EntryPage({ products = [] }) {
           osc.start(); osc.stop(ctx.currentTime + 0.3);
         } catch (e) {}
       }
-    } else alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
+    } else {
+      alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
+    }
   };
 
   return (
@@ -497,7 +560,8 @@ export default function EntryPage({ products = [] }) {
               <div key={d.id} className="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-white/5">
                 <div>
                   <p className="text-sm font-bold text-white">{d.draftName}</p>
-                  <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate().toLocaleString()}</p>
+                  {/* 🌟 Bug 8 Fix: Conditional Accessing သုံး၍ Server Timestamp render crash ကာကွယ်ခြင်း */}
+                  <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}</p>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => restoreDraft(d)} className="px-3 py-1 bg-cyan-600 rounded text-xs font-bold text-white">Restore</button>

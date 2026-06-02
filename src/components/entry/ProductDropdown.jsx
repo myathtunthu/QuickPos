@@ -2,15 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Package } from 'lucide-react';
 
-// React.memo ကိုသုံးထားသဖြင့် မလိုအပ်ဘဲ Re-render မဖြစ်တော့ပါ။
-const ProductDropdown = React.memo(({ products, onSelect, isOpen }) => {
+const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // 🌟 products အရေအတွက် ပြောင်းလဲသွားပါက သို့မဟုတ် Dropdown အသစ်ပွင့်လာပါက Index အား ၀ သို့ အလိုအလျောက် ပြန်ရွှေ့ပေးခြင်း
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [products.length, isOpen]);
 
   // Keyboard Control အတွက်
   useEffect(() => {
-    if (!isOpen) return;
+    // 🌟 Bug 4 Fix: Dropdown မပွင့်ထားလျှင် သို့မဟုတ် product မရှိလျှင် event listener အား အလုပ်မလုပ်စေဘဲ ကြိုတင်တားဆီးခြင်း
+    if (!isOpen || !products || products.length === 0) return;
 
     const handleKeyDown = (e) => {
+      // Listener ထဲတွင်လည်း ဒုတိယအဆင့်အဖြစ် array length အား သေချာစွာ ထပ်မံစစ်ဆေးခြင်း (NaN Crash ဘေးမှ ရာနှုန်းပြည့် ကာကွယ်ရန်)
+      if (!products.length) return;
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIndex((prev) => (prev + 1) % products.length);
@@ -29,11 +37,13 @@ const ProductDropdown = React.memo(({ products, onSelect, isOpen }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, products, selectedIndex, onSelect]);
 
-  if (!isOpen || products.length === 0) return null;
+  if (!isOpen || !products || products.length === 0) return null;
 
   // Render လုပ်မည့် Row တစ်ကြောင်းချင်းစီ
   const Row = ({ index, style }) => {
     const prod = products[index];
+    if (!prod) return null; // Defensive check for safety
+    
     const isSelected = index === selectedIndex;
     const defaultPrice = prod.packageUnits?.[0]?.prices?.retail || 0;
 
@@ -51,8 +61,8 @@ const ProductDropdown = React.memo(({ products, onSelect, isOpen }) => {
             <Package size={12} className="text-cyan-400"/>
           </div>
           <div className="truncate">
-            <p className="text-[11px] font-bold text-white truncate">{prod.name}</p>
-            <p className="text-[9px] text-slate-500">Stock: {prod.stockBase} {prod.baseUnit}</p>
+            <p className="text-[11px] font-bold text-white truncate">{prod.name || 'Unknown Item'}</p>
+            <p className="text-[9px] text-slate-500">Stock: {prod.stockBase || 0} {prod.baseUnit || ''}</p>
           </div>
         </div>
         <div className="text-right flex-shrink-0">

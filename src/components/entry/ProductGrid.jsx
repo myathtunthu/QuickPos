@@ -2,7 +2,8 @@ import React from 'react';
 import { Package } from 'lucide-react';
 
 const ProductGrid = React.memo(({ products, onSelect }) => {
-  if (products.length === 0) {
+  // Products array မရှိခြင်း သို့မဟုတ် အလွတ်ဖြစ်နေခြင်းအား စစ်ဆေးသည်
+  if (!products || products.length === 0) {
     return (
       <div className="text-center text-slate-500 text-xs py-6 border border-dashed border-white/5 rounded-xl">
         No products found
@@ -12,8 +13,8 @@ const ProductGrid = React.memo(({ products, onSelect }) => {
 
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-[30vh] overflow-y-auto custom-scrollbar pr-1">
-      {/* Performance အတွက် အခု ၃၀ ပဲ အရင်ပြထားပါမယ် */}
-      {products.slice(0, 30).map(prod => {
+      {/* 🌟 Bug 3 Fix: ပစ္စည်းများစွာကို ရှာဖွေရလွယ်ကူစေရန် ပြသမှုကန့်သတ်ချက်အား ၃၀ မှ ၁၀၀ ထိ တိုးမြှင့်ထားပါသည် */}
+      {products.slice(0, 100).map(prod => {
         const defaultPrice = prod.packageUnits?.[0]?.prices?.retail || 0;
         
         return (

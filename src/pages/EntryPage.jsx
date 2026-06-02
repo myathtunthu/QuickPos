@@ -18,58 +18,43 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Continuous Scanning & HD Resolution Fix) ----------
+// ---------- Scanner Modal ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
   const streamRef = useRef(null);
   
-  // 🌟 ပစ္စည်းတစ်ခုတည်းကို ကင်မရာရှေ့ငြိမ်နေလို့ စက္ကန့်ပိုင်းအတွင်း အကန့်အသတ်မရှိ Auto ပွားဝင်မသွားစေရန် တားဆီးပေးသည့် Cooldown Ref
   const lastScannedRef = useRef({ code: '', time: 0 });
 
   useEffect(() => {
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E,
-      BarcodeFormat.ITF,
-      BarcodeFormat.QR_CODE
+      BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF, BarcodeFormat.QR_CODE
     ]);
 
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
     const constraints = {
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
     };
 
     navigator.mediaDevices.getUserMedia(constraints)
       .then((stream) => {
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream;
         
-        // 🌟 decodeFromConstraints ကို အသုံးပြု၍ မော်ဒယ်မပိတ်ဘဲ တောက်လျှောက် ဖတ်နိုင်အောင် ပြင်ဆင်ခြင်း
         codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
           if (result) {
             const now = Date.now();
-            // ပစ္စည်းတစ်ခုတည်းကို ၁.၅ စက္ကန့်အတွင်း ဆင်တူထပ်ဖတ်မိပါက ပယ်ဖျက်သည်
-            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) {
-              return; 
-            }
+            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return; 
             
             lastScannedRef.current = { code: result.text, time: now };
-            onScan(result.text); // 🌟 EntryPage သို့ ဒေတာလှမ်းပို့ပြီး တန်းပေါင်းထည့်သည် (အလိုအလျောက် ပိတ်မသွားပါ)
+            onScan(result.text);
           }
         });
       })
@@ -79,12 +64,8 @@ const ScannerModal = ({ onClose, onScan }) => {
       });
 
     return () => {
-      if (readerRef.current) {
-        readerRef.current.reset();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      if (readerRef.current) readerRef.current.reset();
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
     };
   }, [onScan]);
 
@@ -112,10 +93,14 @@ const ScannerModal = ({ onClose, onScan }) => {
 export default function EntryPage({ products = [] }) {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;
-  const shopName = profile?.shopName || 'QuickPOS';
-  const shopPhone = profile?.phone || '09-123456789';
-  const shopAddress = profile?.address || 'No.123, Yangon';
-  const cashierName = profile?.name || profile?.email?.split('@')[0] || 'Admin';
+  const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
+
+  // 🌟 Shop Settings State (pos_settings မှ တိုက်ရိုက်ဆွဲယူရန်)
+  const [shopSettings, setShopSettings] = useState({
+    shopName: profile?.shopName || 'QuickPOS',
+    phone: '',
+    address: ''
+  });
 
   const todayISO = new Date().toISOString().split('T')[0];
   const [entryDate, setEntryDate] = useState(todayISO);
@@ -158,7 +143,6 @@ export default function EntryPage({ products = [] }) {
   const barcodeMap = useMemo(() => {
     const map = new Map();
     if (!products || !Array.isArray(products)) return map;
-    
     products.forEach(p => {
       if (p.barcode) map.set(p.barcode.trim().toLowerCase(), { product: p, unit: p.packageUnits?.[0] });
       p.packageUnits?.forEach(u => {
@@ -170,43 +154,53 @@ export default function EntryPage({ products = [] }) {
     return map;
   }, [products]);
 
-  const fetchPersons = async () => {
+  // 🌟 Shop Settings & Persons & Drafts အားလုံးဆွဲယူခြင်း
+  useEffect(() => {
     if (!tenantId) return;
-    try {
-      const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
-      setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
-      setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) { console.error(err); }
-  };
+
+    const fetchAllData = async () => {
+      try {
+        // 1. Settings ဆွဲယူခြင်း (ဖုန်းနံပါတ်နှင့် လိပ်စာ အတိအကျရရန်)
+        const settingsSnap = await getDoc(doc(db, 'pos_settings', tenantId));
+        if (settingsSnap.exists()) {
+          const sData = settingsSnap.data();
+          setShopSettings({
+            shopName: sData.shopName || profile?.shopName || 'QuickPOS',
+            phone: sData.phone || '',
+            address: sData.address || ''
+          });
+        }
+
+        // 2. Customers & Suppliers
+        const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+        setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
+        setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      } catch (err) { console.error(err); }
+    };
+
+    fetchAllData();
+    fetchDrafts();
+  }, [tenantId, profile]);
 
   const fetchDrafts = async () => {
     if (!tenantId) return;
     try {
-      const q = query(
-        collection(db, 'pos_drafts'),
-        where('tenantId', '==', tenantId),
-        orderBy('createdAt', 'desc'),
-        limit(20)
-      );
+      const q = query(collection(db, 'pos_drafts'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(20));
       const snap = await getDocs(q);
       setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) { console.error(err); }
   };
 
-  useEffect(() => { fetchPersons(); fetchDrafts(); }, [tenantId]);
-
   useEffect(() => {
-    setPersonSearch('');
-    setSelectedPerson(null);
-    setNewPersonPhone('');
-    setNewPersonAddress('');
+    setPersonSearch(''); setSelectedPerson(null);
+    setNewPersonPhone(''); setNewPersonAddress('');
   }, [entryTab]);
 
   const personList = entryTab === 'Sale' ? customers : suppliers;
   const filteredPersons = personList.filter(p =>
-    p.name.toLowerCase().includes(personSearch.toLowerCase()) ||
-    p.phone?.includes(personSearch)
+    p.name.toLowerCase().includes(personSearch.toLowerCase()) || p.phone?.includes(personSearch)
   );
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
@@ -235,14 +229,12 @@ export default function EntryPage({ products = [] }) {
 
   const handleTabChange = (tab) => {
     if (cart.length > 0 && !window.confirm("Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?")) return;
-    setEntryTab(tab);
-    clearCart();
+    setEntryTab(tab); clearCart();
   };
 
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
-    const hasInvalidQty = cart.some(x => x.quantity === '' || Number(x.quantity) <= 0);
-    if (hasInvalidQty) {
+    if (cart.some(x => x.quantity === '' || Number(x.quantity) <= 0)) {
       alert("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။");
       return;
     }
@@ -254,84 +246,40 @@ export default function EntryPage({ products = [] }) {
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
       const sanitizedCart = cart.map(item => ({
-        id: item.id,
-        productId: item.productId || null,
-        productSnapshot: products.find(p => p.id === item.productId) || null,
-        unitName: item.unitName || '',
-        multiplier: Number(item.multiplier) || 1,
-        priceType: item.priceType || 'retail',
-        unitPrice: Number(item.unitPrice) || 0,
-        quantity: Number(item.quantity) || 1,
-        baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
-        itemDiscountAmt: Number(item.itemDiscountAmt) || 0,
-        notes: item.notes || ''
+        id: item.id, productId: item.productId || null, productSnapshot: products.find(p => p.id === item.productId) || null,
+        unitName: item.unitName || '', multiplier: Number(item.multiplier) || 1, priceType: item.priceType || 'retail',
+        unitPrice: Number(item.unitPrice) || 0, quantity: Number(item.quantity) || 1, baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
+        itemDiscountAmt: Number(item.itemDiscountAmt) || 0, notes: item.notes || ''
       }));
 
       await setDoc(draftRef, {
-        tenantId: tenantId || '',
-        draftName: name || 'No Name',
-        type: entryTab || 'Sale',
-        cart: sanitizedCart,
-        cartTotals: {
-          subtotal: Number(cartTotals.subtotal) || 0,
-          itemDiscounts: Number(cartTotals.itemDiscounts) || 0,
-          globalDisc: Number(cartTotals.globalDisc) || 0,
-          total: Number(cartTotals.total) || 0
-        },
-        personSearch: personSearch || '',
-        selectedPerson: selectedPerson || null,
-        newPersonPhone: newPersonPhone || '',
-        newPersonAddress: newPersonAddress || '',
-        globalDiscountAmt: globalDiscountAmt || '',
-        globalDiscountType: globalDiscountType || '%',
-        paymentMethod: paymentMethod || 'Cash',
-        paidAmount: paidAmount || '',
-        createdAt: serverTimestamp()
+        tenantId: tenantId || '', draftName: name || 'No Name', type: entryTab || 'Sale', cart: sanitizedCart,
+        cartTotals: { subtotal: Number(cartTotals.subtotal) || 0, itemDiscounts: Number(cartTotals.itemDiscounts) || 0, globalDisc: Number(cartTotals.globalDisc) || 0, total: Number(cartTotals.total) || 0 },
+        personSearch: personSearch || '', selectedPerson: selectedPerson || null, newPersonPhone: newPersonPhone || '', newPersonAddress: newPersonAddress || '',
+        globalDiscountAmt: globalDiscountAmt || '', globalDiscountType: globalDiscountType || '%', paymentMethod: paymentMethod || 'Cash', paidAmount: paidAmount || '', createdAt: serverTimestamp()
       });
       alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။");
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
-      setNewPersonPhone(''); setNewPersonAddress('');
-      fetchDrafts();
-    } catch (err) {
-      console.error(err);
-      alert("Error saving draft: " + err.message);
-    }
+      setNewPersonPhone(''); setNewPersonAddress(''); fetchDrafts();
+    } catch (err) { alert("Error saving draft: " + err.message); }
     setLoading(false);
   };
 
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
-
-    clearCart();
-    setEntryTab(draft.type || 'Sale');
-    setPersonSearch(draft.personSearch || '');
-    setSelectedPerson(draft.selectedPerson || null);
-    setNewPersonPhone(draft.newPersonPhone || '');
-    setNewPersonAddress(draft.newPersonAddress || '');
-    setGlobalDiscountAmt(draft.globalDiscountAmt || '');
-    setGlobalDiscountType(draft.globalDiscountType || '%');
-    setPaymentMethod(draft.paymentMethod || 'Cash');
-    setPaidAmount(draft.paidAmount || '');
-
-    if (draft.cart && Array.isArray(draft.cart)) {
-      setCart(draft.cart.map(item => ({
-        ...item,
-        id: item.id || Date.now() + Math.random()
-      })));
-    }
-
+    clearCart(); setEntryTab(draft.type || 'Sale'); setPersonSearch(draft.personSearch || ''); setSelectedPerson(draft.selectedPerson || null);
+    setNewPersonPhone(draft.newPersonPhone || ''); setNewPersonAddress(draft.newPersonAddress || ''); setGlobalDiscountAmt(draft.globalDiscountAmt || '');
+    setGlobalDiscountType(draft.globalDiscountType || '%'); setPaymentMethod(draft.paymentMethod || 'Cash'); setPaidAmount(draft.paidAmount || '');
+    if (draft.cart && Array.isArray(draft.cart)) setCart(draft.cart.map(item => ({ ...item, id: item.id || Date.now() + Math.random() })));
     try {
       await deleteDoc(doc(db, 'pos_drafts', draft.id));
-      fetchDrafts();
-      setShowDrafts(false);
-      alert("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။");
+      fetchDrafts(); setShowDrafts(false); alert("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။");
     } catch (err) { console.error(err); }
   };
 
   const deleteDraft = async (id) => {
     if (window.confirm('Draft ကိုဖျက်မှာ သေချာပါသလား?')) {
-      await deleteDoc(doc(db, 'pos_drafts', id));
-      fetchDrafts();
+      await deleteDoc(doc(db, 'pos_drafts', id)); fetchDrafts();
     }
   };
 
@@ -339,8 +287,7 @@ export default function EntryPage({ products = [] }) {
     if (submitLock.current) return;
     if (!expenseTitle || !expenseAmt || !tenantId) return;
 
-    submitLock.current = true;
-    setLoading(true);
+    submitLock.current = true; setLoading(true);
     try {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
@@ -351,24 +298,18 @@ export default function EntryPage({ products = [] }) {
       const ref = doc(collection(db, 'pos_records'));
 
       batch.set(ref, {
-        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0,
-        date: entryDate,
+        type: 'Expense', tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
         cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
       });
 
-      if (counterSnap.exists()) {
-        batch.update(counterRef, { expenseCount: increment(1) });
-      } else {
-        batch.set(counterRef, { expenseCount: 1 });
-      }
+      if (counterSnap.exists()) batch.update(counterRef, { expenseCount: increment(1) });
+      else batch.set(counterRef, { expenseCount: 1 });
+      
       await batch.commit();
-      setExpenseTitle(''); setExpenseAmt('');
-      alert("Expense Saved!");
-    } catch (err) { console.error(err); alert("Error saving expense"); }
-    
-    submitLock.current = false;
-    setLoading(false);
+      setExpenseTitle(''); setExpenseAmt(''); alert("Expense Saved!");
+    } catch (err) { alert("Error saving expense"); }
+    submitLock.current = false; setLoading(false);
   };
 
   const submitTransaction = async () => {
@@ -384,11 +325,7 @@ export default function EntryPage({ products = [] }) {
     const changeAmount = Math.max(0, paid - total);
 
     let personIdForRecord = selectedPerson?.id || null;
-    let personNameForRecord = selectedPerson?.name || personSearch.trim();
-
-    if (!personNameForRecord) {
-      personNameForRecord = entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier';
-    }
+    let personNameForRecord = selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
     if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
       alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
@@ -403,8 +340,7 @@ export default function EntryPage({ products = [] }) {
       }
     }
 
-    submitLock.current = true;
-    setLoading(true);
+    submitLock.current = true; setLoading(true);
     try {
       const batch = writeBatch(db);
 
@@ -413,13 +349,8 @@ export default function EntryPage({ products = [] }) {
         const newPersonRef = doc(collection(db, collectionName));
         personIdForRecord = newPersonRef.id;
         batch.set(newPersonRef, {
-          tenantId: tenantId,
-          name: personNameForRecord,
-          phone: newPersonPhone.trim(),
-          address: newPersonAddress.trim(),
-          totalDebt: remainingDebt,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          tenantId: tenantId, name: personNameForRecord, phone: newPersonPhone.trim(), address: newPersonAddress.trim(),
+          totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
       } else if (personIdForRecord && remainingDebt > 0) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
@@ -437,21 +368,14 @@ export default function EntryPage({ products = [] }) {
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = {
-        id: ref.id, type: entryTab || 'Sale', tenantId,
-        personName: personNameForRecord,
-        customerId: entryTab === 'Sale' ? personIdForRecord : null,
-        supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
+        id: ref.id, type: entryTab || 'Sale', tenantId, personName: personNameForRecord, customerId: entryTab === 'Sale' ? personIdForRecord : null, supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
         cashier: cashierName, time: currentTime, voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({
-          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
-          unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
-          baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
+          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail', baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
         })),
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
-        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
-        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
-        date: entryDate || todayISO, createdAt: serverTimestamp()
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
+        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount, date: entryDate || todayISO, createdAt: serverTimestamp()
       };
       batch.set(ref, record);
 
@@ -463,24 +387,22 @@ export default function EntryPage({ products = [] }) {
         batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
       });
 
-      if (counterSnap.exists()) {
-        batch.update(counterRef, { [countField]: increment(1) });
-      } else {
-        batch.set(counterRef, { [countField]: 1 });
-      }
+      if (counterSnap.exists()) batch.update(counterRef, { [countField]: increment(1) });
+      else batch.set(counterRef, { [countField]: 1 });
 
       await batch.commit();
 
       setReceiptModal({ show: true, record });
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
-      setNewPersonPhone(''); setNewPersonAddress('');
-      setPaidAmount(''); setPaymentMethod('Cash');
-
-      fetchPersons();
+      setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
+      
+      // Data အသစ်များကို Background တွင် ပြန်လည်ဆွဲယူမည်
+      const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+      setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
     } catch (err) { console.error("Firebase Save Error: ", err); alert("Error saving transaction!"); }
     
-    submitLock.current = false;
-    setLoading(false);
+    submitLock.current = false; setLoading(false);
   };
 
   const doPrint = () => { window.print(); };
@@ -519,12 +441,7 @@ export default function EntryPage({ products = [] }) {
         }
       `}</style>
 
-      {showScanner && (
-        <ScannerModal
-          onClose={() => setShowScanner(false)}
-          onScan={handleBarcodeScanned}
-        />
-      )}
+      {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
 
       <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
         <div className="flex items-center justify-between">
@@ -545,16 +462,13 @@ export default function EntryPage({ products = [] }) {
         </div>
 
         <div className="flex justify-end">
-          <button
-            onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }}
-            className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20"
-          >
+          <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
             <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
           </button>
         </div>
 
         {showDrafts && (
-          <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto">
+          <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
             <h3 className="text-xs font-bold text-indigo-400 mb-2">Saved Hold Invoices</h3>
             {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
             {drafts.map(d => (
@@ -595,15 +509,7 @@ export default function EntryPage({ products = [] }) {
                 {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
                   <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar z-50">
                     {filteredPersons.map(p => (
-                      <div
-                        key={p.id}
-                        onMouseDown={() => {
-                          setSelectedPerson(p);
-                          setPersonSearch(p.name);
-                          setShowPersonDropdown(false);
-                          setNewPersonPhone('');
-                          setNewPersonAddress('');
-                        }}
+                      <div key={p.id} onMouseDown={() => { setSelectedPerson(p); setPersonSearch(p.name); setShowPersonDropdown(false); setNewPersonPhone(''); setNewPersonAddress(''); }}
                         className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
                       >
                         <p className="text-sm font-bold text-white">{p.name}</p>
@@ -655,7 +561,6 @@ export default function EntryPage({ products = [] }) {
                   {cartTotals.itemDiscounts > 0 && (
                     <div className="flex justify-between text-amber-400"><span>Item Discounts</span><span>-{Number(cartTotals.itemDiscounts).toLocaleString()} Ks</span></div>
                   )}
-
                   {entryTab === 'Sale' && (
                     <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
                       <span className="flex items-center gap-1">
@@ -690,13 +595,14 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
 
+        {/* 🌟 View Receipt Modal (Using fetched shopSettings) */}
         {receiptModal.show && receiptModal.record && (
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
               <div className="text-center mb-4">
-                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopName}</h2>
-                <p className="text-xs text-gray-500 mt-1">{shopAddress}</p>
-                <p className="text-xs text-gray-500">Tel: {shopPhone}</p>
+                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopSettings.shopName}</h2>
+                {shopSettings.address && <p className="text-xs text-gray-500 mt-1">{shopSettings.address}</p>}
+                {shopSettings.phone && <p className="text-xs text-gray-500">Tel: {shopSettings.phone}</p>}
               </div>
               <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
                 <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
@@ -777,12 +683,13 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
+      {/* 🌟 ACTUAL PRINT AREA (Hidden in UI, only visible when printing) */}
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">
-                 <h2 className="text-[18px] font-bold uppercase m-0">{shopName}</h2>
-                 <p className="m-0 mt-1">{shopAddress}</p>
-                 <p className="m-0">Tel: {shopPhone}</p>
+                 <h2 className="text-[18px] font-bold uppercase m-0">{shopSettings.shopName}</h2>
+                 {shopSettings.address && <p className="m-0 mt-1">{shopSettings.address}</p>}
+                 {shopSettings.phone && <p className="m-0">Tel: {shopSettings.phone}</p>}
              </div>
              <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
                  <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.voucherNo}</span></div>

@@ -18,14 +18,17 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (High-Resolution HD Fix) ----------
+// ---------- Scanner Modal (Continuous Scanning & HD Resolution Fix) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
+  const streamRef = useRef(null);
+  
+  // 🌟 ပစ္စည်းတစ်ခုတည်းကို ကင်မရာရှေ့ငြိမ်နေလို့ စက္ကန့်ပိုင်းအတွင်း အကန့်အသတ်မရှိ Auto ပွားဝင်မသွားစေရန် တားဆီးပေးသည့် Cooldown Ref
+  const lastScannedRef = useRef({ code: '', time: 0 });
 
   useEffect(() => {
-    // Barcode formats စုံလင်စွာ ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.CODE_128,
@@ -41,7 +44,6 @@ const ScannerModal = ({ onClose, onScan }) => {
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    // 🌟 ဖြေရှင်းချက် - ကင်မရာလိုင်းစိပ်သမျှ အပြတ်ဖတ်နိုင်ရန် HD Resolution နှင့် အနောက်ကင်မရာကို Force လုပ်ခြင်း
     const constraints = {
       video: {
         facingMode: { ideal: "environment" },
@@ -50,31 +52,47 @@ const ScannerModal = ({ onClose, onScan }) => {
       }
     };
 
-    codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
-      if (result) {
-        onScan(result.text);
-        codeReader.reset();
-        onClose();
-      }
-    })
-    .catch((err) => {
-      console.error('Camera error:', err);
-      setCameraError(true);
-    });
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        
+        // 🌟 decodeFromConstraints ကို အသုံးပြု၍ မော်ဒယ်မပိတ်ဘဲ တောက်လျှောက် ဖတ်နိုင်အောင် ပြင်ဆင်ခြင်း
+        codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+          if (result) {
+            const now = Date.now();
+            // ပစ္စည်းတစ်ခုတည်းကို ၁.၅ စက္ကန့်အတွင်း ဆင်တူထပ်ဖတ်မိပါက ပယ်ဖျက်သည်
+            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) {
+              return; 
+            }
+            
+            lastScannedRef.current = { code: result.text, time: now };
+            onScan(result.text); // 🌟 EntryPage သို့ ဒေတာလှမ်းပို့ပြီး တန်းပေါင်းထည့်သည် (အလိုအလျောက် ပိတ်မသွားပါ)
+          }
+        });
+      })
+      .catch((err) => {
+        console.error('Camera error:', err);
+        setCameraError(true);
+      });
 
-    // Unmount ဖြစ်ချိန်တွင် ကင်မရာ Hardware Stream အား အလိုအလျောက် ပိတ်သိမ်းခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
       }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [onScan, onClose]);
+  }, [onScan]);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
         <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
-          <h3 className="font-black text-gray-800">Scan Barcode</h3>
+          <h3 className="font-black text-gray-800">Continuous Scanner Active</h3>
           <button type="button" onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
@@ -82,8 +100,8 @@ const ScannerModal = ({ onClose, onScan }) => {
         ) : (
           <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
         )}
-        <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
-          ကင်မရာကို Barcode သို့ ချိန်ပါ
+        <div className="p-4 bg-gray-100 text-center text-xs text-green-600 font-black animate-pulse">
+          စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများအား တောက်လျှောက် ဖတ်နိုင်ပါသည်
         </div>
       </div>
     </div>
@@ -128,7 +146,6 @@ export default function EntryPage({ products = [] }) {
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
 
-  // 🌟 Bug 9 Fix: Double Click ကာကွယ်ရန် Submit Lock Ref ဆောက်ခြင်း
   const submitLock = useRef(false);
 
   const {
@@ -138,7 +155,6 @@ export default function EntryPage({ products = [] }) {
     setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType
   } = useCart(products, entryTab);
 
-  // 🌟 Bug 6 Fix: Barcode search နှုန်း အလွန်မြန်ဆန်စေရန် Map Lookup ဆောက်ခြင်း
   const barcodeMap = useMemo(() => {
     const map = new Map();
     if (!products || !Array.isArray(products)) return map;
@@ -154,7 +170,6 @@ export default function EntryPage({ products = [] }) {
     return map;
   }, [products]);
 
-  // Fetch customers/suppliers
   const fetchPersons = async () => {
     if (!tenantId) return;
     try {
@@ -196,7 +211,6 @@ export default function EntryPage({ products = [] }) {
 
   const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
 
-  // 🌟 Bug 4 Fix: Dropdown Crash ကာကွယ်ရန် products.length စစ်ဆေးခြင်း
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
@@ -225,11 +239,8 @@ export default function EntryPage({ products = [] }) {
     clearCart();
   };
 
-  // ---------- Hold Invoice (Save Draft) ----------
   const handleHoldInvoice = async () => {
     if (cart.length === 0) return;
-    
-    // 🌟 Bug 5 Fix: Qty အလွတ် ဖြစ်နေလျှင် Hold ခွင့်မပြုပါ
     const hasInvalidQty = cart.some(x => x.quantity === '' || Number(x.quantity) <= 0);
     if (hasInvalidQty) {
       alert("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။");
@@ -288,7 +299,6 @@ export default function EntryPage({ products = [] }) {
     setLoading(false);
   };
 
-  // ---------- Restore Draft (Bug 2 Fix) ----------
   const restoreDraft = async (draft) => {
     if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
 
@@ -303,7 +313,6 @@ export default function EntryPage({ products = [] }) {
     setPaymentMethod(draft.paymentMethod || 'Cash');
     setPaidAmount(draft.paidAmount || '');
 
-    // 🌟 Bug 2 Fix: ပြင်ဆင်ထားသည့် စျေးနှုန်းများနှင့် row discount များ အတိအကျ ပေါ်လာစေရန် setCart ကို တိုက်ရိုက်သုံးသည်
     if (draft.cart && Array.isArray(draft.cart)) {
       setCart(draft.cart.map(item => ({
         ...item,
@@ -316,9 +325,7 @@ export default function EntryPage({ products = [] }) {
       fetchDrafts();
       setShowDrafts(false);
       alert("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။");
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const deleteDraft = async (id) => {
@@ -329,7 +336,6 @@ export default function EntryPage({ products = [] }) {
   };
 
   const submitExpense = async () => {
-    // 🌟 Bug 9 Fix: Double Click ကာကွယ်ခြင်း Lock စစ်ဆေးချက်
     if (submitLock.current) return;
     if (!expenseTitle || !expenseAmt || !tenantId) return;
 
@@ -366,11 +372,9 @@ export default function EntryPage({ products = [] }) {
   };
 
   const submitTransaction = async () => {
-    // 🌟 Bug 9 Fix: Double Click တားဆီးရန် ထိပ်ဆုံးမှ Lock ချခြင်း
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
 
-    // 🌟 Bug 5 Fix: Qty အလွတ် ဖြစ်နေလျှင် သိမ်းခွင့်မပြုပါ
     const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
     if (invalidItem) return alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`);
 
@@ -481,7 +485,6 @@ export default function EntryPage({ products = [] }) {
 
   const doPrint = () => { window.print(); };
 
-  // 🌟 Bug 6 Fix: Map Lookups အသုံးပြု၍ Barcode အား Instant ရှာဖွေခြင်း
   const handleBarcodeScanned = (text) => {
     const cleanText = text.trim().toLowerCase();
     const match = barcodeMap.get(cleanText);
@@ -558,7 +561,6 @@ export default function EntryPage({ products = [] }) {
               <div key={d.id} className="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-white/5">
                 <div>
                   <p className="text-sm font-bold text-white">{d.draftName}</p>
-                  {/* 🌟 Bug 8 Fix: Conditional Accessing သုံး၍ Server Timestamp render crash ကာကွယ်ခြင်း */}
                   <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}</p>
                 </div>
                 <div className="flex gap-1">

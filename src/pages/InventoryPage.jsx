@@ -1,37 +1,61 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../firebase/config';
-import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
+import useDebounce from '../hooks/useDebounce';
 
-// ---------- Scanner Modal (ZXing) ----------
+// ---------- Scanner Modal (ZXing Refactored - Bug 4 & 11 Fixes) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
-    const codeReader = new BrowserMultiFormatReader();
+    // 🌟 Bug 4 Fix: Barcode formats ပေါင်းစုံအား တိကျမြန်ဆန်စွာ ဖတ်နိုင်ရန် Hints သတ်မှတ်ခြင်း
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF,
+      BarcodeFormat.QR_CODE
+    ]);
+
+    const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    codeReader
-      .decodeFromVideoDevice(null, videoRef.current, (result, err) => {
-        if (result) {
-          onScan(result.text);
-          codeReader.reset();
-          onClose();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
         }
-        // err is ignored (no barcode in frame)
+        codeReader.decodeFromVideoDevice(null, videoRef.current, (result) => {
+          if (result) {
+            onScan(result.text);
+            codeReader.reset();
+            onClose();
+          }
+        });
       })
       .catch((err) => {
         console.error('Camera error:', err);
         setCameraError(true);
       });
 
+    // 🌟 Bug 11 Fix: Video tracks များအားလုံးကို ပိတ်သိမ်း၍ Memory Leak ကာကွယ်ခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [onScan, onClose]);
@@ -41,12 +65,12 @@ const ScannerModal = ({ onClose, onScan }) => {
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
         <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
           <h3 className="font-black text-gray-800">Scan Barcode</h3>
-          <button onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+          <button type="button" onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
-          <div className="p-6 text-center text-red-500">Camera access denied or not available.</div>
+          <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
         ) : (
-          <video ref={videoRef} className="w-full h-auto min-h-[250px]" />
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
         )}
         <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">
           ကင်မရာကို Barcode သို့ ချိန်ပါ
@@ -59,12 +83,22 @@ const ScannerModal = ({ onClose, onScan }) => {
 // ---------- Inventory Page ----------
 export default function InventoryPage({ products = [] }) {
   const { profile } = useAuth();
+  const tenantId = profile?.tenantId;
+
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebounce(searchTerm, 300); // Search အတွက် performance ပိုကောင်းအောင်လုပ်ခြင်း
+
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [showScanner, setShowScanner] = useState(false);
+  
+  // 🌟 Bug 1 Fix: နှိပ်လိုက်သော သက်ဆိုင်ရာ Package Row Unit တစ်ခုတည်းကိုသာ သတ်မှတ်ရန် Index သုံးခြင်း
+  const [activeScanIdx, setActiveScanIdx] = useState(null); 
+  
   const [expandedRows, setExpandedRows] = useState({});
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+
+  // 🌟 Bug 2 Fix: Double Click ကာကွယ်ရန် Save Transaction Lock တည်ဆောက်ခြင်း
+  const submitLock = useRef(false);
 
   const [form, setForm] = useState({
     name: '', category: '', baseUnit: 'Bottle',
@@ -75,6 +109,7 @@ export default function InventoryPage({ products = [] }) {
   });
 
   const categories = useMemo(() => {
+    if (!products || !Array.isArray(products)) return ['General'];
     const cats = new Set(products.map(p => p.category).filter(Boolean));
     return ['General', ...Array.from(cats).sort()];
   }, [products]);
@@ -127,9 +162,11 @@ export default function InventoryPage({ products = [] }) {
     setShowNewCategoryInput(false);
   };
 
-  const updatePackageUnit = (index, field, value) => {
+  const updatePackageUnit = useCallback((index, field, value) => {
     setForm(prev => {
       const newUnits = [...prev.packageUnits];
+      if (!newUnits[index]) return prev;
+
       if (field.startsWith('prices.')) {
         const priceKey = field.split('.')[1];
         newUnits[index] = { ...newUnits[index], prices: { ...newUnits[index].prices, [priceKey]: value } };
@@ -141,18 +178,27 @@ export default function InventoryPage({ products = [] }) {
       }
       return { ...prev, packageUnits: newUnits };
     });
-  };
+  }, []);
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!form.name) return alert("Product Name ထည့်ပါ");
-    if (!profile?.tenantId) { alert("No tenant ID found."); return; }
+    if (submitLock.current) return; // Double click block
+    
+    if (!form.name.trim()) return alert("Product Name ထည့်ပါ");
+    if (!tenantId) return alert("No tenant ID found.");
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
-    const incomingBarcodes = validUnits.map(u => u.barcodes.retail).filter(b => b && b.trim() !== '');
+    
+    // 🌟 Bug 5 Fix: Package Unit လုံးဝမပါပဲ ကုန်ပစ္စည်းသိမ်းဆည်းခြင်းမှ ကာကွယ်ခြင်း
+    if (validUnits.length === 0) {
+      alert("အမှား: အနည်းဆုံး ပါကင်ယူနစ် (Package Unit) တစ်ခုထည့်သွင်းပေးရန် လိုအပ်ပါသည်။");
+      return;
+    }
+
+    const incomingBarcodes = validUnits.map(u => u.barcodes?.retail?.trim()).filter(b => b);
     const isDuplicate = products.some(p => {
       if (editing && p.id === editing.id) return false;
-      return p.packageUnits?.some(u => incomingBarcodes.includes(u.barcodes?.retail));
+      return p.packageUnits?.some(u => incomingBarcodes.includes(u.barcodes?.retail?.trim()));
     });
 
     if (isDuplicate) {
@@ -160,12 +206,21 @@ export default function InventoryPage({ products = [] }) {
       return;
     }
 
+    submitLock.current = true;
     const payload = {
-      name: form.name, category: form.category || 'General', baseUnit: form.baseUnit,
+      name: form.name.trim(), 
+      category: form.category || 'General', 
+      baseUnit: form.baseUnit || 'Bottle',
       packageUnits: validUnits.map(u => ({
-        name: u.name, multiplier: Number(u.multiplier) || 1,
-        barcodes: { retail: u.barcodes.retail || '' },
-        prices: { retail: Number(u.prices.retail) || 0, wholesaleA: Number(u.prices.wholesaleA) || 0, wholesaleB: Number(u.prices.wholesaleB) || 0, wholesaleC: Number(u.prices.wholesaleC) || 0 },
+        name: u.name.trim(), 
+        multiplier: Number(u.multiplier) || 1,
+        barcodes: { retail: u.barcodes?.retail?.trim() || '' },
+        prices: { 
+          retail: Number(u.prices?.retail) || 0, 
+          wholesaleA: Number(u.prices?.wholesaleA) || 0, 
+          wholesaleB: Number(u.prices?.wholesaleB) || 0, 
+          wholesaleC: Number(u.prices?.wholesaleC) || 0 
+        },
         costPrice: Number(u.costPrice) || 0,
       })),
       minStock: Number(form.minStock) || 5,
@@ -174,13 +229,25 @@ export default function InventoryPage({ products = [] }) {
     try {
       if (editing) {
         await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true });
-        alert("Product updated!"); setEditing(null);
+        alert("Product updated!"); 
+        setEditing(null);
       } else {
-        await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: profile.tenantId, stock: 0, stockBase: 0, createdAt: Date.now() });
-        alert("Product added!"); setAdding(false);
+        await addDoc(collection(db, 'pos_products'), { 
+          ...payload, 
+          tenantId: tenantId, 
+          stock: 0, 
+          stockBase: 0, 
+          createdAt: Date.now() 
+        });
+        alert("Product added!"); 
+        setAdding(false);
       }
       resetForm();
-    } catch (error) { alert("Error: " + error.message); }
+    } catch (error) { 
+      alert("Error: " + error.message); 
+    } finally {
+      submitLock.current = false;
+    }
   };
 
   const startEdit = (p) => {
@@ -203,11 +270,15 @@ export default function InventoryPage({ products = [] }) {
   const updateStock = async (id, newStock) => {
     const s = Number(newStock);
     if (!isNaN(s)) {
-      await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
+      try {
+        await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
+      } catch (err) { console.error(err); }
     }
   };
 
-  const filteredProducts = products.filter(p => (p.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => (p.name || '').toLowerCase().includes(debouncedSearch.toLowerCase()));
+  }, [products, debouncedSearch]);
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-7xl mx-auto space-y-6 pb-10">
@@ -220,7 +291,7 @@ export default function InventoryPage({ products = [] }) {
             <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm"/>
           </div>
-          <button onClick={()=>{setAdding(!adding);setEditing(null);}} className="bg-cyan-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 text-sm">
+          <button onClick={()=>{setAdding(!adding);setEditing(null); if(!adding) resetForm();}} className="bg-cyan-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 text-sm">
             <Plus size={18}/> Add Item
           </button>
         </div>
@@ -256,12 +327,13 @@ export default function InventoryPage({ products = [] }) {
             <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="Base Unit" className="bg-black border border-cyan-500/15 p-2 rounded-lg text-white outline-none text-sm"/>
           </div>
 
-          {/* Package Units (same as before) */}
+          {/* Package Units */}
           <div className="border-t border-white/5 pt-4">
             <div className="flex justify-between items-center mb-3">
               <p className="text-xs text-slate-500 font-bold uppercase">📦 Package Units</p>
               <button type="button" onClick={addPackageUnit} className="px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1"><Plus size={14}/> Add Unit</button>
             </div>
+            
             {/* Mobile view */}
             <div className="block sm:hidden space-y-3">
               {form.packageUnits.map((unit, idx) => (
@@ -278,8 +350,9 @@ export default function InventoryPage({ products = [] }) {
                     )}
                   </div>
                   <div className="flex gap-1 items-center">
-                    <input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="Barcode" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
-                    <button type="button" onClick={()=>setShowScanner(true)} className="px-2 py-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
+                    <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="Barcode" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                    {/* 🌟 Bug 1 Fix Target Scan Index Row */}
+                    <button type="button" onClick={()=>setActiveScanIdx(idx)} className="px-2 py-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
                   </div>
                   <div className="grid grid-cols-5 gap-1">
                     <div><label className="text-[10px] text-slate-500">Retail</label><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black border border-cyan-500/15 p-1.5 rounded text-cyan-300 text-xs outline-none"/></div>
@@ -315,7 +388,11 @@ export default function InventoryPage({ products = [] }) {
                         <td className="p-1.5"><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Bottle" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/></td>
                         <td className="p-1.5"><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="1" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none text-center"/></td>
                         <td className="p-1.5">
-                          <div className="flex gap-1"><input value={unit.barcodes.retail} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/><button type="button" onClick={()=>setShowScanner(true)} className="px-2 bg-blue-600/20 rounded text-blue-400 flex-shrink-0"><ScanBarcode size={14}/></button></div>
+                          <div className="flex gap-1">
+                            <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
+                            {/* 🌟 Bug 1 Fix Target Scan Index Row */}
+                            <button type="button" onClick={()=>setActiveScanIdx(idx)} className="px-2 bg-blue-600/20 rounded text-blue-400 flex-shrink-0"><ScanBarcode size={14}/></button>
+                          </div>
                         </td>
                         <td className="p-1.5"><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black border border-cyan-500/15 p-2 rounded text-cyan-300 text-xs outline-none"/></td>
                         <td className="p-1.5"><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-full bg-black border border-amber-500/15 p-2 rounded text-amber-300 text-xs outline-none"/></td>
@@ -340,7 +417,7 @@ export default function InventoryPage({ products = [] }) {
         </form>
       )}
 
-      {/* Product Table (expandable) same as before */}
+      {/* Product Table */}
       <div className="bg-[#0d1120] border border-cyan-500/15 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -383,8 +460,8 @@ export default function InventoryPage({ products = [] }) {
                       <td className="p-3 text-right font-mono text-cyan-400">{fmt(retailPrice)} Ks</td>
                       <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-center gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-1.5 bg-indigo-950/50 rounded text-indigo-400"><Edit3 size={14}/></button>
-                          <button onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete?')) deleteDoc(doc(db,'pos_products',p.id)); }} className="p-1.5 bg-rose-950/50 rounded text-rose-400"><Trash2 size={14}/></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-1.5 bg-indigo-950/50 rounded text-indigo-400"><Edit3 size={14}/></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete Product?')) deleteDoc(doc(db,'pos_products',p.id)); }} className="p-1.5 bg-rose-950/50 rounded text-rose-400"><Trash2 size={14}/></button>
                         </div>
                       </td>
                     </tr>
@@ -438,17 +515,14 @@ export default function InventoryPage({ products = [] }) {
         </div>
       </div>
 
-      {/* Scanner Modal */}
-      {showScanner && (
+      {/* Scanner Modal (🌟 Targeted Specific Unit Line Row Index) */}
+      {activeScanIdx !== null && (
         <ScannerModal
-          onClose={() => setShowScanner(false)}
+          onClose={() => setActiveScanIdx(null)}
           onScan={(text) => {
-            setForm(prev => {
-              const newUnits = prev.packageUnits.map(u => ({ ...u, barcodes: { ...u.barcodes, retail: u.barcodes.retail || text } }));
-              return { ...prev, packageUnits: newUnits };
-            });
+            updatePackageUnit(activeScanIdx, 'barcodes.retail', text);
             playBeep('success');
-            setShowScanner(false);
+            setActiveScanIdx(null);
           }}
         />
       )}

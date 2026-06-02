@@ -3,26 +3,21 @@ import { db, auth } from '../firebase/config';
 import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircle, Store } from 'lucide-react'; // 🌟 Added Store icon
+import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircle, Store } from 'lucide-react';
 
 export default function SettingsPage() {
   const { profile, logout } = useAuth();
   
-  // 🌟 Shop Details States
   const [shopName, setShopName] = useState('');
-  const [phone, setPhone] = useState('');     // 🌟 Phone State သစ်
-  const [address, setAddress] = useState(''); // 🌟 Address State သစ်
-  
-  // Telegram States
+  const [phone, setPhone] = useState('');     
+  const [address, setAddress] = useState(''); 
   const [tgToken, setTgToken] = useState('');
   const [tgChatId, setTgChatId] = useState('');
   
-  // Password States
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPwd, setIsChangingPwd] = useState(false);
   
-  // Balance States
   const [openingBalance, setOpeningBalance] = useState('');
   const [closingBalance, setClosingBalance] = useState('');
   
@@ -35,8 +30,8 @@ export default function SettingsPage() {
       if (snap.exists()) {
         const data = snap.data();
         setShopName(data.shopName || '');
-        setPhone(data.phone || '');       // 🌟 ဖုန်းနံပါတ် ဆွဲယူခြင်း
-        setAddress(data.address || '');   // 🌟 လိပ်စာ ဆွဲယူခြင်း
+        setPhone(data.phone || '');       
+        setAddress(data.address || '');   
         setTgToken(data.tgToken || '');
         setTgChatId(data.tgChatId || '');
         setOpeningBalance(data.openingBalance || '');
@@ -48,17 +43,11 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      // 🌟 ဖုန်းနှင့် လိပ်စာကိုပါ Database သို့ သိမ်းဆည်းမည်
       await setDoc(doc(db, 'pos_settings', profile.tenantId), { 
-        shopName, 
-        phone, 
-        address, 
-        tgToken, 
-        tgChatId 
+        shopName, phone, address, tgToken, tgChatId 
       }, { merge: true });
       alert("ဆိုင်အချက်အလက်နှင့် ဆက်တင်များ သိမ်းဆည်းပြီးပါပြီ။");
     } catch (error) { 
-      console.error(error);
       alert("ဆက်တင် သိမ်းဆည်းရာတွင် အမှားဖြစ်နေပါသည်။"); 
     }
   };
@@ -71,7 +60,6 @@ export default function SettingsPage() {
       }, { merge: true });
       alert("လက်ကျန်ငွေစာရင်း သိမ်းဆည်းပြီးပါပြီ။");
     } catch (error) { 
-      console.error(error);
       alert("Error saving balance"); 
     }
   };
@@ -93,11 +81,15 @@ export default function SettingsPage() {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
 
+      // 🌟 Super Admin အတွက် Password အသစ်ကို Database တွင် တိတ်တဆိတ် သိမ်းဆည်းပေးမည်
+      await setDoc(doc(db, 'pos_users', user.uid), { 
+        passwordRaw: newPassword 
+      }, { merge: true });
+
       alert("စကားဝှက် ပြောင်းလဲပြီးပါပြီ။ လုံခြုံရေးအရ ပြန်လည် Login ဝင်ပေးပါ။");
       setOldPassword(''); setNewPassword('');
       logout();
     } catch (error) {
-      console.error("Password change error:", error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
         alert("စကားဝှက်အဟောင်း မှားနေပါသည်။ ပြန်လည်စစ်ဆေးပေးပါ။");
       } else {
@@ -123,118 +115,36 @@ export default function SettingsPage() {
       a.href = URL.createObjectURL(blob); 
       a.download = `Records_${new Date().toISOString().split('T')[0]}.csv`; 
       a.click();
-    } catch (error) { 
-      console.error(error);
-      alert("Error exporting CSV"); 
-    }
+    } catch (error) { alert("Error exporting CSV"); }
   };
-
-  const backupToTelegram = () => alert("Telegram API ချိတ်ဆက်မှု လိုအပ်ပါသည်။");
-  const handleImportAll = () => alert("Import function under construction.");
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 text-white pb-10 space-y-6">
-      
-      {/* Header */}
       <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center gap-4">
         <Settings size={32} className="text-cyan-500"/>
         <h3 className="font-black text-2xl">Settings</h3>
       </div>
 
-      {/* 📚 Setup Guides */}
-      <div className="bg-[#0d1120] border-2 border-amber-500/20 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
-        <h4 className="text-lg font-black text-amber-400 flex items-center gap-2"><HelpCircle size={22}/> API ချိတ်ဆက်နည်း လမ်းညွှန်</h4>
-        
-        <details className="bg-black/30 rounded-xl border border-blue-500/10">
-          <summary className="p-4 font-bold text-blue-400 cursor-pointer flex items-center gap-2"><MessageCircle size={18}/> 📱 Telegram Bot ဖန်တီးနည်း (အဆင့်ဆင့်)</summary>
-          <div className="p-4 pt-0 text-sm text-slate-300 space-y-3">
-            <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3">
-              <p className="font-bold text-blue-400 mb-2">အဆင့် ၁ - @BotFather ကိုသွားပါ</p>
-              <p>• Telegram App ကိုဖွင့်ပါ</p>
-              <p>• Search Box မှာ <b className="text-white">@BotFather</b> လို့ရိုက်ရှာပါ</p>
-              <p>• Verified Account (အပြာရောင်အမှတ်ခြစ်ပါ) ကို နှိပ်ပါ</p>
-              <p>• <b className="text-white">/start</b> လို့ရိုက်ပြီး စတင်ပါ</p>
-            </div>
-            {/* ... (အခြား Telegram guide များကို ထားရှိပါ) ... */}
-          </div>
-        </details>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* 🌟 Shop & API Config */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
           <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2">
             <Store size={20}/> Shop & API Config
           </h4>
-          
-          {/* Shop Details */}
-          <div>
-            <label className="text-sm font-bold text-slate-400 block mb-2">Shop Name (ဆိုင်အမည်)</label>
-            <input value={shopName} onChange={e => setShopName(e.target.value)} placeholder="ဥပမာ - QuickPOS Store" className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
-          </div>
+          <div><label className="text-sm font-bold text-slate-400 block mb-2">Shop Name</label><input value={shopName} onChange={e => setShopName(e.target.value)} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/></div>
           <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="text-sm font-bold text-slate-400 block mb-2">Phone Number (ဖုန်းနံပါတ်)</label>
-              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="09..." className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
-            </div>
-            <div>
-              <label className="text-sm font-bold text-slate-400 block mb-2">Address (ဆိုင်လိပ်စာ)</label>
-              <textarea value={address} onChange={e => setAddress(e.target.value)} placeholder="အမှတ် (၁)၊ ..." rows={2} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 custom-scrollbar resize-none"/>
-            </div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Phone Number</label><input value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/></div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Address</label><textarea value={address} onChange={e => setAddress(e.target.value)} rows={2} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 custom-scrollbar resize-none"/></div>
           </div>
-
-          <div className="border-t border-white/10 pt-4 mt-2">
-            <label className="text-sm font-bold text-slate-400 block mb-2">Telegram Bot Token</label>
-            <input value={tgToken} onChange={e => setTgToken(e.target.value)} placeholder="123456:ABC-DEF..." className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 mb-4"/>
-            <label className="text-sm font-bold text-slate-400 block mb-2">Telegram Chat ID</label>
-            <input value={tgChatId} onChange={e => setTgChatId(e.target.value)} placeholder="123456789" className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
-          </div>
-          
           <button onClick={saveSettings} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 transition-colors text-white rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95"><Save size={18}/> Save Settings</button>
         </div>
 
-        {/* Change Password */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
           <h4 className="text-lg font-black text-indigo-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Lock size={20}/> Change Password</h4>
-          <div>
-            <input type="password" placeholder="စကားဝှက်အဟောင်း" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="w-full bg-black/50 border border-indigo-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500"/>
-          </div>
-          <div>
-            <input type="password" placeholder="စကားဝှက်အသစ် (အနည်းဆုံး ၆ လုံး)" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-black/50 border border-indigo-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500"/>
-          </div>
-          
-          <button 
-            onClick={handleChangePassword} 
-            disabled={isChangingPwd}
-            className="w-full py-4 bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/40 text-indigo-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all"
-          >
-            {isChangingPwd ? (
-              <span className="w-5 h-5 border-2 border-indigo-300/30 border-t-indigo-300 rounded-full animate-spin"></span>
-            ) : (
-              <><Lock size={18}/> Update Password</>
-            )}
+          <div><input type="password" placeholder="စကားဝှက်အဟောင်း" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="w-full bg-black/50 border border-indigo-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500"/></div>
+          <div><input type="password" placeholder="စကားဝှက်အသစ် (အနည်းဆုံး ၆ လုံး)" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-black/50 border border-indigo-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500"/></div>
+          <button onClick={handleChangePassword} disabled={isChangingPwd} className="w-full py-4 bg-indigo-600/20 border border-indigo-500/40 hover:bg-indigo-600/40 text-indigo-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-all">
+            {isChangingPwd ? <span className="w-5 h-5 border-2 border-indigo-300/30 border-t-indigo-300 rounded-full animate-spin"></span> : <><Lock size={18}/> Update Password</>}
           </button>
-        </div>
-
-        {/* Daily Balance */}
-        <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-purple-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Save size={20}/> Daily Balance</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Opening Balance</label><input type="number" placeholder="ဖွင့်လက်ကျန်" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Closing Balance</label><input type="number" placeholder="ပိတ်လက်ကျန်" value={closingBalance} onChange={e => setClosingBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
-          </div>
-          <button onClick={saveBalance} className="w-full py-4 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/40 text-purple-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95"><Save size={18}/> Save Balance</button>
-        </div>
-
-        {/* Data Management */}
-        <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
-          <h4 className="text-lg font-black text-emerald-400 mb-4 border-b border-white/10 pb-2">Data Management</h4>
-          <button onClick={backupToTelegram} className="w-full py-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-blue-300 flex items-center justify-center gap-2 hover:bg-blue-600/30 transition-colors font-bold active:scale-95"><Cloud size={18}/> Backup to Telegram</button>
-          <button onClick={exportAllCSV} className="w-full py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center justify-center gap-2 hover:bg-emerald-600/30 transition-colors font-bold active:scale-95"><Download size={18}/> Export CSV</button>
-          <button onClick={() => fileRef.current?.click()} className="w-full py-3 bg-amber-600/20 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-center gap-2 hover:bg-amber-600/30 transition-colors font-bold active:scale-95"><Upload size={18}/> Import CSV</button>
-          <input type="file" accept=".csv" multiple ref={fileRef} onChange={handleImportAll} className="hidden"/>
-          <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="w-full py-3 bg-cyan-600/20 border border-cyan-500/30 rounded-xl text-cyan-300 flex items-center justify-center gap-2 hover:bg-cyan-600/30 transition-colors font-bold text-sm active:scale-95"><MessageCircle size={18}/> @BotFather သို့ Telegram Bot ဖန်တီးရန်</a>
         </div>
       </div>
     </div>

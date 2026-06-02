@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase/config';
+import { db, auth } from '../firebase/config'; // 🌟 auth ကို လှမ်းခေါ်ထားပါသည်
 import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // 🌟 Firebase Auth စနစ်ကို လှမ်းခေါ်ထားပါသည်
 import { useAuth } from '../context/AuthContext';
 import { Users, Plus, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 
@@ -41,8 +42,6 @@ export default function AdminPage() {
   
   const [form, setForm] = useState({ username: '', password: '', role: 'staff' });
   const [showPwd, setShowPwd] = useState(false);
-  
-  // 🌟 Admin Password အတွက် State ပြန်လည်ထည့်သွင်းခြင်း
   const [adminPassword, setAdminPassword] = useState('');
   
   const [editingPerms, setEditingPerms] = useState(null);
@@ -55,8 +54,6 @@ export default function AdminPage() {
     const unsub = onSnapshot(q, (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setPosUsers(all);
-    }, (error) => {
-      console.error("Error fetching users:", error);
     });
     
     return () => unsub();
@@ -65,37 +62,41 @@ export default function AdminPage() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!form.username.trim() || !form.password.trim()) return;
-    
-    // 🌟 Admin Password စစ်ဆေးသည့်စနစ် (Enhanced & Secured)
     if (!adminPassword.trim()) return alert("Admin password ထည့်ရန် လိုအပ်ပါသည်။");
 
-    if (!userData.password) {
-      return alert("System Error: သင့် Admin အကောင့်အတွက် Database တွင် Password မှတ်တမ်း မရှိပါ။ Database သို့သွား၍ 'pos_users' တွင် password ထည့်သွင်းပေးပါ။");
-    }
-
-    const hashedInput = simpleHash(adminPassword);
-    
-    // Database ထဲတွင် Hash စနစ်ဖြင့် သိမ်းထားသည်ဖြစ်စေ၊ ရိုးရိုးစာသားဖြင့် သိမ်းထားသည်ဖြစ်စေ ၂ မျိုးလုံးကို တိုက်စစ်ပေးမည်
-    if (userData.password !== hashedInput && userData.password !== adminPassword) {
-      return alert("Admin Password မှားနေပါသည်။ ပြန်လည်စစ်ဆေးပေးပါ။");
-    }
-    
     if (posUsers.some(u => u.username.toLowerCase() === form.username.trim().toLowerCase())) {
       return alert("ဒီနာမည်ဖြင့် User ရှိပြီးသားပါ။");
     }
 
     setIsSaving(true);
+
     try {
+      // 🌟 ၁။ Firebase Auth ဖြင့် Admin Password ကို တိုက်ရိုက် စစ်ဆေးခြင်း
+      if (auth.currentUser?.email) {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, adminPassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+      } else {
+        throw new Error("Admin email မတွေ့ပါ။");
+      }
+    } catch (error) {
+      console.error("Auth error:", error);
+      setIsSaving(false);
+      return alert("Admin Password မှားနေပါသည်။ သင့်အကောင့် Login ဝင်ရာတွင်သုံးသော Password အမှန်ကို ထည့်ပါ။");
+    }
+
+    try {
+      // 🌟 ၂။ Password မှန်ကန်ပါက User အသစ်ကို Database သို့ ထည့်သွင်းခြင်း
       await addDoc(collection(db, 'pos_users'), {
         tenantId: userData.tenantId, 
         username: form.username.trim(),
-        password: simpleHash(form.password), 
+        password: simpleHash(form.password), // ဝန်ထမ်းများအတွက်တော့ Hash ဖြင့်သာ ဆက်သိမ်းမည်
         role: form.role,
         permissions: form.role === 'staff' ? DEFAULT_STAFF_PERMS : [],
         createdAt: Date.now(),
       });
+      
       setForm({ username: '', password: '', role: 'staff' }); 
-      setAdminPassword(''); // ဖောင်တင်ပြီးပါက Password အကွက်ကို ပြန်လွတ်ပေးမည်
+      setAdminPassword(''); 
       setAdding(false);
     } catch (error) {
       console.error("Error adding user:", error);
@@ -112,7 +113,6 @@ export default function AdminPage() {
         : [...(user.permissions || []), permKey];
       await setDoc(doc(db, 'pos_users', user.id), { permissions: newPerms }, { merge: true });
     } catch (error) {
-      console.error("Error updating permissions:", error);
       alert("လုပ်ပိုင်ခွင့် ပြင်ဆင်ခြင်း မအောင်မြင်ပါ။");
     }
   };
@@ -123,7 +123,6 @@ export default function AdminPage() {
       await deleteDoc(doc(db, 'pos_users', confirmDelete.id));
       setConfirmDelete(null);
     } catch (error) {
-      console.error("Error deleting user:", error);
       alert("User ဖျက်သိမ်းခြင်း မအောင်မြင်ပါ။");
     }
   };
@@ -158,9 +157,8 @@ export default function AdminPage() {
             </button>
           </div>
           
-          {/* 🌟 Admin Password တောင်းသည့် အကွက် ပြန်လည်ထည့်သွင်းခြင်း */}
           <div className="relative">
-            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="သင့် (Admin) ရဲ့ Password ထည့်ပါ" className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
+            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="သင့် (Admin) ရဲ့ Login Password ထည့်ပါ" className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
           </div>
           
           <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50">

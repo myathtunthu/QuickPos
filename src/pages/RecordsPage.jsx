@@ -2,14 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { FileText, Printer, X, Calendar, Search, FileQuestion, Download } from 'lucide-react'; // 🌟 Added Download icon
+import { FileText, Calendar, FileQuestion } from 'lucide-react'; // Download icon ကို ဖယ်ရှားထားပါသည်
 
 // 🌟 UI Components များ လှမ်းခေါ်ခြင်း
 import EmptyState from '../components/UI/EmptyState';
 import { RecordSkeleton } from '../components/UI/Skeleton';
-
-// 🌟 Export Utility လှမ်းခေါ်ခြင်း (src/utils/exportData.js ဖန်တီးထားရန်လိုပါသည်)
-import { exportToCSV } from '../utils/exportData';
 
 // ─── Professional Print Voucher (EntryPage ပုံစံအတိုင်း) ───
 const doPrint = (record, shopName = 'QuickPOS') => {
@@ -41,13 +38,13 @@ const doPrint = (record, shopName = 'QuickPOS') => {
 
 export default function RecordsPage() {
   const { userData } = useAuth();
-  const shopName = userData?.shopName || 'QuickPOS'; // 🌟 Dynamic Shop Name
+  const shopName = userData?.shopName || 'QuickPOS';
   
   const [records, setRecords] = useState([]);
   const [filterType, setFilterType] = useState('All');
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   
-  // 🌟 Loading State ထည့်သွင်းခြင်း
+  // Loading State
   const [isLoading, setIsLoading] = useState(true);
   
   const fmt = n => (Number(n) || 0).toLocaleString();
@@ -58,7 +55,7 @@ export default function RecordsPage() {
       return;
     }
 
-    setIsLoading(true); // Data စတင်ဆွဲယူချိန်တွင် Loading ဖွင့်မည်
+    setIsLoading(true);
     const q = query(
       collection(db, 'pos_records'), 
       where('tenantId', '==', userData.tenantId), 
@@ -68,7 +65,7 @@ export default function RecordsPage() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecords(data);
-      setIsLoading(false); // Data ရလာချိန်တွင် Loading ပိတ်မည်
+      setIsLoading(false);
     }, (error) => {
       console.error(error);
       setIsLoading(false);
@@ -79,62 +76,37 @@ export default function RecordsPage() {
 
   const filteredRecords = filterType === 'All' ? records : records.filter(r => r.type === filterType);
 
-  // 🌟 Excel/CSV ထုတ်ရန် Function
-  const handleExport = () => {
-    const exportData = filteredRecords.map(r => ({
-      Voucher_No: r.voucherNo || r.id,
-      Date: r.date,
-      Time: r.time || '',
-      Type: r.type,
-      Customer_Or_Supplier: r.personName || 'Walk-in',
-      Items_Summary: r.itemsDetail ? r.itemsDetail.map(i => `${i.name} (${i.quantity})`).join(' | ') : r.item,
-      Total_Amount: r.amount,
-      Discount: r.discount || 0,
-      Payment_Method: r.paymentType || 'Cash',
-      Cashier: r.cashier || 'Admin'
-    }));
-
-    exportToCSV(exportData, `Transactions_${filterType}`);
-  };
-
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
       
-      {/* HEADER, FILTER & EXPORT */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-5">
-        <h3 className="font-black text-2xl flex items-center gap-3"><FileText className="text-cyan-500"/> Transactions History</h3>
+      {/* HEADER & FILTER */}
+      <div className="flex flex-col bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-4">
         
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="flex gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar flex-1">
-            {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
-              <button 
-                key={type} 
-                onClick={() => setFilterType(type)} 
-                className={`px-5 py-3 rounded-xl text-sm font-black transition-all whitespace-nowrap ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
+        <div className="flex justify-between items-center w-full">
+          <h3 className="font-black text-xl sm:text-2xl flex items-center gap-2">
+            <FileText className="text-cyan-500" size={24} /> 
+            <span>Transactions</span>
+          </h3>
+        </div>
 
-          {/* 🌟 Export CSV Button အသစ်ထည့်သွင်းခြင်း */}
-          <button 
-            onClick={handleExport}
-            disabled={filteredRecords.length === 0 || isLoading}
-            className="px-4 py-3 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-black transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            <Download size={16}/> Export 
-          </button>
+        <div className="flex gap-2 overflow-x-auto w-full pb-2 custom-scrollbar">
+          {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
+            <button 
+              key={type} 
+              onClick={() => setFilterType(type)} 
+              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all whitespace-nowrap ${filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'}`}
+            >
+              {type}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* 🌟 RECORD LIST with Skeletons & Empty States */}
+      {/* RECORD LIST with Skeletons & Empty States */}
       <div className="space-y-4">
         {isLoading ? (
-          // ⏳ Loading ဖြစ်နေချိန် RecordSkeleton ပြမည်
           [1, 2, 3, 4, 5].map((i) => <RecordSkeleton key={i} />)
         ) : filteredRecords.length === 0 ? (
-          // 📭 Data မရှိချိန် EmptyState UI ပြမည်
           <EmptyState 
             icon={FileQuestion}
             title="မှတ်တမ်း မရှိသေးပါ"
@@ -143,7 +115,6 @@ export default function RecordsPage() {
               : `ယခုစနစ်တွင် "${filterType}" နှင့် သက်ဆိုင်သော မှတ်တမ်းများ မရှိသေးပါ။`}
           />
         ) : (
-          // 📝 Data ရှိချိန် ပုံမှန် List ပြမည်
           filteredRecords.map(r => (
             <div key={r.id} onClick={() => setReceiptModal({ show: true, record: r })} className="bg-[#0d1120] p-6 rounded-2xl border border-white/5 hover:border-cyan-500/30 cursor-pointer transition-all flex justify-between items-center gap-4 hover:scale-[1.01]">
               <div>

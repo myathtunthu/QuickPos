@@ -1,19 +1,20 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Users, ShieldAlert, PauseCircle } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, Users, PauseCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
+// 🌟 Menu များနှင့် သက်ဆိုင်ရာ Permission များကို ချိတ်ဆက်ထားပါသည်
 const navItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dash' },
-  { path: '/entry', icon: ShoppingCart, label: 'Entry' },
-  { path: '/drafts', icon: PauseCircle, label: 'Hold' }, // 🌟 အသစ်
-  { path: '/inventory', icon: Package, label: 'Stock' },
-  { path: '/customers', icon: Users, label: 'People' }, // 🌟 လွယ်ကူစေရန် Customer သို့ ချိတ်ထားသည်
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Dash', perm: 'view_reports' },
+  { path: '/entry', icon: ShoppingCart, label: 'Entry', perm: 'create_sale' },
+  { path: '/drafts', icon: PauseCircle, label: 'Hold', perm: 'create_sale' }, // 🌟 အသစ်
+  { path: '/inventory', icon: Package, label: 'Stock', perm: 'view_inventory' },
+  { path: '/customers', icon: Users, label: 'People', perm: 'accept_payment' }, // 🌟 လွယ်ကူစေရန် Customer သို့ ချိတ်ထားသည်
 ];
 
 export default function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission } = useAuth(); // 🌟 Permission စစ်ဆေးရန်
 
   return (
     <nav 
@@ -22,7 +23,8 @@ export default function BottomNav() {
     >
       <div className="flex justify-around items-end px-1 pt-1 pb-1 max-w-6xl mx-auto">
         {navItems.map(item => {
-          if (item.path === '/admin' && !hasPermission('manage_users') && !hasPermission('manage_products') && !hasPermission('manage_inventory')) {
+          // 🌟 Permission မရှိပါက ဤခလုတ်ကို ဖျောက်ထားမည် (null ပြန်ပေးမည်)
+          if (item.perm && !hasPermission(item.perm)) {
             return null;
           }
           

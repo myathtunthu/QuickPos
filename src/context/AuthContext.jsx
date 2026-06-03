@@ -38,11 +38,11 @@ export function AuthProvider({ children }) {
           
           if (staffSession) {
             const staffData = JSON.parse(staffSession);
-            // Staff အတွက် User Object အတု ဖန်တီးပေးမည် (System က Logged In ဟု သိစေရန်)
             setUser({ uid: staffData.id, email: staffData.username, isStaff: true });
             setProfile(staffData);
             logger.log('Staff profile loaded successfully', staffData.username);
           } else {
+            // လုံးဝ Login မဝင်ထားပါက သေချာစွာ ရှင်းလင်းမည်
             setUser(null);
             setProfile(null);
           }
@@ -72,10 +72,20 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
-      // 🌟 Logout နှိပ်ပါက Staff Session ကိုပါ ဖျက်ပေးမည်
+      // ၁။ Local Storage ထဲက Staff မှတ်တမ်းကို အရင်ဆုံး ဖျက်ပစ်ပါမည်
       localStorage.removeItem('pos_staff_session');
-      logger.log('User logged out');
+      
+      // ၂။ App Memory (State) ထဲမှ User Data များကို ချက်ချင်း ရှင်းလင်းပါမည်
+      setUser(null);
+      setProfile(null);
+
+      // ၃။ Firebase Admin Account ဝင်ထားလျှင် ထွက်ပါမည်
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+      
+      // ၄။ အရေးကြီးဆုံး: Login မျက်နှာပြင်သို့ အတင်း (Force) ပြန်ပို့ပြီး App အား အသစ်ပြန်ဖွင့်ပါမည် (Cache ရှင်းစေရန်)
+      window.location.href = '/login';
     } catch (error) {
       logger.error('Logout failed', error);
       throw error;

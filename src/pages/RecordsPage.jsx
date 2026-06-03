@@ -4,7 +4,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'fire
 import { useAuth } from '../context/AuthContext';
 import {
   FileText, Calendar, FileQuestion, Printer, Search, X,
-  DollarSign, ShoppingCart, CreditCard, TrendingUp
+  DollarSign, ShoppingCart, CreditCard, TrendingUp, Package
 } from 'lucide-react';
 
 // ─── Print Voucher ───
@@ -67,15 +67,12 @@ const doPrint = (record, settings) => {
 };
 
 export default function RecordsPage() {
-  const { userData } = useAuth();
+  const { profile } = useAuth();
+  const tenantId = profile?.tenantId;
 
-  const [shopSettings, setShopSettings] = useState({
-    shopName: userData?.shopName || 'QuickPOS',
-    phone: '',
-    address: ''
-  });
-
+  const [shopSettings, setShopSettings] = useState({ shopName: 'QuickPOS', phone: '', address: '' });
   const [records, setRecords] = useState([]);
+  const [products, setProducts] = useState([]); // 🌟 Added to calculate true COGS
   const [filterType, setFilterType] = useState('All');
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const [isLoading, setIsLoading] = useState(true);
@@ -87,46 +84,42 @@ export default function RecordsPage() {
   const fmt = (n) => (Number(n) || 0).toLocaleString();
 
   useEffect(() => {
-    if (!userData?.tenantId) {
-      setIsLoading(false);
-      return;
-    }
+    if (!tenantId) { setIsLoading(false); return; }
     setIsLoading(true);
 
     const fetchSettings = async () => {
       try {
-        const snap = await getDoc(doc(db, 'pos_settings', userData.tenantId));
+        const snap = await getDoc(doc(db, 'pos_settings', tenantId));
         if (snap.exists()) {
           const data = snap.data();
           setShopSettings({
-            shopName: data.shopName || userData.shopName || 'QuickPOS',
-            phone: data.phone || '',
-            address: data.address || ''
+            shopName: data.shopName || profile.shopName || 'QuickPOS',
+            phone: data.phone || '', address: data.address || ''
           });
         }
-      } catch (err) {
-        console.error("Error fetching settings:", err);
-      }
+      } catch (err) { console.error(err); }
     };
     fetchSettings();
 
-    const q = query(
-      collection(db, 'pos_records'),
-      where('tenantId', '==', userData.tenantId),
-      orderBy('createdAt', 'desc')
-    );
+    // Fetch Products (For exact Cost mapping)
+    const qProd = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
+    const unsubProd = onSnapshot(qProd, (snap) => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRecords(data);
-      setIsLoading(false);
-    }, (error) => {
-      console.error(error);
+    // Fetch Records
+    const qRec = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'));
+    const unsubRec = onSnapshot(qRec, (snap) => {
+      setRecords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [userData]);
+    return () => { unsubProd(); unsubRec(); };
+  }, [tenantId, profile]);
+
+  const productMap = useMemo(() => {
+    const map = {};
+    products.forEach(p => { map[p.id] = p; });
+    return map;
+  }, [products]);
 
   const getRecordDateISO = (r) => {
     if (r.date && r.date.includes('-')) return r.date;
@@ -140,14 +133,13 @@ export default function RecordsPage() {
   };
 
   const filteredRecords = useMemo(() => {
-    let result = records;
-    if (filterType !== 'All') {
-      result = result.filter(r => r.type === filterType);
-    }
-    result = result.filter(r => {
+    let result = records.filter(r => {
       const iso = getRecordDateISO(r);
       return iso && iso >= dateRange.start && iso <= dateRange.end;
     });
+    if (filterType !== 'All') {
+      result = result.filter(r => (r.type || '').toLowerCase() === filterType.toLowerCase());
+    }
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       result = result.filter(r =>
@@ -159,32 +151,44 @@ export default function RecordsPage() {
     return result;
   }, [records, filterType, dateRange, searchTerm]);
 
+  // 🌟 Dashboard နှင့် ကွက်တိတူညီသော အမြတ်တွက်ချက်မှုစနစ် (True Profit Formula)
   const reportStats = useMemo(() => {
-    const recsInRange = records.filter(r => {
-      const iso = getRecordDateISO(r);
-      return iso && iso >= dateRange.start && iso <= dateRange.end;
-    });
     const sum = (arr, fn) => arr.reduce((s, r) => s + (Number(fn(r)) || 0), 0);
-    const sales = sum(recsInRange.filter(r => r.type === 'Sale'), r => r.amount);
-    const purchases = sum(recsInRange.filter(r => r.type === 'Purchase'), r => r.amount);
-    const expenses = sum(recsInRange.filter(r => r.type === 'Expense'), r => r.amount);
-    const netProfit = sales - purchases - expenses;
-    return { sales, purchases, expenses, netProfit };
-  }, [records, dateRange]);
+    
+    const salesRecs = filteredRecords.filter(r => (r.type || '').toLowerCase() === 'sale');
+    const expensesRecs = filteredRecords.filter(r => (r.type || '').toLowerCase() === 'expense');
+
+    const totalSales = sum(salesRecs, r => r.amount);
+    const totalExpenses = sum(expensesRecs, r => r.amount);
+
+    // COGS (ရောင်းလိုက်ရသော ပစ္စည်းများ၏ အရင်း)
+    const totalCOGS = salesRecs.reduce((sum, r) => {
+      const items = r.itemsDetail || r.items || [];
+      return sum + items.reduce((s, item) => {
+        const prod = productMap[item.productId];
+        const cost = Number(item.costPrice) || Number(item.cost) || Number(prod?.packageUnits?.[0]?.costPrice) || 0;
+        return s + (cost * (Number(item.quantity) || 0));
+      }, 0);
+    }, 0);
+
+    // True Net Profit (အရောင်း - အရင်း - အသုံးစရိတ်)
+    const netProfit = totalSales - totalCOGS - totalExpenses;
+
+    return { totalSales, totalCOGS, totalExpenses, netProfit };
+  }, [filteredRecords, productMap]);
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-10">
       {/* ─── Profit/Loss Report Summary ─── */}
       <div className="bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/15 shadow-xl space-y-6">
         <h3 className="font-black text-2xl flex items-center gap-2">
-          <TrendingUp className="text-cyan-500" /> Profit/Loss Report
+          <TrendingUp className="text-cyan-500" /> Date-Range Profit Report
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-bold text-slate-500 uppercase mb-2 block">Start Date</label>
             <input
-              type="date"
-              value={dateRange.start}
+              type="date" value={dateRange.start}
               onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
               className="w-full bg-black/50 border-2 border-cyan-500/20 rounded-xl px-5 py-3 text-lg font-bold text-cyan-400 outline-none focus:border-cyan-400"
             />
@@ -192,19 +196,20 @@ export default function RecordsPage() {
           <div>
             <label className="text-sm font-bold text-slate-500 uppercase mb-2 block">End Date</label>
             <input
-              type="date"
-              value={dateRange.end}
+              type="date" value={dateRange.end}
               onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
               className="w-full bg-black/50 border-2 border-cyan-500/20 rounded-xl px-5 py-3 text-lg font-bold text-cyan-400 outline-none focus:border-cyan-400"
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+        {/* 🌟 ရှင်းလင်းစွာ ပြင်ဆင်ထားသော ကိန်းဂဏန်းပြကွက်များ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total Sales', value: reportStats.sales, icon: DollarSign, color: 'text-cyan-400', bg: 'bg-cyan-950/20 border-cyan-500/10' },
-            { label: 'Total Purchases', value: reportStats.purchases, icon: ShoppingCart, color: 'text-blue-400', bg: 'bg-blue-950/20 border-blue-500/10' },
-            { label: 'Total Expenses', value: reportStats.expenses, icon: CreditCard, color: 'text-amber-400', bg: 'bg-amber-950/20 border-amber-500/10' },
-            { label: 'Net Profit', value: reportStats.netProfit, icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-950/30 border-emerald-500/30' },
+            { label: 'အရောင်းစုစုပေါင်း (Revenue)', value: reportStats.totalSales, icon: DollarSign, color: 'text-cyan-400', bg: 'bg-cyan-950/20 border-cyan-500/10' },
+            { label: 'ပစ္စည်းအရင်း (Total Cost)', value: reportStats.totalCOGS, icon: Package, color: 'text-rose-400', bg: 'bg-rose-950/20 border-rose-500/10' },
+            { label: 'အထွေထွေအသုံးစရိတ် (Expense)', value: reportStats.totalExpenses, icon: CreditCard, color: 'text-amber-400', bg: 'bg-amber-950/20 border-amber-500/10' },
+            { label: 'အသားတင်အမြတ် (Net Profit)', value: reportStats.netProfit, icon: TrendingUp, color: reportStats.netProfit >= 0 ? 'text-emerald-400' : 'text-red-500', bg: reportStats.netProfit >= 0 ? 'bg-emerald-950/30 border-emerald-500/30' : 'bg-red-950/30 border-red-500/30' },
           ].map((stat, i) => (
             <div key={i} className={`p-4 rounded-xl border-2 ${stat.bg} flex items-center justify-between`}>
               <div>
@@ -228,29 +233,20 @@ export default function RecordsPage() {
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
             <input
-              type="text"
-              placeholder="Search by name, voucher..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              type="text" placeholder="Search by name, voucher..."
+              value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
               className="w-full bg-black/50 border border-cyan-500/20 rounded-xl pl-10 pr-10 py-2 text-sm text-white outline-none focus:border-cyan-400"
             />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X size={14} className="text-slate-400 hover:text-white" />
-              </button>
-            )}
+            {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} className="text-slate-400 hover:text-white" /></button>}
           </div>
           <div className="flex gap-2 overflow-x-auto">
             {['All', 'Sale', 'Purchase', 'Expense'].map(type => (
               <button
-                key={type}
-                onClick={() => setFilterType(type)}
+                key={type} onClick={() => setFilterType(type)}
                 className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
                   filterType === type ? 'bg-cyan-600 text-white' : 'bg-black/50 text-slate-400 border border-white/5'
                 }`}
-              >
-                {type}
-              </button>
+              >{type}</button>
             ))}
           </div>
         </div>
@@ -280,9 +276,9 @@ export default function RecordsPage() {
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    r.type === 'Sale' ? 'bg-cyan-500/20 text-cyan-400' :
-                    r.type === 'Expense' ? 'bg-rose-500/20 text-rose-400' :
-                    'bg-amber-500/20 text-amber-400'
+                    (r.type||'').toLowerCase() === 'sale' ? 'bg-cyan-500/20 text-cyan-400' :
+                    (r.type||'').toLowerCase() === 'expense' ? 'bg-amber-500/20 text-amber-400' :
+                    'bg-rose-500/20 text-rose-400'
                   }`}>{r.type}</span>
                   <span className="text-slate-500 text-xs">{r.voucherNo || r.id.slice(0,8)}</span>
                 </div>
@@ -291,8 +287,8 @@ export default function RecordsPage() {
                   <Calendar size={12} /> {r.date || '-'} {r.time || ''}
                 </p>
               </div>
-              <p className={`font-bold text-xl ${r.type === 'Sale' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {r.type === 'Sale' ? '+' : '-'}{fmt(r.amount)}
+              <p className={`font-bold text-xl ${(r.type||'').toLowerCase() === 'sale' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {(r.type||'').toLowerCase() === 'sale' ? '+' : '-'}{fmt(r.amount)}
               </p>
             </div>
           ))

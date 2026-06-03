@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
-// 🌟 New UI & Utility Imports (PDF လမ်းညွှန်ချက်အရ ထည့်သွင်းထားပါသည်)
+// Custom UI & Utilities
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 import logger from '../utils/logger';
@@ -23,13 +23,22 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal ----------
+// ---------- Scanner Modal (Fixed Version) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // 🌟 Loading ပြရန် State အသစ်
   const readerRef = useRef(null);
   const streamRef = useRef(null);
   
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
+
   const lastScannedRef = useRef({ code: '', time: 0 });
 
   useEffect(() => {
@@ -59,12 +68,19 @@ const ScannerModal = ({ onClose, onScan }) => {
             if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return; 
             
             lastScannedRef.current = { code: result.text, time: now };
-            onScan(result.text);
+            
+            // 🌟 Barcode ဖတ်မိသည်နှင့် Processing Loading ပြမည်
+            setIsProcessing(true);
+            if (onScanRef.current) onScanRef.current(result.text); 
+
+            // ၁ စက္ကန့်ကြာလျှင် Loading ပြန်ဖျောက်ပြီး နောက်တစ်ခု ဆက်ဖတ်ခွင့်ပေးမည်
+            setTimeout(() => {
+              setIsProcessing(false);
+            }, 1000);
           }
         });
       })
       .catch((err) => {
-        // 🌟 console.error အစား logger.error ကို အသုံးပြုထားပါသည်
         logger.error('Camera error:', err);
         setCameraError(true);
       });
@@ -73,22 +89,35 @@ const ScannerModal = ({ onClose, onScan }) => {
       if (readerRef.current) readerRef.current.reset();
       if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
     };
-  }, [onScan]);
+  }, []); 
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
         <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
-          <h3 className="font-black text-gray-800">Continuous Scanner Active</h3>
-          <button type="button" onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+          <h3 className="font-black text-gray-800">Barcode Scanner</h3>
+          <button type="button" onClick={() => onCloseRef.current()} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
-        {cameraError ? (
-          <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
-        ) : (
-          <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
-        )}
-        <div className="p-4 bg-gray-100 text-center text-xs text-green-600 font-black animate-pulse">
-          စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများအား တောက်လျှောက် ဖတ်နိုင်ပါသည်
+        
+        <div className="relative">
+          {cameraError ? (
+            <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
+          ) : (
+            <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
+          )}
+
+          {/* 🌟 Loading Box (ဖတ်လိုက်တိုင်း ခဏပေါ်လာမည့် အပိုင်း) */}
+          {isProcessing && (
+            <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-10 transition-opacity">
+              <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+              <p className="text-cyan-800 font-black text-base">ပစ္စည်းစာရင်းသွင်းနေပါသည်</p>
+              <p className="text-sm font-bold text-gray-500 mt-1">ခဏစောင့်ပါ...</p>
+            </div>
+          )}
+        </div>
+
+        <div className={`p-4 text-center text-xs font-black transition-colors ${isProcessing ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700 animate-pulse'}`}>
+          {isProcessing ? 'စနစ်ထဲသို့ ထည့်သွင်းနေပါသည်...' : 'စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများ ဆက်တိုက်ဖတ်နိုင်ပါသည်'}
         </div>
       </div>
     </div>
@@ -136,7 +165,6 @@ export default function EntryPage({ products = [] }) {
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
 
-  // 🌟 Custom Dialog States
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
 
@@ -233,12 +261,11 @@ export default function EntryPage({ products = [] }) {
     const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
     const response = addToCart(product, defaultUnit, 'retail', 1);
     if (response.success) setProdSearch('');
-    else showToast(response.message, 'error'); // 🌟 Replaced alert
+    else showToast(response.message, 'error'); 
   }, [addToCart]);
 
   const handleTabChange = (tab) => {
     if (cart.length > 0) {
-      // 🌟 Replaced window.confirm
       setConfirmDialog({
         isOpen: true,
         title: "Tab ပြောင်းလဲခြင်း",
@@ -260,7 +287,6 @@ export default function EntryPage({ products = [] }) {
       showToast("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။", "error");
       return;
     }
-    // 🌟 Replaced prompt
     setPromptModal({ isOpen: true, name: personSearch || "" });
   };
 
@@ -500,16 +526,6 @@ export default function EntryPage({ products = [] }) {
 
   return (
     <>
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #receipt-print-area, #receipt-print-area * { visibility: visible; }
-          #receipt-print-area { position: absolute; left: 0; top: 0; width: 80mm; margin: 0; padding: 10px; }
-          @page { margin: 0; }
-        }
-      `}</style>
-
-      {/* 🌟 New Component: ConfirmDialog implementation */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
@@ -518,7 +534,6 @@ export default function EntryPage({ products = [] }) {
         onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
       />
 
-      {/* 🌟 New Component: Inline Prompt replacement for 'Hold Invoice' */}
       {promptModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:hidden">
           <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -780,7 +795,39 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* ACTUAL PRINT AREA */}
+      {/* 🌟 ACTUAL PRINT AREA (Printer Setup - POS Standard 80mm/58mm Support) 🌟 */}
+      <style>{`
+        @media print {
+          @page {
+            size: 80mm auto; /* 58mm စက်သုံးရင် 58mm လို့ ပြောင်းပေးပါ */
+            margin: 0;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: white;
+          }
+          body * { 
+            visibility: hidden; 
+          }
+          #receipt-print-area, #receipt-print-area * { 
+            visibility: visible; 
+          }
+          #receipt-print-area { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            margin: 0; 
+            padding: 4mm; 
+          }
+          html, body {
+            height: auto;
+            overflow: hidden;
+          }
+        }
+      `}</style>
+
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">

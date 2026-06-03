@@ -1,30 +1,43 @@
 import { useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import logger from '../../utils/logger'; // 🌟 Add Custom Logger
 
 export default function BarcodeScanner({ onScanSuccess, onScanFailure }) {
   const scannerRef = useRef(null);
 
   useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      "qr-reader",
-      { fps: 10, qrbox: { width: 250, height: 100 } },
-      false
-    );
-    scannerRef.current = scanner;
+    // 🌟 Added try-catch for scanner initialization
+    try {
+      const scanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: { width: 250, height: 100 } },
+        false
+      );
+      scannerRef.current = scanner;
 
-    scanner.render(
-      (decodedText) => {
-        scanner.clear();
-        if (onScanSuccess) onScanSuccess(decodedText);
-      },
-      (error) => {
-        if (onScanFailure) onScanFailure(error);
-      }
-    );
+      scanner.render(
+        (decodedText) => {
+          try {
+            scanner.clear();
+            if (onScanSuccess) onScanSuccess(decodedText);
+          } catch (clearErr) {
+            logger.error('Error clearing scanner on success:', clearErr);
+          }
+        },
+        (error) => {
+          if (onScanFailure) onScanFailure(error);
+        }
+      );
+    } catch (initErr) {
+      logger.error('Error initializing Barcode Scanner:', initErr);
+    }
 
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(console.error);
+        // 🌟 Replaced console.error with logger.error
+        scannerRef.current.clear().catch(err => {
+          logger.error('Scanner cleanup error:', err);
+        });
       }
     };
   }, [onScanSuccess, onScanFailure]);

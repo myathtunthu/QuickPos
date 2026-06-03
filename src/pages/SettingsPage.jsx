@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase/config';
-import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Cloud, Download, Upload, Lock, Save, Key, HelpCircle, MessageCircle } from 'lucide-react';
+import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircle, Store, Wallet } from 'lucide-react';
 
-// 🌟 UI & Utilities (alert များကို အစားထိုးရန်)
+// 🌟 UI & Utilities 
 import { showToast } from '../components/UI/Toast';
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import logger from '../utils/logger';
 
-// 🌟 Security: ပိုမိုလုံခြုံသော Password ကုဒ်ဝှက်စနစ် (Super Admin Auto-login အတွက်)
+// 🌟 Security Utility
 const SECRET_SALT = "QPOS_SECURE_99";
 const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
 
@@ -20,7 +20,6 @@ export default function SettingsPage() {
   const [shopName, setShopName] = useState('');
   const [tgToken, setTgToken] = useState('');
   const [tgChatId, setTgChatId] = useState('');
-  const [geminiKey, setGeminiKey] = useState('');
   
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -42,7 +41,6 @@ export default function SettingsPage() {
           setShopName(data.shopName || '');
           setTgToken(data.tgToken || '');
           setTgChatId(data.tgChatId || '');
-          setGeminiKey(data.geminiKey || '');
           setOpeningBalance(data.openingBalance || '');
           setClosingBalance(data.closingBalance || '');
         }
@@ -56,7 +54,7 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      await setDoc(doc(db, 'pos_settings', profile.tenantId), { shopName, tgToken, tgChatId, geminiKey }, { merge: true });
+      await setDoc(doc(db, 'pos_settings', profile.tenantId), { shopName, tgToken, tgChatId }, { merge: true });
       showToast("ဆက်တင်များ သိမ်းဆည်းပြီးပါပြီ။", "success");
     } catch (error) { 
       logger.error('Error saving settings:', error);
@@ -86,14 +84,10 @@ export default function SettingsPage() {
       const user = auth.currentUser;
       if (!user) throw new Error("User not found");
 
-      // 🌟 Firebase Auth ဖြင့် စကားဝှက်အဟောင်းကို စစ်ဆေးခြင်း
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
-      
-      // 🌟 စကားဝှက်အသစ်သို့ ပြောင်းလဲခြင်း
       await updatePassword(user, newPassword);
 
-      // 🌟 Database တွင် Encrypted Key အဖြစ်သာ သိမ်းဆည်းခြင်း (simpleHash အစား)
       await setDoc(doc(db, 'pos_users', profile.id || user.uid), { 
         encryptedKey: encodeAuth(newPassword) 
       }, { merge: true });
@@ -141,8 +135,90 @@ export default function SettingsPage() {
     });
   };
 
+  // 🌟 Import CSV အစစ်အမှန် လုပ်ဆောင်ချက်
+  const handleImportCSV = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setConfirmDialog({
+      isOpen: true,
+      title: "CSV တင်သွင်းခြင်း",
+      message: "ရွေးချယ်ထားသော CSV ဖိုင်မှ ဒေတာများကို System အတွင်းသို့ တင်သွင်းမှာ သေချာပါသလား?",
+      onConfirm: async () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        try {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const text = event.target.result;
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            if (rows.length <= 1) return showToast("ဖိုင်ထဲတွင် ဒေတာမရှိပါ။", "warning");
+
+            let count = 0;
+            let batch = writeBatch(db);
+
+            for (let i = 1; i < rows.length; i++) {
+              const rowStr = rows[i];
+              const cols = [];
+              let inQuotes = false;
+              let current = '';
+              for (let j = 0; j < rowStr.length; j++) {
+                if (rowStr[j] === '"') {
+                  inQuotes = !inQuotes;
+                } else if (rowStr[j] === ',' && !inQuotes) {
+                  cols.push(current.trim());
+                  current = '';
+                } else {
+                  current += rowStr[j];
+                }
+              }
+              cols.push(current.trim());
+
+              if (cols.length < 8) continue; // ကော်လံ မပြည့်စုံလျှင် ကျော်သွားမည်
+
+              const recordRef = doc(collection(db, 'pos_records'));
+              batch.set(recordRef, {
+                tenantId: profile?.tenantId,
+                date: cols[0] || '',
+                invoiceNo: cols[1] || '',
+                type: cols[2] || '',
+                personName: cols[3] || '',
+                item: cols[4] || '',
+                amount: Number(cols[5]) || 0,
+                discount: Number(cols[6]) || 0,
+                paymentType: cols[7] || '',
+                createdAt: Date.now()
+              });
+
+              count++;
+              // 🌟 Firebase ၏ တစ်ခါသွင်း ကန့်သတ်ချက် (500) အရ ၄၀၀ ပြည့်တိုင်း Batch သစ်ခွဲသွင်းမည်
+              if (count % 400 === 0) {
+                await batch.commit();
+                batch = writeBatch(db);
+              }
+            }
+
+            // ကျန်နေသော မှတ်တမ်းများကို သွင်းမည်
+            if (count % 400 !== 0) {
+              await batch.commit();
+            }
+
+            if (count > 0) {
+              showToast(`မှတ်တမ်းပေါင်း ${count} ခုကို အောင်မြင်စွာ တင်သွင်းပြီးပါပြီ။`, "success");
+            } else {
+              showToast("တင်သွင်းရန် မှန်ကန်သော ဒေတာမတွေ့ရှိပါ။", "warning");
+            }
+          };
+          reader.readAsText(file);
+        } catch (error) {
+          logger.error('Import error:', error);
+          showToast("Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။", "error");
+        }
+        if (fileRef.current) fileRef.current.value = ''; // Reset file input
+      }
+    });
+  };
+
   const backupToTelegram = () => showToast("Telegram API ချိတ်ဆက်မှု လိုအပ်ပါသည်။", "info");
-  const handleImportAll = () => showToast("Import function under construction.", "warning");
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 text-white pb-10 space-y-6">
@@ -156,7 +232,7 @@ export default function SettingsPage() {
         <h3 className="font-black text-2xl">Settings</h3>
       </div>
 
-      {/* 📚 Setup Guides */}
+      {/* 📚 Setup Guides (Gemini Removed) */}
       <div className="bg-[#0d1120] border-2 border-amber-500/20 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
         <h4 className="text-lg font-black text-amber-400 flex items-center gap-2"><HelpCircle size={22}/> API ချိတ်ဆက်နည်း လမ်းညွှန်</h4>
         
@@ -191,43 +267,13 @@ export default function SettingsPage() {
             </div>
           </div>
         </details>
-
-        {/* Gemini Guide */}
-        <details className="bg-black/30 rounded-xl border border-purple-500/10">
-          <summary className="p-4 font-bold text-purple-400 cursor-pointer flex items-center gap-2"><Key size={18}/> 🤖 Gemini AI API Key ရယူနည်း (အဆင့်ဆင့်)</summary>
-          <div className="p-4 pt-0 text-sm text-slate-300 space-y-3">
-            <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-3">
-              <p className="font-bold text-amber-400 mb-2">⚠️ အရေးကြီး - အမေရိကန် VPN ခံပါ</p>
-              <p>• Google AI Studio ကို <b className="text-white">အမေရိကန် IP</b> နဲ့ပဲ ဝင်ခွင့်ပြုပါတယ်</p>
-              <p>• VPN App တစ်ခုခု (Proton VPN, Windscribe) ကို သုံးပြီး <b className="text-white">United States</b> Server ချိတ်ပါ</p>
-            </div>
-            <div className="bg-purple-500/5 border border-purple-500/10 rounded-lg p-3">
-              <p className="font-bold text-purple-400 mb-2">အဆင့် ၁ - Google AI Studio သွားပါ</p>
-              <p>• <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-purple-400 underline">https://aistudio.google.com/apikey</a> ဖွင့်ပါ</p>
-              <p>• Google Account နဲ့ <b className="text-white">Sign In</b> လုပ်ပါ</p>
-            </div>
-            <div className="bg-purple-500/5 border border-purple-500/10 rounded-lg p-3">
-              <p className="font-bold text-purple-400 mb-2">အဆင့် ၂ - API Key ဖန်တီးပါ</p>
-              <p>• <b className="text-white">Create API Key</b> ခလုတ်ကို နှိပ်ပါ</p>
-              <p>• <b className="text-white">Create API key in new project</b> ရွေးပါ</p>
-              <p>• Key ရလာရင် <b className="text-white">Copy</b> လုပ်ပါ</p>
-              <p>• အောက်က <b className="text-purple-400">Gemini API Key</b> အကွက်မှာ ထည့်ပါ</p>
-            </div>
-            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-lg p-3">
-              <p className="font-bold text-emerald-400 mb-2">✅ သတိပြုရန်</p>
-              <p>• လုံးဝအခမဲ့၊ Payment Method မလို</p>
-              <p>• တစ်မိနစ် ၁၅ ကြိမ်၊ တစ်နေ့ ၁,၅၀၀ ကြိမ် အခမဲ့</p>
-              <p>• API Key မထည့်ရင် Local AI က အလုပ်လုပ်ပါမယ်</p>
-            </div>
-          </div>
-        </details>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
         {/* General + API Config */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2">General & API Config</h4>
+          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Store size={20}/> General & API Config</h4>
           <div>
             <label className="text-sm font-bold text-slate-400 block mb-2">Shop Name</label>
             <input value={shopName} onChange={e => setShopName(e.target.value)} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
@@ -239,10 +285,6 @@ export default function SettingsPage() {
           <div>
             <label className="text-sm font-bold text-slate-400 block mb-2">Telegram Chat ID</label>
             <input value={tgChatId} onChange={e => setTgChatId(e.target.value)} placeholder="123456789" className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
-          </div>
-          <div className="border-t border-white/5 pt-4">
-            <label className="text-sm font-bold text-slate-400 block mb-2">Gemini API Key (AI Assistant)</label>
-            <input value={geminiKey} onChange={e => setGeminiKey(e.target.value)} placeholder="AIzaSy... (ချန်ထားပါက Local AI)" className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-purple-400"/>
           </div>
           <button onClick={saveSettings} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 transition-colors text-white rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95"><Save size={18}/> Save Settings</button>
         </div>
@@ -259,10 +301,10 @@ export default function SettingsPage() {
 
         {/* Daily Balance */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-purple-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Save size={20}/> Daily Balance</h4>
+          <h4 className="text-lg font-black text-purple-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Wallet size={20}/> Daily Balance</h4>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Opening Balance</label><input type="number" placeholder="ဖွင့်လက်ကျန်" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Closing Balance</label><input type="number" placeholder="ပိတ်လက်ကျန်" value={closingBalance} onChange={e => setClosingBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Opening Balance</label><input type="number" placeholder="ဖွင့်လက်ကျန်" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-400"/></div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Closing Balance</label><input type="number" placeholder="ပိတ်လက်ကျန်" value={closingBalance} onChange={e => setClosingBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-400"/></div>
           </div>
           <button onClick={saveBalance} className="w-full py-4 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/40 text-purple-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={18}/> Save Balance</button>
         </div>
@@ -271,9 +313,13 @@ export default function SettingsPage() {
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
           <h4 className="text-lg font-black text-emerald-400 mb-4 border-b border-white/10 pb-2">Data Management</h4>
           <button onClick={backupToTelegram} className="w-full py-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-blue-300 flex items-center justify-center gap-2 hover:bg-blue-600/30 transition-colors font-bold active:scale-95"><Cloud size={18}/> Backup to Telegram</button>
-          <button onClick={exportAllCSV} className="w-full py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center justify-center gap-2 hover:bg-emerald-600/30 transition-colors font-bold active:scale-95"><Download size={18}/> Export CSV</button>
-          <button onClick={() => fileRef.current?.click()} className="w-full py-3 bg-amber-600/20 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-center gap-2 hover:bg-amber-600/30 transition-colors font-bold active:scale-95"><Upload size={18}/> Import CSV</button>
-          <input type="file" accept=".csv" multiple ref={fileRef} onChange={handleImportAll} className="hidden"/>
+          
+          <div className="flex gap-4">
+            <button onClick={exportAllCSV} className="w-full py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center justify-center gap-2 hover:bg-emerald-600/30 transition-colors font-bold active:scale-95"><Download size={18}/> Export CSV</button>
+            <button onClick={() => fileRef.current?.click()} className="w-full py-3 bg-amber-600/20 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-center gap-2 hover:bg-amber-600/30 transition-colors font-bold active:scale-95"><Upload size={18}/> Import CSV</button>
+            <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
+          </div>
+
           <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="w-full py-3 bg-cyan-600/20 border border-cyan-500/30 rounded-xl text-cyan-300 flex items-center justify-center gap-2 hover:bg-cyan-600/30 transition-colors font-bold text-sm active:scale-95"><MessageCircle size={18}/> @BotFather သို့ Telegram Bot ဖန်တီးရန်</a>
         </div>
 

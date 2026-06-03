@@ -54,6 +54,7 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
+      // 🌟 Gemini မပါတော့ပါ
       await setDoc(doc(db, 'pos_settings', profile.tenantId), { shopName, tgToken, tgChatId }, { merge: true });
       showToast("ဆက်တင်များ သိမ်းဆည်းပြီးပါပြီ။", "success");
     } catch (error) { 
@@ -135,7 +136,7 @@ export default function SettingsPage() {
     });
   };
 
-  // 🌟 Import CSV အစစ်အမှန် လုပ်ဆောင်ချက်
+  // 🌟 Import CSV အစစ်အမှန် လုပ်ဆောင်ချက် (Under Construction အစား)
   const handleImportCSV = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -173,7 +174,7 @@ export default function SettingsPage() {
               }
               cols.push(current.trim());
 
-              if (cols.length < 8) continue; // ကော်လံ မပြည့်စုံလျှင် ကျော်သွားမည်
+              if (cols.length < 8) continue;
 
               const recordRef = doc(collection(db, 'pos_records'));
               batch.set(recordRef, {
@@ -190,14 +191,13 @@ export default function SettingsPage() {
               });
 
               count++;
-              // 🌟 Firebase ၏ တစ်ခါသွင်း ကန့်သတ်ချက် (500) အရ ၄၀၀ ပြည့်တိုင်း Batch သစ်ခွဲသွင်းမည်
+              // Data များလျှင် Error မတက်ရန် Batch ခွဲသွင်းခြင်း
               if (count % 400 === 0) {
                 await batch.commit();
                 batch = writeBatch(db);
               }
             }
 
-            // ကျန်နေသော မှတ်တမ်းများကို သွင်းမည်
             if (count % 400 !== 0) {
               await batch.commit();
             }
@@ -227,12 +227,14 @@ export default function SettingsPage() {
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}/>
 
       {/* Header */}
-      <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center gap-4">
-        <Settings size={32} className="text-cyan-500"/>
-        <h3 className="font-black text-2xl">Settings</h3>
+      <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Settings size={32} className="text-cyan-500"/>
+          <h3 className="font-black text-2xl">Settings</h3>
+        </div>
       </div>
 
-      {/* 📚 Setup Guides (Gemini Removed) */}
+      {/* 📚 Setup Guides (Gemini Removed completely) */}
       <div className="bg-[#0d1120] border-2 border-amber-500/20 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
         <h4 className="text-lg font-black text-amber-400 flex items-center gap-2"><HelpCircle size={22}/> API ချိတ်ဆက်နည်း လမ်းညွှန်</h4>
         
@@ -271,7 +273,7 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
-        {/* General + API Config */}
+        {/* General + API Config (Gemini Removed completely) */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
           <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Store size={20}/> General & API Config</h4>
           <div>
@@ -316,6 +318,8 @@ export default function SettingsPage() {
           
           <div className="flex gap-4">
             <button onClick={exportAllCSV} className="w-full py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center justify-center gap-2 hover:bg-emerald-600/30 transition-colors font-bold active:scale-95"><Download size={18}/> Export CSV</button>
+            
+            {/* 🌟 Import CSV နေရာမှန် */}
             <button onClick={() => fileRef.current?.click()} className="w-full py-3 bg-amber-600/20 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-center gap-2 hover:bg-amber-600/30 transition-colors font-bold active:scale-95"><Upload size={18}/> Import CSV</button>
             <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
           </div>

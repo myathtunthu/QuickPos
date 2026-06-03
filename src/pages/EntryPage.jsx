@@ -31,7 +31,7 @@ const ScannerModal = ({ onClose, onScan }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const readerRef = useRef(null);
   const streamRef = useRef(null);
-  
+
   const onScanRef = useRef(onScan);
   const onCloseRef = useRef(onClose);
 
@@ -62,16 +62,16 @@ const ScannerModal = ({ onClose, onScan }) => {
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
-        
+
         codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
           if (result) {
             const now = Date.now();
-            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return; 
-            
+            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return;
+
             lastScannedRef.current = { code: result.text, time: now };
-            
+
             setIsProcessing(true);
-            if (onScanRef.current) onScanRef.current(result.text); 
+            if (onScanRef.current) onScanRef.current(result.text);
 
             setTimeout(() => {
               setIsProcessing(false);
@@ -88,7 +88,7 @@ const ScannerModal = ({ onClose, onScan }) => {
       if (readerRef.current) readerRef.current.reset();
       if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
     };
-  }, []); 
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
@@ -97,7 +97,7 @@ const ScannerModal = ({ onClose, onScan }) => {
           <h3 className="font-black text-gray-800">Barcode Scanner</h3>
           <button type="button" onClick={() => onCloseRef.current()} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
-        
+
         <div className="relative">
           {cameraError ? (
             <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
@@ -207,8 +207,8 @@ export default function EntryPage({ products = [] }) {
         setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
         setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) { 
-        logger.error('Error fetching initial data:', err); 
+      } catch (err) {
+        logger.error('Error fetching initial data:', err);
         showToast('ဒေတာများရယူရာတွင် အမှားအယွင်းရှိနေပါသည်', 'error');
       }
     };
@@ -223,8 +223,8 @@ export default function EntryPage({ products = [] }) {
       const q = query(collection(db, 'pos_drafts'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(20));
       const snap = await getDocs(q);
       setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) { 
-      logger.error('Error fetching drafts:', err); 
+    } catch (err) {
+      logger.error('Error fetching drafts:', err);
     }
   };
 
@@ -259,7 +259,7 @@ export default function EntryPage({ products = [] }) {
     const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
     const response = addToCart(product, defaultUnit, 'retail', 1);
     if (response.success) setProdSearch('');
-    else showToast(response.message, 'error'); 
+    else showToast(response.message, 'error');
   }, [addToCart]);
 
   const handleTabChange = (tab) => {
@@ -269,7 +269,7 @@ export default function EntryPage({ products = [] }) {
         title: "Tab ပြောင်းလဲခြင်း",
         message: "Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?",
         onConfirm: () => {
-          setEntryTab(tab); 
+          setEntryTab(tab);
           clearCart();
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
         }
@@ -309,9 +309,9 @@ export default function EntryPage({ products = [] }) {
       showToast("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။", "success");
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); fetchDrafts();
-    } catch (err) { 
+    } catch (err) {
       logger.error('Error saving draft:', err);
-      showToast("Error saving draft: " + err.message, "error"); 
+      showToast("Error saving draft: " + err.message, "error");
     }
     setLoading(false);
     setPromptModal({ isOpen: false, name: '' });
@@ -338,10 +338,10 @@ export default function EntryPage({ products = [] }) {
     if (draft.cart && Array.isArray(draft.cart)) setCart(draft.cart.map(item => ({ ...item, id: item.id || Date.now() + Math.random() })));
     try {
       await deleteDoc(doc(db, 'pos_drafts', draft.id));
-      fetchDrafts(); setShowDrafts(false); 
+      fetchDrafts(); setShowDrafts(false);
       showToast("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။", "success");
-    } catch (err) { 
-      logger.error('Error restoring draft:', err); 
+    } catch (err) {
+      logger.error('Error restoring draft:', err);
     }
   };
 
@@ -353,7 +353,7 @@ export default function EntryPage({ products = [] }) {
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
         try {
-          await deleteDoc(doc(db, 'pos_drafts', id)); 
+          await deleteDoc(doc(db, 'pos_drafts', id));
           fetchDrafts();
           showToast("Draft ဖျက်သိမ်းပြီးပါပြီ", "success");
         } catch (err) {
@@ -388,18 +388,18 @@ export default function EntryPage({ products = [] }) {
       } else {
         batch.set(counterRef, { expenseCount: 1, tenantId: tenantId });
       }
-      
+
       await batch.commit();
-      setExpenseTitle(''); setExpenseAmt(''); 
+      setExpenseTitle(''); setExpenseAmt('');
       showToast("Expense သိမ်းဆည်းပြီးပါပြီ!", "success");
-    } catch (err) { 
+    } catch (err) {
       logger.error('Error saving expense:', err);
-      showToast("Error saving expense", "error"); 
+      showToast("Error saving expense", "error");
     }
     submitLock.current = false; setLoading(false);
   };
 
-  // ========== OFFLINE-FRIENDLY SUBMIT TRANSACTION ==========
+  // ========== OFFLINE-FRIENDLY SUBMIT TRANSACTION (FIXED LOADING) ==========
   const submitTransaction = async () => {
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
@@ -428,11 +428,13 @@ export default function EntryPage({ products = [] }) {
       }
     }
 
-    submitLock.current = true; setLoading(true);
+    submitLock.current = true;
+    setLoading(true);
+
     try {
       const batch = writeBatch(db);
 
-      // 1. Customer/Supplier handling
+      // Customer / Supplier handling
       if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const newPersonRef = doc(collection(db, collectionName));
@@ -447,7 +449,7 @@ export default function EntryPage({ products = [] }) {
         batch.update(personRef, { totalDebt: increment(remainingDebt) });
       }
 
-      // 2. Get next voucher number using Firestore transaction (works offline!)
+      // Counter transaction (offline-friendly)
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const countField = `${entryTab.toLowerCase()}Count`;
 
@@ -468,12 +470,11 @@ export default function EntryPage({ products = [] }) {
         nextCount = counterTxResult;
       } catch (counterErr) {
         logger.warn('Counter transaction failed, using fallback', counterErr);
-        nextCount = Date.now(); // Fallback unique number if offline transaction somehow fails
+        nextCount = Date.now();
       }
 
       const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
 
-      // 3. Prepare main record
       const ref = doc(collection(db, 'pos_records'));
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -496,7 +497,7 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, record);
 
-      // 4. Update stock
+      // Update stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -505,23 +506,22 @@ export default function EntryPage({ products = [] }) {
         batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
       });
 
-      // 5. Commit batch
       await batch.commit();
 
       setReceiptModal({ show: true, record });
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
 
-      // Refresh customer list
       const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (err) {
       logger.error("Firebase Save Error: ", err);
       showToast("Error saving transaction! Please check your internet connection and try again.", "error");
+    } finally {
+      submitLock.current = false;
+      setLoading(false);
     }
-
-    submitLock.current = false; setLoading(false);
   };
 
   const doPrint = () => { window.print(); };
@@ -563,11 +563,11 @@ export default function EntryPage({ products = [] }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:hidden">
           <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-xl font-black text-cyan-400 mb-4">ခဏဆိုင်းထားမည့် ဘေလ်အမည်</h3>
-            <input 
+            <input
               autoFocus
-              value={promptModal.name} 
-              onChange={e => setPromptModal({ ...promptModal, name: e.target.value })} 
-              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-cyan-500 mb-6" 
+              value={promptModal.name}
+              onChange={e => setPromptModal({ ...promptModal, name: e.target.value })}
+              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-cyan-500 mb-6"
               placeholder="ဥပမာ - စားပွဲ ၃"
             />
             <div className="flex gap-3">
@@ -824,7 +824,7 @@ export default function EntryPage({ products = [] }) {
       <style>{`
         @media print {
           @page {
-            size: 80mm auto; /* 58mm စက်သုံးရင် 58mm လို့ ပြောင်းပေးပါ */
+            size: 80mm auto;
             margin: 0;
           }
           body {

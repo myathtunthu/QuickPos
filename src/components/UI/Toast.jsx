@@ -1,11 +1,17 @@
+import React from 'react';
 import { useToastStore } from '../../store/toastStore';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+
+// 🌟 EntryPage, SettingsPage တို့မှ လှမ်းခေါ်နိုင်ရန် showToast ကို export လုပ်ပေးခြင်း
+export const showToast = (message, type = 'info') => {
+  useToastStore.getState().showToast(message, type);
+};
 
 export default function Toast() {
   const { toasts, removeToast } = useToastStore();
 
   return (
-    <div className="fixed bottom-4 right-4 z-[200] flex flex-col gap-2">
+    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 print:hidden">
       {toasts.map((toast) => {
         const isSuccess = toast.type === 'success';
         const isError = toast.type === 'error';

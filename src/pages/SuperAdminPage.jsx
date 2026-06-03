@@ -1,542 +1,858 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app'; 
-import { db, auth } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; 
-import { 
-  ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
-  Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
-  RotateCcw, Copy, Zap, Send, Bell, Cloud, FileText, ToggleRight, Key
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import {
+  collection, doc, writeBatch, serverTimestamp, increment,
+  getDoc, getDocs, query, where, orderBy, limit, setDoc, deleteDoc
+} from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { useAuth } from '../context/AuthContext';
+import { useCart } from '../hooks/useCart';
+import useDebounce from '../hooks/useDebounce';
+import {
+  Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X
 } from 'lucide-react';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
-// 🌟 Password များကို Database တွင် အစိမ်းအတိုင်းမသိမ်းဘဲ လုံခြုံစွာ ဖျောက်ထားမည့်စနစ် (Encryption Utility)
-const SECRET_SALT = "QPOS_SECURE_99";
-const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
-const decodeAuth = (hash) => decodeURIComponent(atob(hash.split('').reverse().join(''))).replace(SECRET_SALT, '');
+// 🌟 Custom UI & Utilities
+import ConfirmDialog from '../components/UI/ConfirmDialog';
+import { showToast } from '../components/UI/Toast';
+import logger from '../utils/logger';
 
-export default function SuperAdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(true);
+import ProductSearch from '../components/entry/ProductSearch';
+import ProductGrid from '../components/entry/ProductGrid';
+import ProductDropdown from '../components/entry/ProductDropdown';
+import CartSection from '../components/entry/CartSection';
+import PaymentSection from '../components/entry/PaymentSection';
+
+// ---------- Scanner Modal ----------
+const ScannerModal = ({ onClose, onScan }) => {
+  const videoRef = useRef(null);
+  const [cameraError, setCameraError] = useState(false);
+  const readerRef = useRef(null);
+  const streamRef = useRef(null);
   
-  const [tenants, setTenants] = useState([]);
-  const [filteredTenants, setFilteredTenants] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [adding, setAdding] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [editForm, setEditForm] = useState({ username: '' });
-  const [form, setForm] = useState({ shopName: '', username: '', password: '', expiryDate: '' });
-  const [stats, setStats] = useState({ total: 0, active: 0, expired: 0, trial: 0, blocked: 0 });
-  const [activityLog, setActivityLog] = useState([]);
-  const [showLog, setShowLog] = useState(false);
-  const [showChangePwd, setShowChangePwd] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [selectedTenant, setSelectedTenant] = useState(null);
-  const [tenantAnalytics, setTenantAnalytics] = useState(null);
-  const [bulkDays, setBulkDays] = useState('30');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailBody, setEmailBody] = useState('');
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [systemOverview, setSystemOverview] = useState({ totalSales: 0, totalOrders: 0, todayLogins: 0, topStores: [] });
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [revenueData, setRevenueData] = useState({ monthly: 0, unpaidInvoices: 0 });
-  const [storageData, setStorageData] = useState({});
-  const [showInvoice, setShowInvoice] = useState(false);
-  const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
+  // 🌟 Scanner Re-render ပြဿနာ ဖြေရှင်းချက် (ကင်မရာကို ခဏခဏ Restart မဖြစ်စေရန်)
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        try {
-          const snap = await getDoc(doc(db, 'pos_users', user.uid));
-          if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
-            setIsAuthenticated(true);
-          } else { setIsAuthenticated(false); }
-        } catch (e) { setIsAuthenticated(false); }
-      } else { setIsAuthenticated(false); }
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
 
-  const handleMasterLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-      const snap = await getDoc(doc(db, 'pos_users', userCred.user.uid));
-      if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
-        setIsAuthenticated(true);
-        addLog('🔓 Master Panel Accessed', 'login');
-      } else {
-        alert("Permission Denied: ဤအကောင့်သည် Super Admin မဟုတ်ပါ။");
-        await signOut(auth);
-      }
-    } catch (err) { alert('Login Error: ' + err.message); }
-    setLoading(false);
-  };
-
-  const addLog = async (action, type = 'action') => {
-    const log = { action, type, timestamp: new Date().toISOString(), id: Date.now() };
-    setActivityLog(prev => [log, ...prev].slice(0, 200));
-    setDoc(doc(db, 'audit_logs', String(log.id)), log).catch(() => {});
-  };
+  const lastScannedRef = useRef({ code: '', time: 0 });
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    const unsub = onSnapshot(collection(db, 'pos_users'), (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const admins = all.filter(u => u.role === 'admin');
-      setTenants(admins);
-      const now = new Date();
-      setStats({
-        total: admins.length,
-        active: admins.filter(u => !u.expiryDate || new Date(u.expiryDate) >= now).length,
-        expired: admins.filter(u => u.expiryDate && new Date(u.expiryDate) < now).length,
-        trial: admins.filter(u => !u.expiryDate).length,
-        blocked: admins.filter(u => u.status === 'blocked').length,
-      });
-    });
-    return () => unsub();
-  }, [isAuthenticated]);
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF, BarcodeFormat.QR_CODE
+    ]);
 
-  useEffect(() => {
-    let f = [...tenants];
-    const now = new Date();
-    if (statusFilter === 'active') f = f.filter(u => !u.expiryDate || new Date(u.expiryDate) >= now);
-    if (statusFilter === 'expired') f = f.filter(u => u.expiryDate && new Date(u.expiryDate) < now);
-    if (statusFilter === 'trial') f = f.filter(u => !u.expiryDate);
-    if (statusFilter === 'blocked') f = f.filter(u => u.status === 'blocked');
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      f = f.filter(u => (u.username||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q));
-    }
-    setFilteredTenants(f);
-  }, [tenants, searchQuery, statusFilter]);
+    const codeReader = new BrowserMultiFormatReader(hints);
+    readerRef.current = codeReader;
 
-  useEffect(() => {
-    if (!isAuthenticated || tenants.length === 0) return;
-    const loadOverview = async () => {
-      try {
-        let totalSales = 0, totalOrders = 0; const storeSales = [];
-        for (const t of tenants.slice(0, 20)) {
-          const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId), where('type', 'in', ['Sale', 'sale'])));
-          const sales = snap.docs.reduce((s, d) => s + (Number(d.data().amount) || 0), 0);
-          totalOrders += snap.docs.length; totalSales += sales;
-          storeSales.push({ name: t.username || t.email, sales, tenantId: t.tenantId });
-        }
-        const topStores = storeSales.sort((a,b) => b.sales - a.sales).slice(0, 5);
-        setSystemOverview({ totalSales, totalOrders, todayLogins: stats.active, topStores });
-        setRevenueData({ monthly: stats.active * 10000, unpaidInvoices: stats.expired * 10000 });
-      } catch (e) {}
+    const constraints = {
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
     };
-    loadOverview();
-  }, [isAuthenticated, tenants, stats]);
 
-  useEffect(() => {
-    if (!isAuthenticated || tenants.length === 0) return;
-    const loadStorage = async () => {
-      const data = {};
-      for (const t of tenants.slice(0, 10)) {
-        const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId)));
-        data[t.tenantId] = { records: snap.docs.length, size: snap.docs.length * 2 };
-      }
-      setStorageData(data);
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        
+        codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+          if (result) {
+            const now = Date.now();
+            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return; 
+            
+            lastScannedRef.current = { code: result.text, time: now };
+            if (onScanRef.current) onScanRef.current(result.text); 
+          }
+        });
+      })
+      .catch((err) => {
+        logger.error('Camera error:', err);
+        setCameraError(true);
+      });
+
+    return () => {
+      if (readerRef.current) readerRef.current.reset();
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
     };
-    loadStorage();
-  }, [isAuthenticated, tenants]);
-
-  // ==================== CREATE TENANT ====================
-  const handleCreateTenant = async (e) => {
-    e.preventDefault();
-    if (!form.shopName || !form.username || !form.password || !form.expiryDate) return alert("အားလုံးဖြည့်ပါ");
-    
-    try {
-      const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const secondaryApp = initializeApp(auth.app.options, "SecondaryApp" + Date.now());
-      const secondaryAuth = getAuth(secondaryApp);
-      const uc = await createUserWithEmailAndPassword(secondaryAuth, form.username.trim(), form.password);
-      
-      // 🌟 Password ကို အစိမ်းအတိုင်း (Plaintext) မသိမ်းဘဲ ကုဒ်ဝှက်၍ (Encrypted) သိမ်းဆည်းခြင်း
-      await setDoc(doc(db, 'pos_users', uc.user.uid), { 
-        email: form.username.trim(), 
-        username: form.username.trim(), 
-        role: 'admin', 
-        permissions: [], 
-        tenantId: tid, 
-        expiryDate: form.expiryDate, 
-        encryptedKey: encodeAuth(form.password), // ✅ FIX #1: Encrypted Password
-        createdAt: Date.now(), 
-        status: 'active' 
-      });
-      await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
-      
-      await secondaryAuth.signOut();
-
-      addLog(`✅ Created Tenant: ${form.username}`);
-      setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
-      setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
-      alert("✅ အကောင့်အသစ် ဖန်တီးပြီးပါပြီ။");
-    } catch (er) { 
-      alert(er.code === 'auth/email-already-in-use' ? 'Email သုံးပြီးသားဖြစ်နေပါသည်' : 'Error: ' + er.message); 
-    }
-  };
-
-  const startEdit = (u) => { setEditingUser(u); setEditForm({ username: u.username || '' }); };
-  const handleEditSave = async () => {
-    if (!editingUser) return;
-    const up = {};
-    if (editForm.username.trim()) up.username = editForm.username.trim();
-    await updateDoc(doc(db, 'pos_users', editingUser.id), up);
-    addLog(`✏️ Edited Tenant: ${editingUser.username}`);
-    setEditingUser(null); setEditForm({ username:'' });
-  };
-
-  const toggleStatus = async (userId, currentStatus) => {
-    const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
-    await updateDoc(doc(db, 'pos_users', userId), { status: newStatus });
-    addLog(`🔒 Status Changed: ${userId} → ${newStatus}`);
-  };
-
-  // 🌟 FORCE RESET (Database တွင် ကုဒ်ဝှက်၍ ပြန်သိမ်းပေးမည်)
-  const forcePasswordReset = async (user) => {
-    const newPwd = prompt(`Enter new password for ${user.username}:`);
-    if (!newPwd || newPwd.length < 6) return alert('အနည်းဆုံး ၆ လုံး');
-    // ✅ FIX #1: Password အစိမ်းအစား ကုဒ်ဝှက်၍ သိမ်းသည်
-    await updateDoc(doc(db, 'pos_users', user.id), { 
-      encryptedKey: encodeAuth(newPwd) 
-    });
-    addLog(`🔄 Force Password Reset (DB Key Updated): ${user.username}`); 
-    alert('✅ Database တွင် Auto Login အတွက် Password အသစ် ချိတ်ဆက်ပြီးပါပြီ။ (မှတ်ချက် - လုံခြုံရေးအရ Firebase Auth ၏ မူရင်း Password ပြောင်းလဲလိုပါက ဆိုင်ပိုင်ရှင်သည် Password Reset လင့်ခ်မှတဆင့် ကိုယ်တိုင်ပြောင်းရပါမည်)');
-  };
-
-  const updateExpiry = async (uid, nd) => { if(nd){ await updateDoc(doc(db,'pos_users',uid),{expiryDate:nd}); addLog(`📅 Expiry Updated for ${uid}`); } };
-  const deleteTenant = async (uid, un) => { if(window.confirm(`ဖျက်ရန်သေချာပါသလား? [${un}]`)){ await deleteDoc(doc(db,'pos_users',uid)); addLog(`🗑️ Deleted Tenant: ${un}`); } };
-
-  // ==================== AUTO LOGIN (IMPERSONATE) ပြန်လည်ထည့်သွင်းခြင်း ====================
-  const impersonateTenant = async (user) => {
-    try {
-      let targetPwd = null;
-      
-      // ✅ 1. ကုဒ်ဝှက်ထားသော Password ရှိလျှင် ဖြေထုတ်မည်
-      if (user.encryptedKey) {
-        targetPwd = decodeAuth(user.encryptedKey);
-      } 
-      // ✅ 2. အကောင့်ဟောင်းများဖြစ်၍ Plaintext ကျန်နေသေးလျှင်
-      else if (user.passwordRaw) {
-        targetPwd = user.passwordRaw;
-      }
-      
-      if (!targetPwd) {
-        const manualPwd = prompt(`စကားဝှက်မှတ်တမ်း မရှိပါ။ ${user.username} ၏ Password ကို ထည့်ပါ:`);
-        if (!manualPwd) return;
-        targetPwd = manualPwd;
-      }
-
-      await signInWithEmailAndPassword(auth, user.email || user.username, targetPwd);
-      window.open('/dashboard', '_blank');
-      addLog(`👤 Auto-Logged in to: ${user.username}`);
-    } catch (err) { 
-      alert(`Auto Login ပျက်ကွက်ပါသည်။\n(ဆိုင်ပိုင်ရှင်သည် ပြင်ပမှ Password ပြောင်းသွားပုံရပါသည်)\nError: ${err.message}`); 
-    }
-  };
-
-  // ==================== CLONE TENANT ====================
-  const cloneTenant = async (user) => {
-    const newEmail = prompt(`Enter new email for clone of ${user.username}:`);
-    if (!newEmail || !newEmail.includes('@')) return alert('Valid email required');
-    const newPassword = prompt('Enter password for new admin:');
-    if (!newPassword || newPassword.length < 6) return alert('Password min 6 chars');
-    try {
-      const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const secondaryApp = initializeApp(auth.app.options, "SecondaryAppClone" + Date.now());
-      const secondaryAuth = getAuth(secondaryApp);
-      const uc = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
-      
-      await setDoc(doc(db, 'pos_users', uc.user.uid), { 
-        email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
-        permissions: user.permissions || [], tenantId: tid, 
-        expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], 
-        encryptedKey: encodeAuth(newPassword), // ✅ Encrypted
-        createdAt: Date.now(), status: 'active' 
-      });
-      await setDoc(doc(db, 'pos_settings', tid), { shopName: `${user.username || 'Shop'} (Clone)`, tenantId: tid, createdAt: Date.now() });
-      await secondaryAuth.signOut();
-      
-      addLog(`📋 Cloned Tenant: ${user.username} → ${newEmail}`); alert(`✅ Cloned! Email: ${newEmail}`);
-    } catch (err) { alert('Error: ' + err.message); }
-  };
-
-  const loadTenantAnalytics = async (tenant) => {
-    setSelectedTenant(tenant); setShowAnalytics(true);
-    addLog(`👁️ Viewed Analytics for ${tenant.username}`);
-    try {
-      const [recSnap, prodSnap] = await Promise.all([
-        getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', tenant.tenantId))),
-        getDocs(query(collection(db, 'pos_products'), where('tenantId', '==', tenant.tenantId)))
-      ]);
-      const records = recSnap.docs.map(d => d.data());
-      const products = prodSnap.docs.map(d => d.data());
-      setTenantAnalytics({
-        totalSales: records.filter(r => r.type === 'Sale' || r.type === 'sale').reduce((s,r) => s + (Number(r.amount)||0), 0),
-        totalPurchases: records.filter(r => r.type === 'Purchase' || r.type === 'purchase').reduce((s,r) => s + (Number(r.amount)||0), 0),
-        totalExpenses: records.filter(r => r.type === 'Expense' || r.type === 'expense').reduce((s,r) => s + (Number(r.amount)||0), 0),
-        orderCount: records.filter(r => r.type === 'Sale' || r.type === 'sale').length,
-        productCount: products.length, recordCount: records.length
-      });
-    } catch (e) { console.error(e); }
-  };
-
-  const sendBulkEmail = async () => {
-    if (!emailSubject || !emailBody) return alert('Subject နဲ့ Body ဖြည့်ပါ');
-    const recipients = filteredTenants.map(t => t.email || t.username).filter(Boolean);
-    addLog(`📧 Bulk Email Sent to ${recipients.length} admins`);
-    alert(`✅ Email ready for ${recipients.length} admins`);
-    setShowEmailForm(false); setEmailSubject(''); setEmailBody('');
-  };
-
-  const exportCSV = () => {
-    const h = 'Username,Email,Tenant ID,Expiry,Status';
-    const rows = filteredTenants.map(t => [t.username||t.email, t.email||'', t.tenantId, t.expiryDate||'Trial', (t.expiryDate&&new Date(t.expiryDate)<new Date())?'Expired':'Active']);
-    let csv = h+'\n'+rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
-    const b = new Blob(['\uFEFF'+csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`tenants_${new Date().toISOString().slice(0,10)}.csv`; a.click();
-    addLog('📥 Exported Tenants CSV');
-  };
-
-  const generateInvoice = (tenant) => {
-    setSelectedInvoiceTenant(tenant);
-    setShowInvoice(true);
-  };
-
-  const downloadInvoicePDF = (tenant) => {
-    const w = window.open('', '_blank', 'width=800,height=900');
-    w.document.write(`
-      <html><head><title>Invoice - ${tenant.username}</title>
-      <style>
-        body { font-family: sans-serif; padding: 40px; color: #333; }
-        .invoice-box { max-width: 800px; margin: auto; border: 1px solid #eee; padding: 30px; box-shadow: 0 0 10px rgba(0,0,0,0.15); }
-        h2 { color: #e11d48; }
-        table { line-height: inherit; text-align: left; width: 100%; border-collapse: collapse; margin-top: 20px; }
-        table td { padding: 10px; border-bottom: 1px solid #eee; }
-        .total { font-weight: bold; font-size: 18px; color: #000; }
-      </style></head><body>
-        <div class="invoice-box">
-          <h2>QuickPOS Subscription Invoice</h2>
-          <p><strong>Date:</strong> ${new Date().toISOString().split('T')[0]}</p>
-          <hr/>
-          <table>
-            <tr><td><strong>Billed To:</strong></td><td>${tenant.username} (${tenant.email || 'N/A'})</td></tr>
-            <tr><td><strong>Tenant ID:</strong></td><td>${tenant.tenantId}</td></tr>
-            <tr><td><strong>Service Plan:</strong></td><td>Standard Monthly License</td></tr>
-            <tr><td><strong>Status:</strong></td><td style="color: red;"><strong>Unpaid</strong></td></tr>
-          </table>
-          <br/>
-          <table style="background: #f9fafb;">
-            <tr><td><strong>Total Amount Due:</strong></td><td style="text-align: right;" class="total">10,000 Ks</td></tr>
-          </table>
-          <p style="text-align: center; margin-top: 50px; font-size: 12px; color: #777;">Thank you for using QuickPOS!</p>
-        </div>
-        <script>
-          window.onload = () => { window.print(); window.close(); }
-        </script>
-      </body></html>
-    `);
-    w.document.close();
-    addLog(`📄 Downloaded Invoice PDF for ${tenant.username}`);
-  };
-
-  const backupTenantData = async (tenant) => {
-    try {
-      const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', tenant.tenantId)));
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const json = JSON.stringify(data, null, 2);
-      const b = new Blob([json], { type: 'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_${tenant.tenantId}.json`; a.click();
-      addLog(`💾 Backup Downloaded: ${tenant.username}`); alert('✅ Backup downloaded!');
-    } catch (err) { alert('Error: ' + err.message); }
-  };
-
-  const sendTelegramNotification = async (message) => {
-    const snap = await getDoc(doc(db, 'settings', 'telegram'));
-    if (!snap.exists()) return alert('Telegram not configured. Set bot token and chat ID in settings.');
-    const { botToken, chatId } = snap.data();
-    try {
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
-      });
-      addLog(`📱 Telegram Sent: ${message}`); alert('✅ Telegram notification sent!');
-    } catch (err) { alert('Error: ' + err.message); }
-  };
-
-  const bulkUpdateExpiry = async () => {
-    const days = parseInt(bulkDays) || 30;
-    const now = new Date(); now.setDate(now.getDate() + days);
-    const newDate = now.toISOString().split('T')[0];
-    const batch = writeBatch(db);
-    for (const id of selectedIds) { batch.update(doc(db, 'pos_users', id), { expiryDate: newDate }); }
-    await batch.commit();
-    addLog(`📅 Bulk Expiry Update: ${selectedIds.length} admins +${days} days`);
-    setSelectedIds([]); alert(`✅ ${selectedIds.length} Admins သက်တမ်းတိုးပြီး`);
-  };
-
-  if (loading) return <div className="min-h-screen bg-[#080c14] flex items-center justify-center"><div className="w-12 h-12 border-4 border-rose-400 border-t-transparent rounded-full animate-spin"/></div>;
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
-        <form onSubmit={handleMasterLogin} className="bg-rose-950/20 border-2 border-rose-500/30 p-8 sm:p-10 rounded-3xl w-full max-w-md text-center shadow-[0_0_50px_rgba(244,63,94,0.15)] animate-in fade-in">
-          <ShieldAlert size={64} className="mx-auto text-rose-500 mb-6"/>
-          <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-widest">Master Control</h2>
-          <p className="text-rose-400 font-bold mb-8">Restricted Area</p>
-          <div className="space-y-4 mb-8">
-            <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="Super Admin Email" className="w-full bg-black/50 border border-rose-500/30 text-white px-5 py-4 rounded-xl outline-none focus:border-rose-400"/>
-            <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full bg-black/50 border border-rose-500/30 text-white px-5 py-4 rounded-xl outline-none focus:border-rose-400"/>
-          </div>
-          <button type="submit" className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xl rounded-xl transition-all shadow-lg shadow-rose-500/20 active:scale-95">Access System</button>
-        </form>
-      </div>
-    );
-  }
+  }, []); // 🌟 Dependency အလွတ်ထားသဖြင့် ကင်မရာ တစ်ခါသာပွင့်မည်
 
   return (
-    <div className="min-h-screen bg-[#080c14] p-4 sm:p-8 text-white">
-      <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
-        
-        {/* HEADER & OVERVIEW */}
-        <div className="bg-gray-900 border-2 border-rose-500/20 rounded-3xl p-6 shadow-2xl">
-          <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="p-4 bg-rose-500/10 rounded-2xl text-rose-500"><ShieldAlert size={36}/></div>
-              <div>
-                <h1 className="text-3xl font-black uppercase tracking-widest">SaaS Master Panel</h1>
-                <p className="text-rose-400 font-bold">Manage Tenants & Subscriptions</p>
-              </div>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={()=>setShowNotifications(!showNotifications)} className="px-4 py-2 bg-yellow-600/20 text-yellow-400 rounded-xl font-bold flex items-center gap-2 relative">
-                <Bell size={16}/> Alerts
-                {notifications.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-xs flex items-center justify-center">{notifications.length}</span>}
-              </button>
-              <button onClick={()=>setShowLog(!showLog)} className="px-4 py-2 bg-purple-600/20 text-purple-400 rounded-xl font-bold flex items-center gap-2"><Activity size={16}/> Log</button>
-              <button onClick={()=>setShowEmailForm(!showEmailForm)} className="px-4 py-2 bg-green-600/20 text-green-400 rounded-xl font-bold flex items-center gap-2"><Send size={16}/> Email</button>
-              <button onClick={exportCSV} className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded-xl font-bold flex items-center gap-2"><Download size={16}/> Export</button>
-              <button onClick={()=>{setAdding(!adding);setEditingUser(null);}} className="px-4 py-2 bg-rose-600 text-white rounded-xl font-bold flex items-center gap-2"><Plus size={16}/> New</button>
-              <button onClick={()=>signOut(auth)} className="px-4 py-2 bg-slate-800 text-white rounded-xl font-bold flex items-center gap-2"><X size={16}/> Logout</button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {[{label:'Total',value:stats.total,icon:Users,color:'text-cyan-400'},{label:'Active',value:stats.active,icon:UserCheck,color:'text-emerald-400'},{label:'Expired',value:stats.expired,icon:UserX,color:'text-rose-400'},{label:'Trial',value:stats.trial,icon:Clock,color:'text-amber-400'},{label:'Blocked',value:stats.blocked,icon:ToggleRight,color:'text-purple-400'}].map(s=>{const I=s.icon;return <div key={s.label} className="bg-black/30 rounded-2xl p-4 text-center"><I size={24} className={`mx-auto mb-2 ${s.color}`}/><p className="text-2xl font-black">{s.value}</p><p className="text-xs text-slate-500">{s.label}</p></div>;})}
-          </div>
+    <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
+      <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
+        <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
+          <h3 className="font-black text-gray-800">Continuous Scanner Active</h3>
+          <button type="button" onClick={() => onCloseRef.current()} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
-
-        {/* MODALS */}
-        {showLog && (
-          <div className="bg-gray-900 border-2 border-purple-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
-            <h3 className="text-lg font-black text-purple-400 mb-4">📋 Full Audit Log</h3>
-            <div className="space-y-2 text-sm">{activityLog.length===0&&<p className="text-slate-500">No activity</p>}{activityLog.map(l=><div key={l.id} className="flex justify-between text-slate-400"><span>{l.action}</span><span className="text-xs">{new Date(l.timestamp).toLocaleString()}</span></div>)}</div>
-          </div>
+        {cameraError ? (
+          <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
+        ) : (
+          <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
         )}
-
-        {showEmailForm && (
-          <div className="bg-gray-900 border-2 border-green-500/20 rounded-3xl p-6 space-y-3">
-            <h3 className="text-lg font-black text-green-400">📧 Bulk Email ({filteredTenants.length} admins)</h3>
-            <input value={emailSubject} onChange={e=>setEmailSubject(e.target.value)} placeholder="Subject" className="w-full bg-black/50 border border-green-500/20 rounded-xl px-4 py-3 text-white"/>
-            <textarea value={emailBody} onChange={e=>setEmailBody(e.target.value)} placeholder="Message..." rows={3} className="w-full bg-black/50 border border-green-500/20 rounded-xl px-4 py-3 text-white"/>
-            <div className="flex gap-3"><button onClick={sendBulkEmail} className="px-6 py-2 bg-green-600 rounded-xl font-bold">Send</button><button onClick={()=>setShowEmailForm(false)} className="px-6 py-2 bg-slate-700 rounded-xl">Cancel</button></div>
-          </div>
-        )}
-
-        {adding && (
-          <form onSubmit={handleCreateTenant} className="bg-gray-900 border-2 border-cyan-500/20 rounded-3xl p-6 space-y-4">
-            <h3 className="text-lg font-black text-cyan-400">Register New Shop</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input required value={form.shopName} onChange={e=>setForm({...form,shopName:e.target.value})} placeholder="Shop Name" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
-              <input required type="email" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="Admin Email" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
-              <input required value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
-              <input required type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400"/>
-            </div>
-            <div className="flex gap-3"><button type="submit" className="px-6 py-3 bg-cyan-600 rounded-xl font-bold">Create</button><button type="button" onClick={()=>setAdding(false)} className="px-6 py-3 bg-slate-700 rounded-xl">Cancel</button></div>
-          </form>
-        )}
-
-        {/* TENANT LIST */}
-        <div className="space-y-3">
-          <div className="flex gap-3 flex-wrap items-center mt-6">
-            <div className="relative flex-1 min-w-[200px]"><Search size={18} className="absolute left-4 top-3 text-slate-500"/><input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search admin..." className="w-full bg-gray-900 border border-white/10 rounded-xl pl-12 pr-4 py-3"/></div>
-            <div className="flex gap-2">{['all','active','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
-          </div>
-          
-          <p className="text-sm text-slate-500">{filteredTenants.length} tenants found</p>
-          
-          {filteredTenants.map(t=>{
-            const isExpired=t.expiryDate&&new Date(t.expiryDate)<new Date();
-            const isBlocked=t.status==='blocked';
-            const storage = storageData[t.tenantId] || { records: 0, size: 0 };
-            return (
-              <div key={t.id} className={`bg-gray-900 p-5 rounded-2xl border-2 ${isExpired?'border-rose-500/20':isBlocked?'border-purple-500/20':'border-emerald-500/10'}`}>
-                <div className="flex flex-col sm:flex-row justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>toggleSelect(t.id)} className="mt-2 accent-cyan-500 w-5 h-5"/>
-                    <div className={`p-3 rounded-xl ${isExpired?'bg-rose-500/10 text-rose-500':isBlocked?'bg-purple-500/10 text-purple-500':'bg-emerald-500/10 text-emerald-500'}`}><Store size={28}/></div>
-                    <div>
-                      <p className="font-black text-xl">{t.username||t.email}</p>
-                      <p className="text-xs text-slate-500 mt-1">Tenant ID: {t.tenantId}</p>
-
-                      <div className="flex gap-2 mt-1 flex-wrap">
-                        <span className={`text-xs font-bold ${isExpired?'text-rose-400':isBlocked?'text-purple-400':'text-emerald-400'}`}>{isExpired?'⚠️ Expired':isBlocked?'🚫 Blocked':'✓ Active'}</span>
-                        <span className="text-xs text-slate-500">| 📦 {storage.records} recs (~{storage.size}KB)</span>
-                      </div>
-                      
-                      {/* 🌟 နေရာအသစ်: Analytics စသည့် Tools များ */}
-                      <div className="flex gap-2 mt-3 flex-wrap">
-                        <button onClick={()=>loadTenantAnalytics(t)} className="text-xs px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg hover:bg-cyan-600/40"><Eye size={12} className="inline mr-1"/> Analytics</button>
-                        <button onClick={()=>backupTenantData(t)} className="text-xs px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40"><Cloud size={12} className="inline mr-1"/> Backup</button>
-                        <button onClick={()=>generateInvoice(t)} className="text-xs px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/40"><FileText size={12} className="inline mr-1"/> Invoice</button>
-                        <button onClick={()=>sendTelegramNotification(`Admin Update: ${t.username}`)} className="text-xs px-3 py-1.5 bg-sky-600/20 text-sky-400 rounded-lg hover:bg-sky-600/40"><Send size={12} className="inline mr-1"/> Notify</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions Area */}
-                  {editingUser?.id===t.id?(
-                    <div className="flex gap-2 items-center mt-4 sm:mt-0">
-                      <input value={editForm.username} onChange={e=>setEditForm({...editForm,username:e.target.value})} placeholder="Username" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-32"/>
-                      <button onClick={handleEditSave} className="p-2 bg-indigo-600 rounded-lg"><Save size={16}/></button>
-                      <button onClick={()=>setEditingUser(null)} className="p-2 bg-slate-700 rounded-lg"><X size={16}/></button>
-                    </div>
-                  ):(
-                    <div className="flex gap-2 items-center flex-wrap mt-4 sm:mt-0">
-                      <input type="date" defaultValue={t.expiryDate} onBlur={e=>updateExpiry(t.id,e.target.value)} className={`bg-black border rounded-lg px-3 py-2 text-sm ${isExpired?'border-rose-500/30 text-rose-300':'border-emerald-500/30 text-emerald-300'}`}/>
-                      
-                      <button onClick={()=>startEdit(t)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg" title="Edit"><Edit3 size={16}/></button>
-                      
-                      <button onClick={()=>forcePasswordReset(t)} className="px-4 py-2 bg-amber-600/20 text-amber-400 font-bold rounded-lg flex items-center gap-2 hover:bg-amber-600/40 transition-colors border border-amber-500/30">
-                        <RotateCcw size={16}/> Connect New Key
-                      </button>
-
-                      <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>
-                      
-                      {/* 🌟 AUTO LOGIN (IMPERSONATE) BUTTON 🌟 */}
-                      <button onClick={()=>impersonateTenant(t)} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-lg flex items-center gap-2 shadow-lg shadow-purple-600/40 transition-transform active:scale-95">
-                        <Zap size={16}/> Auto Login
-                      </button>
-                      
-                      <button onClick={()=>cloneTenant(t)} className="p-2 bg-cyan-600/20 text-cyan-400 rounded-lg" title="Clone"><Copy size={16}/></button>
-                      <button onClick={()=>deleteTenant(t.id,t.username)} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg" title="Delete"><Trash2 size={16}/></button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div className="p-4 bg-gray-100 text-center text-xs text-green-600 font-black animate-pulse">
+          စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများအား တောက်လျှောက် ဖတ်နိုင်ပါသည်
         </div>
       </div>
     </div>
+  );
+};
+
+// ---------- Main EntryPage Component ----------
+export default function EntryPage({ products = [] }) {
+  const { profile } = useAuth();
+  const tenantId = profile?.tenantId;
+  const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
+
+  const [shopSettings, setShopSettings] = useState({
+    shopName: profile?.shopName || 'QuickPOS',
+    phone: '',
+    address: ''
+  });
+
+  const todayISO = new Date().toISOString().split('T')[0];
+  const [entryDate, setEntryDate] = useState(todayISO);
+  const [entryTab, setEntryTab] = useState('Sale');
+
+  const [customers, setCustomers] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [personSearch, setPersonSearch] = useState('');
+  const [showPersonDropdown, setShowPersonDropdown] = useState(false);
+
+  const [newPersonPhone, setNewPersonPhone] = useState('');
+  const [newPersonAddress, setNewPersonAddress] = useState('');
+
+  const [selCategory, setSelCategory] = useState('All');
+  const [prodSearch, setProdSearch] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const debouncedSearch = useDebounce(prodSearch, 300);
+
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paidAmount, setPaidAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
+
+  const [expenseTitle, setExpenseTitle] = useState('');
+  const [expenseAmt, setExpenseAmt] = useState('');
+
+  const [drafts, setDrafts] = useState([]);
+  const [showDrafts, setShowDrafts] = useState(false);
+
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
+
+  const submitLock = useRef(false);
+
+  const {
+    cart, setCart, addToCart, removeCartItem, updateCartItemQty,
+    updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount,
+    updateCartItemPrice, clearCart, cartTotals, globalDiscountAmt,
+    setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType
+  } = useCart(products, entryTab);
+
+  const barcodeMap = useMemo(() => {
+    const map = new Map();
+    if (!products || !Array.isArray(products)) return map;
+    products.forEach(p => {
+      if (p.barcode) map.set(p.barcode.trim().toLowerCase(), { product: p, unit: p.packageUnits?.[0] });
+      p.packageUnits?.forEach(u => {
+        if (u.barcode) map.set(u.barcode.trim().toLowerCase(), { product: p, unit: u });
+        if (u.barcodes?.retail) map.set(u.barcodes.retail.trim().toLowerCase(), { product: p, unit: u });
+        if (u.barcodes?.wholesale) map.set(u.barcodes.wholesale.trim().toLowerCase(), { product: p, unit: u });
+      });
+    });
+    return map;
+  }, [products]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const fetchAllData = async () => {
+      try {
+        const settingsSnap = await getDoc(doc(db, 'pos_settings', tenantId));
+        if (settingsSnap.exists()) {
+          const sData = settingsSnap.data();
+          setShopSettings({
+            shopName: sData.shopName || profile?.shopName || 'QuickPOS',
+            phone: sData.phone || '',
+            address: sData.address || ''
+          });
+        }
+        const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+        setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
+        setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) { 
+        logger.error('Error fetching initial data:', err); 
+        showToast('ဒေတာများရယူရာတွင် အမှားအယွင်းရှိနေပါသည်', 'error');
+      }
+    };
+
+    fetchAllData();
+    fetchDrafts();
+  }, [tenantId, profile]);
+
+  const fetchDrafts = async () => {
+    if (!tenantId) return;
+    try {
+      const q = query(collection(db, 'pos_drafts'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(20));
+      const snap = await getDocs(q);
+      setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (err) { 
+      logger.error('Error fetching drafts:', err); 
+    }
+  };
+
+  useEffect(() => {
+    setPersonSearch(''); setSelectedPerson(null);
+    setNewPersonPhone(''); setNewPersonAddress('');
+  }, [entryTab]);
+
+  const personList = entryTab === 'Sale' ? customers : suppliers;
+  const filteredPersons = personList.filter(p =>
+    p.name.toLowerCase().includes(personSearch.toLowerCase()) || p.phone?.includes(personSearch)
+  );
+
+  const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+
+  const filteredProducts = useMemo(() => {
+    let result = products;
+    if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(p => {
+        const hasBarcode = p.packageUnits?.some(u =>
+          u.barcodes?.retail?.toLowerCase().includes(q) || u.barcodes?.wholesale?.toLowerCase().includes(q) || u.barcode?.toLowerCase().includes(q)
+        );
+        return (p.name || '').toLowerCase().includes(q) || hasBarcode;
+      });
+    }
+    return result;
+  }, [products, debouncedSearch, selCategory]);
+
+  const handleSelectProduct = useCallback((product) => {
+    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
+    const response = addToCart(product, defaultUnit, 'retail', 1);
+    if (response.success) setProdSearch('');
+    else showToast(response.message, 'error'); 
+  }, [addToCart]);
+
+  const handleTabChange = (tab) => {
+    if (cart.length > 0) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Tab ပြောင်းလဲခြင်း",
+        message: "Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?",
+        onConfirm: () => {
+          setEntryTab(tab); 
+          clearCart();
+          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        }
+      });
+      return;
+    }
+    setEntryTab(tab); clearCart();
+  };
+
+  const handleHoldInvoiceClick = () => {
+    if (cart.length === 0) return;
+    if (cart.some(x => x.quantity === '' || Number(x.quantity) <= 0)) {
+      showToast("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။", "error");
+      return;
+    }
+    setPromptModal({ isOpen: true, name: personSearch || "" });
+  };
+
+  const executeHoldInvoice = async (name) => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      const draftRef = doc(collection(db, 'pos_drafts'));
+      const sanitizedCart = cart.map(item => ({
+        id: item.id, productId: item.productId || null, productSnapshot: products.find(p => p.id === item.productId) || null,
+        unitName: item.unitName || '', multiplier: Number(item.multiplier) || 1, priceType: item.priceType || 'retail',
+        unitPrice: Number(item.unitPrice) || 0, quantity: Number(item.quantity) || 1, baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
+        itemDiscountAmt: Number(item.itemDiscountAmt) || 0, notes: item.notes || ''
+      }));
+
+      await setDoc(draftRef, {
+        tenantId: tenantId || '', draftName: name || 'No Name', type: entryTab || 'Sale', cart: sanitizedCart,
+        cartTotals: { subtotal: Number(cartTotals.subtotal) || 0, itemDiscounts: Number(cartTotals.itemDiscounts) || 0, globalDisc: Number(cartTotals.globalDisc) || 0, total: Number(cartTotals.total) || 0 },
+        personSearch: personSearch || '', selectedPerson: selectedPerson || null, newPersonPhone: newPersonPhone || '', newPersonAddress: newPersonAddress || '',
+        globalDiscountAmt: globalDiscountAmt || '', globalDiscountType: globalDiscountType || '%', paymentMethod: paymentMethod || 'Cash', paidAmount: paidAmount || '', createdAt: serverTimestamp()
+      });
+      showToast("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။", "success");
+      clearCart(); setPersonSearch(''); setSelectedPerson(null);
+      setNewPersonPhone(''); setNewPersonAddress(''); fetchDrafts();
+    } catch (err) { 
+      logger.error('Error saving draft:', err);
+      showToast("Error saving draft: " + err.message, "error"); 
+    }
+    setLoading(false);
+    setPromptModal({ isOpen: false, name: '' });
+  };
+
+  const restoreDraft = (draft) => {
+    if (cart.length > 0) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Draft ပြန်လည်ရယူခြင်း",
+        message: "လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?",
+        onConfirm: () => executeRestoreDraft(draft)
+      });
+      return;
+    }
+    executeRestoreDraft(draft);
+  };
+
+  const executeRestoreDraft = async (draft) => {
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+    clearCart(); setEntryTab(draft.type || 'Sale'); setPersonSearch(draft.personSearch || ''); setSelectedPerson(draft.selectedPerson || null);
+    setNewPersonPhone(draft.newPersonPhone || ''); setNewPersonAddress(draft.newPersonAddress || ''); setGlobalDiscountAmt(draft.globalDiscountAmt || '');
+    setGlobalDiscountType(draft.globalDiscountType || '%'); setPaymentMethod(draft.paymentMethod || 'Cash'); setPaidAmount(draft.paidAmount || '');
+    if (draft.cart && Array.isArray(draft.cart)) setCart(draft.cart.map(item => ({ ...item, id: item.id || Date.now() + Math.random() })));
+    try {
+      await deleteDoc(doc(db, 'pos_drafts', draft.id));
+      fetchDrafts(); setShowDrafts(false); 
+      showToast("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။", "success");
+    } catch (err) { 
+      logger.error('Error restoring draft:', err); 
+    }
+  };
+
+  const deleteDraft = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Draft ဖျက်သိမ်းခြင်း",
+      message: "ဤ Draft အား ဖျက်မှာ သေချာပါသလား?",
+      onConfirm: async () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        try {
+          await deleteDoc(doc(db, 'pos_drafts', id)); 
+          fetchDrafts();
+          showToast("Draft ဖျက်သိမ်းပြီးပါပြီ", "success");
+        } catch (err) {
+          logger.error('Error deleting draft:', err);
+        }
+      }
+    });
+  };
+
+  const submitExpense = async () => {
+    if (submitLock.current) return;
+    if (!expenseTitle || !expenseAmt || !tenantId) return;
+
+    submitLock.current = true; setLoading(true);
+    try {
+      const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+      const counterSnap = await getDoc(counterRef);
+      const nextCount = (counterSnap.exists() ? (counterSnap.data().expenseCount || 0) : 0) + 1;
+      const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`;
+
+      const batch = writeBatch(db);
+      const ref = doc(collection(db, 'pos_records'));
+
+      batch.set(ref, {
+        type: 'Expense', tenantId: tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
+      });
+
+      if (counterSnap.exists()) {
+        batch.set(counterRef, { expenseCount: increment(1), tenantId: tenantId }, { merge: true });
+      } else {
+        batch.set(counterRef, { expenseCount: 1, tenantId: tenantId });
+      }
+      
+      await batch.commit();
+      setExpenseTitle(''); setExpenseAmt(''); 
+      showToast("Expense သိမ်းဆည်းပြီးပါပြီ!", "success");
+    } catch (err) { 
+      logger.error('Error saving expense:', err);
+      showToast("Error saving expense", "error"); 
+    }
+    submitLock.current = false; setLoading(false);
+  };
+
+  const submitTransaction = async () => {
+    if (submitLock.current) return;
+    if (cart.length === 0 || !tenantId) return;
+
+    const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
+    if (invalidItem) return showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`, "error");
+
+    const total = Number(cartTotals.total) || 0;
+    const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
+    const remainingDebt = Math.max(0, total - paid);
+    const changeAmount = Math.max(0, paid - total);
+
+    let personIdForRecord = selectedPerson?.id || null;
+    let personNameForRecord = selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
+
+    if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
+      showToast(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`, "error");
+      return;
+    }
+
+    if (entryTab === 'Sale') {
+      for (const item of cart) {
+        const prodData = products.find(p => p.id === item.productId);
+        const currentStockBase = Number(prodData?.stockBase) || Number(prodData?.stock) || 0;
+        if (item.baseQuantity > currentStockBase) return showToast(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`, "error");
+      }
+    }
+
+    submitLock.current = true; setLoading(true);
+    try {
+      const batch = writeBatch(db);
+
+      if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
+        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+        const newPersonRef = doc(collection(db, collectionName));
+        personIdForRecord = newPersonRef.id;
+        batch.set(newPersonRef, {
+          tenantId: tenantId, name: personNameForRecord, phone: newPersonPhone.trim(), address: newPersonAddress.trim(),
+          totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+      } else if (personIdForRecord && remainingDebt > 0) {
+        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+        const personRef = doc(db, collectionName, personIdForRecord);
+        batch.set(personRef, { totalDebt: increment(remainingDebt), tenantId: tenantId }, { merge: true });
+      }
+
+      const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+      const counterSnap = await getDoc(counterRef);
+      const countField = `${entryTab.toLowerCase()}Count`;
+      const nextCount = (counterSnap.exists() ? (counterSnap.data()[countField] || 0) : 0) + 1;
+      const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
+
+      const ref = doc(collection(db, 'pos_records'));
+      const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+      const record = {
+        id: ref.id, type: entryTab || 'Sale', tenantId: tenantId, personName: personNameForRecord, customerId: entryTab === 'Sale' ? personIdForRecord : null, supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
+        cashier: cashierName, time: currentTime, voucherNo: voucherNo,
+        itemsDetail: cart.map(i => ({
+          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail', baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
+        })),
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
+        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount, date: entryDate || todayISO, createdAt: serverTimestamp()
+      };
+      batch.set(ref, record);
+
+      cart.forEach(item => {
+        if (!item.productId) return;
+        const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
+        const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
+        const prodRef = doc(db, 'pos_products', item.productId);
+        batch.set(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange), tenantId: tenantId }, { merge: true });
+      });
+
+      if (counterSnap.exists()) {
+        batch.set(counterRef, { [countField]: increment(1), tenantId: tenantId }, { merge: true });
+      } else {
+        batch.set(counterRef, { [countField]: 1, tenantId: tenantId });
+      }
+
+      await batch.commit();
+
+      setReceiptModal({ show: true, record });
+      clearCart(); setPersonSearch(''); setSelectedPerson(null);
+      setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
+      
+      const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+      setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      
+    } catch (err) { 
+      logger.error("Firebase Save Error: ", err); 
+      showToast("Error saving transaction! Please check your internet connection and try again.", "error"); 
+    }
+    
+    submitLock.current = false; setLoading(false);
+  };
+
+  const doPrint = () => { window.print(); };
+
+  const handleBarcodeScanned = (text) => {
+    const cleanText = text.trim().toLowerCase();
+    const match = barcodeMap.get(cleanText);
+
+    if (match) {
+      const { product, unit } = match;
+      const res = addToCart(product, unit, 'retail', 1);
+      if (!res.success) showToast(res.message, 'error');
+      else {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator(); const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+          osc.start(); osc.stop(ctx.currentTime + 0.3);
+        } catch (e) {}
+      }
+    } else {
+      showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`, "error");
+    }
+  };
+
+  return (
+    <>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #receipt-print-area, #receipt-print-area * { visibility: visible; }
+          #receipt-print-area { position: absolute; left: 0; top: 0; width: 80mm; margin: 0; padding: 10px; }
+          @page { margin: 0; }
+        }
+      `}</style>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+      />
+
+      {promptModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:hidden">
+          <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-xl font-black text-cyan-400 mb-4">ခဏဆိုင်းထားမည့် ဘေလ်အမည်</h3>
+            <input 
+              autoFocus
+              value={promptModal.name} 
+              onChange={e => setPromptModal({ ...promptModal, name: e.target.value })} 
+              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-cyan-500 mb-6" 
+              placeholder="ဥပမာ - စားပွဲ ၃"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => executeHoldInvoice(promptModal.name)} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold">သိမ်းမည်</button>
+              <button onClick={() => setPromptModal({ isOpen: false, name: '' })} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold">ပယ်ဖျက်မည်</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
+
+      <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2"><ShoppingCart size={22}/> POS ENTRY</h1>
+          <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-xl px-3 py-1.5 shadow-inner">
+            <Calendar size={14} className="text-cyan-400"/>
+            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
+          {['Sale', 'Purchase', 'Expense'].map(tab => (
+            <button key={tab} onClick={() => handleTabChange(tab)}
+              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
+            <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
+          </button>
+        </div>
+
+        {showDrafts && (
+          <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+            <h3 className="text-xs font-bold text-indigo-400 mb-2">Saved Hold Invoices</h3>
+            {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
+            {drafts.map(d => (
+              <div key={d.id} className="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-white/5">
+                <div>
+                  <p className="text-sm font-bold text-white">{d.draftName}</p>
+                  <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}</p>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => restoreDraft(d)} className="px-3 py-1 bg-cyan-600 rounded text-xs font-bold text-white">Restore</button>
+                  <button onClick={() => deleteDraft(d.id)} className="px-2 py-1 bg-red-600 rounded text-xs text-white"><X size={14}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {entryTab === 'Expense' ? (
+          <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
+            <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
+            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
+            <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="relative z-20 space-y-2">
+              <div className="relative">
+                <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
+                <input
+                  value={personSearch}
+                  onChange={e => { setPersonSearch(e.target.value); setSelectedPerson(null); setShowPersonDropdown(true); }}
+                  onFocus={() => setShowPersonDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
+                  placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"}
+                  className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`}
+                />
+                {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar z-50">
+                    {filteredPersons.map(p => (
+                      <div key={p.id} onMouseDown={() => { setSelectedPerson(p); setPersonSearch(p.name); setShowPersonDropdown(false); setNewPersonPhone(''); setNewPersonAddress(''); }}
+                        className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
+                      >
+                        <p className="text-sm font-bold text-white">{p.name}</p>
+                        {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {!selectedPerson && personSearch.trim().length > 0 && (
+                <div className="p-3 bg-green-900/10 rounded-xl border border-green-500/20 shadow-inner">
+                  <p className="text-[11px] font-bold text-green-400 mb-2">
+                    <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input value={newPersonPhone} onChange={e => setNewPersonPhone(e.target.value)} placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
+                    <input value={newPersonAddress} onChange={e => setNewPersonAddress(e.target.value)} placeholder="လိပ်စာ (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+
+            <div className="relative z-10">
+              {debouncedSearch.length > 0 ? (
+                <ProductDropdown products={filteredProducts} onSelect={handleSelectProduct} isOpen={true} />
+              ) : (
+                <ProductGrid products={filteredProducts} onSelect={handleSelectProduct} />
+              )}
+            </div>
+
+            <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
+              <div className="flex justify-between items-center mb-2 pl-1 pr-1">
+                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
+                <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
+                  className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
+                >
+                  <PauseCircle size={12}/> Pause / Hold
+                </button>
+              </div>
+
+              <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
+
+              {cart.length > 0 && (
+                <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-300"><span>Subtotal</span><span>{Number(cartTotals.subtotal).toLocaleString()} Ks</span></div>
+                  {cartTotals.itemDiscounts > 0 && (
+                    <div className="flex justify-between text-amber-400"><span>Item Discounts</span><span>-{Number(cartTotals.itemDiscounts).toLocaleString()} Ks</span></div>
+                  )}
+                  {entryTab === 'Sale' && (
+                    <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
+                      <span className="flex items-center gap-1">
+                        Invoice Discount
+                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)} className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
+                          <option value="%">%</option>
+                          <option value="flat">Ks</option>
+                        </select>
+                      </span>
+                      <input type="number" value={globalDiscountAmt} onChange={e => setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400" />
+                    </div>
+                  )}
+                  {cartTotals.globalDisc > 0 && (
+                    <div className="flex justify-between text-amber-400"><span>Applied Discount</span><span>-{Number(cartTotals.globalDisc).toLocaleString()} Ks</span></div>
+                  )}
+
+                  <div className="flex justify-between text-lg font-black text-cyan-300 border-t border-cyan-500/20 pt-2 mt-2">
+                    <span>TOTAL</span><span>{Number(cartTotals.total).toLocaleString()} Ks</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <PaymentSection
+                paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+                paidAmount={paidAmount} setPaidAmount={setPaidAmount}
+                submitTransaction={submitTransaction} loading={loading}
+                entryTab={entryTab}
+              />
+            )}
+          </div>
+        )}
+
+        {/* View Receipt Modal */}
+        {receiptModal.show && receiptModal.record && (
+          <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+            <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
+              <div className="text-center mb-4">
+                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopSettings.shopName}</h2>
+                {shopSettings.address && <p className="text-xs text-gray-500 mt-1">{shopSettings.address}</p>}
+                {shopSettings.phone && <p className="text-xs text-gray-500">Tel: {shopSettings.phone}</p>}
+              </div>
+              <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
+                <div className="flex justify-between"><span>Date & Time:</span> <span className="text-gray-900">{receiptModal.record.date} | {receiptModal.record.time}</span></div>
+                <div className="flex justify-between"><span>Cashier:</span> <span className="text-gray-900">{receiptModal.record.cashier}</span></div>
+                <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
+              </div>
+              <div className="mb-4">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-300 text-gray-500">
+                      <th className="text-left py-2 font-bold uppercase tracking-wider">Description</th>
+                      <th className="text-right py-2 font-bold uppercase tracking-wider">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiptModal.record.itemsDetail.map((item,i) => (
+                      <tr key={i} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2.5">
+                          <div className="font-bold text-gray-800">{item.name}</div>
+                          <div className="text-gray-500 text-[10px] mt-0.5">
+                            {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                            {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-right font-bold text-gray-800 align-top">
+                          {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-dashed border-gray-300 pt-3 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                 <div className="flex justify-between"><span>Subtotal:</span><span className="text-gray-900">{Number(receiptModal.record.subtotal).toLocaleString()} Ks</span></div>
+                 {(receiptModal.record.itemDiscount > 0 || receiptModal.record.globalDiscount > 0) && (
+                    <div className="flex justify-between text-red-500">
+                      <span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()} Ks</span>
+                    </div>
+                 )}
+              </div>
+              <div className="border-t border-gray-300 pt-3 mt-3 flex justify-between text-lg font-black text-gray-900">
+                <span>GRAND TOTAL</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
+                 <div className="flex justify-between">
+                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
+                   <span className="text-gray-900">{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span>
+                 </div>
+                 {receiptModal.record.remainingDebt > 0 ? (
+                   <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                     <span>Credit Balance (အကြွေး):</span>
+                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span>
+                   </div>
+                 ) : (
+                   <div className="flex justify-between text-green-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                     <span>Change (ပြန်အမ်းငွေ):</span>
+                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()} Ks</span>
+                   </div>
+                 )}
+              </div>
+              <div className="text-center mt-6 flex flex-col items-center gap-2">
+                <span className={`font-black tracking-widest border-2 px-4 py-1 rounded-sm text-sm ${receiptModal.record.remainingDebt > 0 ? 'text-red-500 border-red-500' : 'text-green-500 border-green-500'}`}>
+                  {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
+                </span>
+                <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
+              </div>
+              <div className="mt-6 flex flex-col gap-2">
+                <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
+                  <Printer size={18}/> Print Receipt
+                </button>
+                <button onClick={() => setReceiptModal({show:false, record:null})} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors">
+                  New Transaction
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ACTUAL PRINT AREA */}
+      {receiptModal.show && receiptModal.record && (
+         <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
+             <div className="text-center mb-3">
+                 <h2 className="text-[18px] font-bold uppercase m-0">{shopSettings.shopName}</h2>
+                 {shopSettings.address && <p className="m-0 mt-1">{shopSettings.address}</p>}
+                 {shopSettings.phone && <p className="m-0">Tel: {shopSettings.phone}</p>}
+             </div>
+             <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
+                 <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.voucherNo}</span></div>
+                 <div className="flex justify-between"><span>Date:</span> <span>{receiptModal.record.date} {receiptModal.record.time}</span></div>
+                 <div className="flex justify-between"><span>Cashier:</span> <span>{receiptModal.record.cashier}</span></div>
+                 <div className="flex justify-between"><span>Customer:</span> <span>{receiptModal.record.personName}</span></div>
+             </div>
+             <table className="w-full border-collapse mb-3">
+                 <thead>
+                     <tr className="border-b border-black">
+                         <th className="text-left pb-1 font-bold">Item</th>
+                         <th className="text-right pb-1 font-bold">Amount</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     {receiptModal.record.itemsDetail.map((item, i) => (
+                         <tr key={i}>
+                             <td className="py-1.5 align-top">
+                                <div className="font-bold">{item.name}</div>
+                                <div className="text-[10px] mt-0.5">
+                                  {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                                  {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                                </div>
+                             </td>
+                             <td className="text-right py-1.5 align-top font-bold">
+                               {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
+                             </td>
+                         </tr>
+                     ))}
+                 </tbody>
+             </table>
+             <div className="border-t border-dashed border-black pt-2 mb-2 space-y-1">
+                 <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record.subtotal).toLocaleString()}</span></div>
+                 {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
+                    <div className="flex justify-between"><span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()}</span></div>
+                 )}
+             </div>
+             <div className="flex justify-between font-bold border-t border-black pt-2 mb-3 text-[14px]">
+               <span>TOTAL:</span><span>{Number(receiptModal.record.amount).toLocaleString()}</span>
+             </div>
+             <div className="border-t border-black pt-2 mb-4 space-y-1">
+                 <div className="flex justify-between">
+                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
+                   <span>{Number(receiptModal.record.paidAmount).toLocaleString()}</span>
+                 </div>
+                 {receiptModal.record.remainingDebt > 0 ? (
+                   <div className="flex justify-between font-bold">
+                     <span>Credit Balance:</span>
+                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()}</span>
+                   </div>
+                 ) : (
+                   <div className="flex justify-between font-bold">
+                     <span>Change:</span>
+                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()}</span>
+                   </div>
+                 )}
+             </div>
+             <div className="text-center font-bold text-[14px] mb-2">
+                {receiptModal.record.remainingDebt > 0 ? '*** CREDIT ***' : '*** PAID ***'}
+             </div>
+             <div className="text-center text-[10px]">Thank you for your business!</div>
+         </div>
+      )}
+    </>
   );
 }

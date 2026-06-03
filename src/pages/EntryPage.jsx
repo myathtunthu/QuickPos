@@ -124,7 +124,8 @@ const ScannerModal = ({ onClose, onScan }) => {
 
 // ---------- Main EntryPage Component ----------
 export default function EntryPage({ products = [] }) {
-  const { profile } = useAuth();
+  // 🌟 Permission စစ်ဆေးရန် hasPermission ကို လှမ်းခေါ်ပါသည်
+  const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
 
@@ -135,8 +136,15 @@ export default function EntryPage({ products = [] }) {
   });
 
   const todayISO = new Date().toISOString().split('T')[0];
+  
+  // 🌟 Permission ပေါ်မူတည်၍ Default Tab ကို သတ်မှတ်မည်
+  const initialTab = hasPermission('create_sale') ? 'Sale' 
+                   : hasPermission('create_purchase') ? 'Purchase' 
+                   : hasPermission('create_expense') ? 'Expense' 
+                   : 'Sale';
+                   
   const [entryDate, setEntryDate] = useState(todayISO);
-  const [entryTab, setEntryTab] = useState('Sale');
+  const [entryTab, setEntryTab] = useState(initialTab);
 
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -399,7 +407,6 @@ export default function EntryPage({ products = [] }) {
     submitLock.current = false; setLoading(false);
   };
 
-  // ========== OFFLINE-FRIENDLY SUBMIT TRANSACTION (FIXED LOADING) ==========
   const submitTransaction = async () => {
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
@@ -434,7 +441,6 @@ export default function EntryPage({ products = [] }) {
     try {
       const batch = writeBatch(db);
 
-      // Customer / Supplier handling
       if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const newPersonRef = doc(collection(db, collectionName));
@@ -449,7 +455,6 @@ export default function EntryPage({ products = [] }) {
         batch.update(personRef, { totalDebt: increment(remainingDebt) });
       }
 
-      // Counter transaction (offline-friendly)
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const countField = `${entryTab.toLowerCase()}Count`;
 
@@ -497,7 +502,6 @@ export default function EntryPage({ products = [] }) {
       };
       batch.set(ref, record);
 
-      // Update stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
@@ -589,22 +593,28 @@ export default function EntryPage({ products = [] }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
-          {['Sale', 'Purchase', 'Expense'].map(tab => (
-            <button key={tab} onClick={() => handleTabChange(tab)}
-              className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === tab ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>
-              {tab}
+        {/* 🌟 Tab များကို Permission စစ်ဆေးပြီး ဖျောက်/ပေါ် လုပ်ထားပါသည် */}
+        <div className="grid grid-flow-col auto-cols-fr gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
+          {hasPermission('create_sale') && (
+            <button onClick={() => handleTabChange('Sale')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Sale' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Sale</button>
+          )}
+          {hasPermission('create_purchase') && (
+            <button onClick={() => handleTabChange('Purchase')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Purchase' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Purchase</button>
+          )}
+          {hasPermission('create_expense') && (
+            <button onClick={() => handleTabChange('Expense')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Expense' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Expense</button>
+          )}
+        </div>
+
+        {entryTab === 'Sale' && hasPermission('create_sale') && (
+          <div className="flex justify-end">
+            <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
+              <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
             </button>
-          ))}
-        </div>
+          </div>
+        )}
 
-        <div className="flex justify-end">
-          <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
-            <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
-          </button>
-        </div>
-
-        {showDrafts && (
+        {showDrafts && entryTab === 'Sale' && (
           <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
             <h3 className="text-xs font-bold text-indigo-400 mb-2">Saved Hold Invoices</h3>
             {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
@@ -683,11 +693,13 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
               <div className="flex justify-between items-center mb-2 pl-1 pr-1">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
-                <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
-                  className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
-                >
-                  <PauseCircle size={12}/> Pause / Hold
-                </button>
+                {entryTab === 'Sale' && (
+                  <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
+                    className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
+                  >
+                    <PauseCircle size={12}/> Pause / Hold
+                  </button>
+                )}
               </div>
 
               <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
@@ -820,7 +832,6 @@ export default function EntryPage({ products = [] }) {
         )}
       </div>
 
-      {/* 🌟 ACTUAL PRINT AREA (Printer Setup - POS Standard 80mm/58mm Support) 🌟 */}
       <style>{`
         @media print {
           @page {

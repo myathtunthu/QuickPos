@@ -1,22 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app'; // 🌟 အကောင့်ဖန်တီးရန် သီးသန့် App
 import { db, auth } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 Auth functions
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where } from 'firebase/firestore';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 getAuth ကို ထပ်ထည့်ထားသည်
 import { 
   ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
   Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
-  Filter, Key, RotateCcw, Copy, Zap, AlertTriangle, Send,
-  BarChart3, TrendingUp, RefreshCw, ToggleRight, Bell, 
-  HardDrive, Database, DollarSign, FileText, Cloud
+  Key, RotateCcw, Copy, Zap, Send, Bell, Cloud, FileText, ToggleRight
 } from 'lucide-react';
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  
-  // 🌟 Email & Password Login အတွက်
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
   const [loading, setLoading] = useState(true);
   
   const [tenants, setTenants] = useState([]);
@@ -47,7 +43,7 @@ export default function SuperAdminPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
 
-  // ==================== AUTHENTICATION CHECK ====================
+  // ==================== AUTH CHECK ====================
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
       if (user) {
@@ -63,7 +59,7 @@ export default function SuperAdminPage() {
     return () => unsub();
   }, []);
 
-  // ==================== MASTER LOGIN (Firebase Auth) ====================
+  // ==================== LOGIN ====================
   const handleMasterLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -88,12 +84,10 @@ export default function SuperAdminPage() {
       await updatePassword(auth.currentUser, np);
       await setDoc(doc(db, 'pos_users', auth.currentUser.uid), { updatedAt: Date.now() }, { merge: true });
       addLog('🔑 Master Password Changed'); 
-      setShowChangePwd(false);
-      alert('✅ ပြောင်းလဲပြီး');
+      setShowChangePwd(false); alert('✅ ပြောင်းလဲပြီး');
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  // ==================== ACTIVITY LOG (FULL AUDIT) ====================
   const addLog = (action, type = 'action') => {
     const log = { action, type, timestamp: new Date().toISOString(), id: Date.now(), ip: 'System' };
     setActivityLog(prev => [log, ...prev].slice(0, 200));
@@ -115,7 +109,6 @@ export default function SuperAdminPage() {
         trial: admins.filter(u => !u.expiryDate).length,
         blocked: admins.filter(u => u.status === 'blocked').length,
       });
-      // Check expiring soon
       const expiringSoon = admins.filter(u => u.expiryDate && new Date(u.expiryDate) > now && new Date(u.expiryDate) - now < 7*24*60*60*1000);
       if (expiringSoon.length > 0) {
         setNotifications(prev => [...prev, { id: Date.now(), msg: `⚠️ ${expiringSoon.length} admins expiring within 7 days`, type: 'warning' }]);
@@ -124,7 +117,6 @@ export default function SuperAdminPage() {
     return () => unsub();
   }, [isAuthenticated]);
 
-  // ==================== FILTER ====================
   useEffect(() => {
     let f = [...tenants];
     const now = new Date();
@@ -139,18 +131,15 @@ export default function SuperAdminPage() {
     setFilteredTenants(f);
   }, [tenants, searchQuery, statusFilter]);
 
-  // ==================== SYSTEM OVERVIEW + TOP STORES + REVENUE ====================
   useEffect(() => {
     if (!isAuthenticated || tenants.length === 0) return;
     const loadOverview = async () => {
       try {
-        let totalSales = 0, totalOrders = 0;
-        const storeSales = [];
+        let totalSales = 0, totalOrders = 0; const storeSales = [];
         for (const t of tenants.slice(0, 20)) {
           const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId), where('type', 'in', ['Sale', 'sale'])));
           const sales = snap.docs.reduce((s, d) => s + (Number(d.data().amount) || 0), 0);
-          totalOrders += snap.docs.length;
-          totalSales += sales;
+          totalOrders += snap.docs.length; totalSales += sales;
           storeSales.push({ name: t.username || t.email, sales, tenantId: t.tenantId });
         }
         const topStores = storeSales.sort((a,b) => b.sales - a.sales).slice(0, 5);
@@ -161,7 +150,6 @@ export default function SuperAdminPage() {
     loadOverview();
   }, [isAuthenticated, tenants, stats]);
 
-  // ==================== STORAGE USAGE MONITOR ====================
   useEffect(() => {
     if (!isAuthenticated || tenants.length === 0) return;
     const loadStorage = async () => {
@@ -175,15 +163,21 @@ export default function SuperAdminPage() {
     loadStorage();
   }, [isAuthenticated, tenants]);
 
-  // ==================== CREATE TENANT ====================
+  // ==================== CREATE TENANT (🌟 FIXED PERMISSION ERROR) ====================
   const handleCreateTenant = async (e) => {
     e.preventDefault();
     if (!form.shopName || !form.username || !form.password || !form.expiryDate) return alert("အားလုံးဖြည့်ပါ");
+    
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(auth, form.username.trim(), form.password);
       
-      // 🌟 PasswordRaw ထည့်သွင်းသိမ်းဆည်းခြင်း
+      // 🌟 Super Admin ရဲ့ Session အား မထိခိုက်စေရန် Secondary App ဖြင့် နောက်ကွယ်မှ ဖန်တီးမည်
+      const secondaryApp = initializeApp(auth.app.options, "SecondaryApp" + Date.now());
+      const secondaryAuth = getAuth(secondaryApp);
+      
+      const uc = await createUserWithEmailAndPassword(secondaryAuth, form.username.trim(), form.password);
+      
+      // 🌟 ယခုအခါ ပင်မ Auth (Super Admin) အနေဖြင့် ဆက်ရှိနေသောကြောင့် Firebase Rules မှ တားမြစ်မည်မဟုတ်ပါ
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: form.username.trim(), 
         username: form.username.trim(), 
@@ -191,18 +185,24 @@ export default function SuperAdminPage() {
         permissions: [], 
         tenantId: tid, 
         expiryDate: form.expiryDate, 
-        passwordRaw: form.password, // Super Admin auto-login အတွက်
+        passwordRaw: form.password, 
         createdAt: Date.now(), 
         status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
+      
+      // နောက်ကွယ်မှ အကောင့်ကို ပိတ်သိမ်းမည်
+      await secondaryAuth.signOut();
+
       addLog(`✅ Created: ${form.username}`);
       setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
       setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
-    } catch (er) { alert(er.code==='auth/email-already-in-use'?'Email သုံးပြီးသားဖြစ်နေပါသည်':'Error: '+er.message); }
+      alert("✅ အကောင့်အသစ် ဖန်တီးပြီးပါပြီ။");
+    } catch (er) { 
+      alert(er.code === 'auth/email-already-in-use' ? 'Email သုံးပြီးသားဖြစ်နေပါသည်' : 'Error: ' + er.message); 
+    }
   };
 
-  // ==================== EDIT ADMIN ====================
   const startEdit = (u) => { setEditingUser(u); setEditForm({ username: u.username || '', password: '' }); };
   const handleEditSave = async () => {
     if (!editingUser) return;
@@ -214,30 +214,22 @@ export default function SuperAdminPage() {
     setEditingUser(null); setEditForm({ username:'', password:'' });
   };
 
-  // ==================== TOGGLE STATUS ====================
   const toggleStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
     await setDoc(doc(db, 'pos_users', userId), { status: newStatus }, { merge: true });
     addLog(`🔒 Status: ${userId} → ${newStatus}`);
   };
 
-  // ==================== FORCE PASSWORD RESET ====================
   const forcePasswordReset = async (user) => {
     const newPwd = prompt(`Enter new password for ${user.username}:`);
     if (!newPwd || newPwd.length < 6) return alert('အနည်းဆုံး ၆ လုံး');
-    // Save as raw password too so we can still impersonate
     await updateDoc(doc(db, 'pos_users', user.id), { password: newPwd, passwordRaw: newPwd });
-    addLog(`🔄 Password Reset: ${user.username}`);
-    alert('✅ Password ပြောင်းပြီး');
+    addLog(`🔄 Password Reset: ${user.username}`); alert('✅ Password ပြောင်းပြီး');
   };
 
-  // ==================== UPDATE EXPIRY ====================
   const updateExpiry = async (uid, nd) => { if(nd){ await setDoc(doc(db,'pos_users',uid),{expiryDate:nd},{merge:true}); addLog('📅 Expiry Updated'); } };
-
-  // ==================== DELETE TENANT ====================
   const deleteTenant = async (uid, un) => { if(window.confirm(`ဖျက်ရန်သေချာပါသလား? [${un}]`)){ await deleteDoc(doc(db,'pos_users',uid)); addLog(`🗑️ Deleted: ${un}`); } };
 
-  // ==================== BULK EXPIRY UPDATE ====================
   const bulkUpdateExpiry = async () => {
     const days = parseInt(bulkDays) || 30;
     const now = new Date(); now.setDate(now.getDate() + days);
@@ -249,7 +241,6 @@ export default function SuperAdminPage() {
 
   const toggleSelect = (id) => { setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]); };
 
-  // ==================== TENANT ANALYTICS ====================
   const loadTenantAnalytics = async (tenant) => {
     setSelectedTenant(tenant); setShowAnalytics(true);
     try {
@@ -269,9 +260,7 @@ export default function SuperAdminPage() {
     } catch (e) { console.error(e); }
   };
 
-  // ==================== IMPERSONATE (AUTO-LOGIN) ====================
   const impersonateTenant = async (user) => {
-    // Database မှ Password အစစ်ကို ဆွဲထုတ်မည်
     const targetPwd = user.passwordRaw || user.password;
     if (!targetPwd) {
       const manualPwd = prompt(`စကားဝှက်မှတ်တမ်း မရှိပါ။ ${user.username} ၏ Password ကို ထည့်ပါ:`);
@@ -282,7 +271,6 @@ export default function SuperAdminPage() {
       } catch (err) { alert('Login failed: ' + err.message); }
       return;
     }
-
     try {
       await signInWithEmailAndPassword(auth, user.email || user.username, targetPwd);
       window.open('/dashboard', '_blank');
@@ -290,7 +278,6 @@ export default function SuperAdminPage() {
     } catch (err) { alert(`Auto Login Error: ${err.message}\n(ဆိုင်ပိုင်ရှင်သည် ပြင်ပမှ Password ပြောင်းသွားပုံရပါသည်)`); }
   };
 
-  // ==================== CLONE TENANT ====================
   const cloneTenant = async (user) => {
     const newEmail = prompt(`Enter new email for clone of ${user.username}:`);
     if (!newEmail || !newEmail.includes('@')) return alert('Valid email required');
@@ -298,21 +285,23 @@ export default function SuperAdminPage() {
     if (!newPassword || newPassword.length < 6) return alert('Password min 6 chars');
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(auth, newEmail.trim(), newPassword);
+      const secondaryApp = initializeApp(auth.app.options, "SecondaryAppClone" + Date.now());
+      const secondaryAuth = getAuth(secondaryApp);
+      const uc = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
+      
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
         permissions: user.permissions || [], tenantId: tid, 
         expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], 
-        passwordRaw: newPassword, // Clone လုပ်လျှင်လည်း မှတ်ထားမည်
-        createdAt: Date.now(), status: 'active' 
+        passwordRaw: newPassword, createdAt: Date.now(), status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: `${user.username || 'Shop'} (Clone)`, tenantId: tid, createdAt: Date.now() });
-      addLog(`📋 Cloned: ${user.username} → ${newEmail}`);
-      alert(`✅ Cloned! Email: ${newEmail}`);
+      await secondaryAuth.signOut();
+      
+      addLog(`📋 Cloned: ${user.username} → ${newEmail}`); alert(`✅ Cloned! Email: ${newEmail}`);
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  // ==================== BULK EMAIL ====================
   const sendBulkEmail = async () => {
     if (!emailSubject || !emailBody) return alert('Subject နဲ့ Body ဖြည့်ပါ');
     const recipients = filteredTenants.map(t => t.email || t.username).filter(Boolean);
@@ -321,7 +310,6 @@ export default function SuperAdminPage() {
     setShowEmailForm(false); setEmailSubject(''); setEmailBody('');
   };
 
-  // ==================== EXPORT CSV ====================
   const exportCSV = () => {
     const h = 'Username,Email,Tenant ID,Expiry,Status';
     const rows = filteredTenants.map(t => [t.username||t.email, t.email||'', t.tenantId, t.expiryDate||'Trial', (t.expiryDate&&new Date(t.expiryDate)<new Date())?'Expired':'Active']);
@@ -330,13 +318,48 @@ export default function SuperAdminPage() {
     addLog('📥 Exported CSV');
   };
 
-  // ==================== INVOICE GENERATION ====================
+  // ==================== INVOICE GENERATION & PRINT ====================
   const generateInvoice = (tenant) => {
     setSelectedInvoiceTenant(tenant);
     setShowInvoice(true);
   };
 
-  // ==================== BACKUP/RESTORE ====================
+  const downloadInvoicePDF = (tenant) => {
+    const w = window.open('', '_blank', 'width=800,height=900');
+    w.document.write(`
+      <html><head><title>Invoice - ${tenant.username}</title>
+      <style>
+        body { font-family: sans-serif; padding: 40px; color: #333; }
+        .invoice-box { max-width: 800px; margin: auto; border: 1px solid #eee; padding: 30px; box-shadow: 0 0 10px rgba(0,0,0,0.15); }
+        h2 { color: #e11d48; }
+        table { line-height: inherit; text-align: left; width: 100%; border-collapse: collapse; margin-top: 20px; }
+        table td { padding: 10px; border-bottom: 1px solid #eee; }
+        .total { font-weight: bold; font-size: 18px; color: #000; }
+      </style></head><body>
+        <div class="invoice-box">
+          <h2>QuickPOS Subscription Invoice</h2>
+          <p><strong>Date:</strong> ${new Date().toISOString().split('T')[0]}</p>
+          <hr/>
+          <table>
+            <tr><td><strong>Billed To:</strong></td><td>${tenant.username} (${tenant.email || 'N/A'})</td></tr>
+            <tr><td><strong>Tenant ID:</strong></td><td>${tenant.tenantId}</td></tr>
+            <tr><td><strong>Service Plan:</strong></td><td>Standard Monthly License</td></tr>
+            <tr><td><strong>Status:</strong></td><td style="color: red;"><strong>Unpaid</strong></td></tr>
+          </table>
+          <br/>
+          <table style="background: #f9fafb;">
+            <tr><td><strong>Total Amount Due:</strong></td><td style="text-align: right;" class="total">10,000 Ks</td></tr>
+          </table>
+          <p style="text-align: center; margin-top: 50px; font-size: 12px; color: #777;">Thank you for using QuickPOS!</p>
+        </div>
+        <script>
+          window.onload = () => { window.print(); window.close(); }
+        </script>
+      </body></html>
+    `);
+    w.document.close();
+  };
+
   const backupTenantData = async (tenant) => {
     try {
       const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', tenant.tenantId)));
@@ -344,31 +367,25 @@ export default function SuperAdminPage() {
       const json = JSON.stringify(data, null, 2);
       const b = new Blob([json], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `backup_${tenant.tenantId}.json`; a.click();
-      addLog(`💾 Backup: ${tenant.username}`);
-      alert('✅ Backup downloaded!');
+      addLog(`💾 Backup: ${tenant.username}`); alert('✅ Backup downloaded!');
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  // ==================== TELEGRAM NOTIFICATION ====================
   const sendTelegramNotification = async (message) => {
     const snap = await getDoc(doc(db, 'settings', 'telegram'));
     if (!snap.exists()) return alert('Telegram not configured. Set bot token and chat ID in settings.');
     const { botToken, chatId } = snap.data();
     try {
       await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
       });
-      addLog(`📱 Telegram Sent: ${message}`);
-      alert('✅ Telegram notification sent!');
+      addLog(`📱 Telegram Sent: ${message}`); alert('✅ Telegram notification sent!');
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  // ==================== LOADING ====================
   if (loading) return <div className="min-h-screen bg-[#080c14] flex items-center justify-center"><div className="w-12 h-12 border-4 border-rose-400 border-t-transparent rounded-full animate-spin"/></div>;
 
-  // ==================== LOGIN SCREEN ====================
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
@@ -386,12 +403,10 @@ export default function SuperAdminPage() {
     );
   }
 
-  // ==================== MASTER PANEL ====================
   return (
     <div className="min-h-screen bg-[#080c14] p-4 sm:p-8 text-white">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
         
-        {/* ==================== HEADER + STATS + SYSTEM OVERVIEW ==================== */}
         <div className="bg-gray-900 border-2 border-rose-500/20 rounded-3xl p-6 shadow-2xl">
           <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
             <div className="flex items-center gap-4">
@@ -415,12 +430,10 @@ export default function SuperAdminPage() {
             </div>
           </div>
           
-          {/* Stats Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[{label:'Total',value:stats.total,icon:Users,color:'text-cyan-400'},{label:'Active',value:stats.active,icon:UserCheck,color:'text-emerald-400'},{label:'Expired',value:stats.expired,icon:UserX,color:'text-rose-400'},{label:'Trial',value:stats.trial,icon:Clock,color:'text-amber-400'},{label:'Blocked',value:stats.blocked,icon:ToggleRight,color:'text-purple-400'}].map(s=>{const I=s.icon;return <div key={s.label} className="bg-black/30 rounded-2xl p-4 text-center"><I size={24} className={`mx-auto mb-2 ${s.color}`}/><p className="text-2xl font-black">{s.value}</p><p className="text-xs text-slate-500">{s.label}</p></div>;})}
           </div>
 
-          {/* System Overview + Revenue */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
             <div>
               <p className="text-xs text-slate-500 mb-3 font-bold uppercase">System Overview</p>
@@ -429,7 +442,6 @@ export default function SuperAdminPage() {
                 <div className="flex justify-between"><span>Total Orders</span><span className="text-emerald-400 font-bold">{systemOverview.totalOrders}</span></div>
                 <div className="flex justify-between"><span>Today Active Users</span><span className="text-amber-400 font-bold">{systemOverview.todayLogins}</span></div>
               </div>
-              {/* Top 5 Stores */}
               {systemOverview.topStores.length > 0 && (
                 <div className="mt-3">
                   <p className="text-xs text-slate-500 mb-2 font-bold uppercase">Top 5 Stores</p>
@@ -450,7 +462,7 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
-        {/* ==================== MODALS & FORMS ==================== */}
+        {/* MODALS */}
         {showNotifications && (
           <div className="bg-gray-900 border-2 border-yellow-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
             <h3 className="text-lg font-black text-yellow-400 mb-4">🔔 Notifications</h3>
@@ -522,11 +534,17 @@ export default function SuperAdminPage() {
               <div className="flex justify-between"><span>Status:</span><span className="text-rose-400">Unpaid</span></div>
               <div className="flex justify-between"><span>Due Date:</span><span>{new Date().toISOString().split('T')[0]}</span></div>
             </div>
-            <button onClick={()=>alert('Invoice downloaded!')} className="mt-4 px-4 py-2 bg-green-600 rounded-xl font-bold text-sm">Download PDF</button>
+            {/* 🌟 DOWNLOAD PDF / PRINT BUTTON (FIXED) */}
+            <button 
+              onClick={() => downloadInvoicePDF(selectedInvoiceTenant)} 
+              className="mt-4 px-4 py-2 bg-green-600 rounded-xl font-bold text-sm"
+            >
+              Download PDF / Print
+            </button>
           </div>
         )}
 
-        {/* ==================== SEARCH + FILTER + BULK ==================== */}
+        {/* SEARCH + FILTER + BULK */}
         <div className="flex gap-3 flex-wrap items-center mt-6">
           <div className="relative flex-1 min-w-[200px]"><Search size={18} className="absolute left-4 top-3 text-slate-500"/><input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search admin..." className="w-full bg-gray-900 border border-white/10 rounded-xl pl-12 pr-4 py-3"/></div>
           <div className="flex gap-2">{['all','active','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
@@ -538,7 +556,7 @@ export default function SuperAdminPage() {
           )}
         </div>
 
-        {/* ==================== TENANT LIST ==================== */}
+        {/* TENANT LIST */}
         <div className="space-y-3">
           <p className="text-sm text-slate-500">{filteredTenants.length} tenants found</p>
           {filteredTenants.map(t=>{
@@ -555,12 +573,12 @@ export default function SuperAdminPage() {
                       <p className="font-black text-xl">{t.username||t.email}</p>
                       <p className="text-xs text-slate-500 mt-1">Tenant ID: {t.tenantId}</p>
                       
-                      {/* 🌟 Super Admin အတွက် Password ဖော်ပြပေးမည့် နေရာ */}
+                      {/* Pwd Display */}
                       <p className="text-xs mt-1.5 flex items-center gap-1 font-bold text-amber-400">
                         <Key size={12}/> Pwd: <span className="bg-black/50 px-2 py-0.5 rounded text-white tracking-wider">{t.passwordRaw || t.password || 'N/A'}</span>
                       </p>
 
-                      <div className="flex gap-2 mt-2 flex-wrap">
+                      <div className="flex gap-2 mt-1 flex-wrap">
                         <span className={`text-xs font-bold ${isExpired?'text-rose-400':isBlocked?'text-purple-400':'text-emerald-400'}`}>{isExpired?'⚠️ Expired':isBlocked?'🚫 Blocked':'✓ Active'}</span>
                         <span className="text-xs text-slate-500">| 📦 {storage.records} recs (~{storage.size}KB)</span>
                       </div>
@@ -586,7 +604,6 @@ export default function SuperAdminPage() {
                       <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg" title="Force Reset Password"><RotateCcw size={16}/></button>
                       <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>
                       
-                      {/* 🌟 Auto Login ခလုတ် */}
                       <button onClick={()=>impersonateTenant(t)} className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 font-bold rounded-lg flex items-center gap-2 transition-colors border border-purple-500/30">
                         <Zap size={16}/> Auto Login
                       </button>

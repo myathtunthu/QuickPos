@@ -6,6 +6,11 @@ import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, 
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import useDebounce from '../hooks/useDebounce';
 
+// 🌟 Custom UI & Utilities (Phase 1 Fixes)
+import ConfirmDialog from '../components/UI/ConfirmDialog';
+import { showToast } from '../components/UI/Toast';
+import logger from '../utils/logger';
+
 // ---------- Scanner Modal (High-Resolution HD Fix) ----------
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
@@ -13,7 +18,6 @@ const ScannerModal = ({ onClose, onScan }) => {
   const readerRef = useRef(null);
 
   useEffect(() => {
-    // Barcode formats စုံလင်စွာ ဖတ်နိုင်ရန် hints သတ်မှတ်ခြင်း
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.CODE_128,
@@ -29,7 +33,6 @@ const ScannerModal = ({ onClose, onScan }) => {
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
-    // 🌟 ဖြေရှင်းချက် - ကင်မရာလိုင်းစိပ်သမျှ အပြတ်ဖတ်နိုင်ရန် HD Resolution နှင့် အနောက်ကင်မရာကို Force လုပ်ခြင်း
     const constraints = {
       video: {
         facingMode: { ideal: "environment" },
@@ -46,11 +49,11 @@ const ScannerModal = ({ onClose, onScan }) => {
       }
     })
     .catch((err) => {
-      console.error('Camera error:', err);
+      // 🌟 console.error အစား logger ကို အသုံးပြုထားပါသည်
+      logger.error('Camera error in Inventory Scanner:', err);
       setCameraError(true);
     });
 
-    // Unmount ဖြစ်ချိန်တွင် ကင်မရာ Hardware Stream အား အလိုအလျောက် ပိတ်သိမ်းခြင်း
     return () => {
       if (readerRef.current) {
         readerRef.current.reset();
@@ -84,19 +87,20 @@ export default function InventoryPage({ products = [] }) {
   const tenantId = profile?.tenantId;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearch = useDebounce(searchTerm, 300); // Search အတွက် performance ပိုကောင်းအောင်လုပ်ခြင်း
+  const debouncedSearch = useDebounce(searchTerm, 300);
 
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   
-  // 🌟 Bug 1 Fix: နှိပ်လိုက်သော သက်ဆိုင်ရာ Package Row Unit တစ်ခုတည်းကိုသာ သတ်မှတ်ရန် Index သုံးခြင်း
   const [activeScanIdx, setActiveScanIdx] = useState(null); 
   
   const [expandedRows, setExpandedRows] = useState({});
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
 
-  // 🌟 Bug 2 Fix: Double Click ကာကွယ်ရန် Save Transaction Lock တည်ဆောက်ခြင်း
   const submitLock = useRef(false);
+
+  // 🌟 ConfirmDialog State
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
   const [form, setForm] = useState({
     name: '', category: '', baseUnit: 'Bottle',
@@ -180,16 +184,16 @@ export default function InventoryPage({ products = [] }) {
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (submitLock.current) return; // Double click block
+    if (submitLock.current) return; 
     
-    if (!form.name.trim()) return alert("Product Name ထည့်ပါ");
-    if (!tenantId) return alert("No tenant ID found.");
+    // 🌟 alert() များကို showToast ဖြင့် အစားထိုးခြင်း
+    if (!form.name.trim()) return showToast("Product Name ထည့်ပါ", "error");
+    if (!tenantId) return showToast("No tenant ID found.", "error");
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
     
-    // 🌟 Bug 5 Fix: Package Unit လုံးဝမပါပဲ ကုန်ပစ္စည်းသိမ်းဆည်းခြင်းမှ ကာကွယ်ခြင်း
     if (validUnits.length === 0) {
-      alert("အမှား: အနည်းဆုံး ပါကင်ယူနစ် (Package Unit) တစ်ခုထည့်သွင်းပေးရန် လိုအပ်ပါသည်။");
+      showToast("အမှား: အနည်းဆုံး ပါကင်ယူနစ် (Package Unit) တစ်ခုထည့်သွင်းပေးရန် လိုအပ်ပါသည်။", "error");
       return;
     }
 
@@ -200,7 +204,7 @@ export default function InventoryPage({ products = [] }) {
     });
 
     if (isDuplicate) {
-      alert("အမှား: ဤ Barcode သည် အခြားပစ္စည်းတွင် သုံးထားပြီးဖြစ်ပါသည်။");
+      showToast("အမှား: ဤ Barcode သည် အခြားပစ္စည်းတွင် သုံးထားပြီးဖြစ်ပါသည်။", "error");
       return;
     }
 
@@ -227,7 +231,7 @@ export default function InventoryPage({ products = [] }) {
     try {
       if (editing) {
         await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true });
-        alert("Product updated!"); 
+        showToast("Product updated successfully!", "success"); 
         setEditing(null);
       } else {
         await addDoc(collection(db, 'pos_products'), { 
@@ -237,12 +241,13 @@ export default function InventoryPage({ products = [] }) {
           stockBase: 0, 
           createdAt: Date.now() 
         });
-        alert("Product added!"); 
+        showToast("Product added successfully!", "success"); 
         setAdding(false);
       }
       resetForm();
     } catch (error) { 
-      alert("Error: " + error.message); 
+      logger.error('Error saving product:', error);
+      showToast("Error: " + error.message, "error"); 
     } finally {
       submitLock.current = false;
     }
@@ -265,13 +270,37 @@ export default function InventoryPage({ products = [] }) {
 
   const cancelEdit = () => { setEditing(null); setAdding(false); resetForm(); };
 
+  // 🌟 Error Handling အပြည့်အစုံပါသော updateStock Function
   const updateStock = async (id, newStock) => {
     const s = Number(newStock);
     if (!isNaN(s)) {
       try {
         await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
-      } catch (err) { console.error(err); }
+        showToast("Stock updated successfully!", "success");
+      } catch (err) { 
+        logger.error('Error updating stock:', err); 
+        showToast("Error updating stock", "error");
+      }
     }
+  };
+
+  // 🌟 window.confirm အစား Custom Confirm Dialog အသုံးပြုသော Delete Function
+  const handleDeleteProduct = (id, name) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "ပစ္စည်း ဖျက်သိမ်းခြင်း",
+      message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
+      onConfirm: async () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        try {
+          await deleteDoc(doc(db, 'pos_products', id));
+          showToast("Product deleted successfully!", "success");
+        } catch (err) {
+          logger.error('Error deleting product:', err);
+          showToast("Failed to delete product.", "error");
+        }
+      }
+    });
   };
 
   const filteredProducts = useMemo(() => {
@@ -280,6 +309,16 @@ export default function InventoryPage({ products = [] }) {
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-7xl mx-auto space-y-6 pb-10">
+      
+      {/* 🌟 ConfirmDialog UI အား ထည့်သွင်းခြင်း */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+      />
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-2xl border border-cyan-500/15 gap-4">
         <h3 className="font-black text-xl sm:text-2xl flex items-center gap-2"><Boxes className="text-cyan-500"/> Inventory</h3>
@@ -349,7 +388,6 @@ export default function InventoryPage({ products = [] }) {
                   </div>
                   <div className="flex gap-1 items-center">
                     <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="Barcode" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
-                    {/* 🌟 Bug 1 Fix Target Scan Index Row */}
                     <button type="button" onClick={()=>setActiveScanIdx(idx)} className="px-2 py-2 bg-blue-600/20 rounded text-blue-400"><ScanBarcode size={14}/></button>
                   </div>
                   <div className="grid grid-cols-5 gap-1">
@@ -388,7 +426,6 @@ export default function InventoryPage({ products = [] }) {
                         <td className="p-1.5">
                           <div className="flex gap-1">
                             <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="BC" className="flex-1 bg-black border border-cyan-500/15 p-2 rounded text-white text-xs outline-none"/>
-                            {/* 🌟 Bug 1 Fix Target Scan Index Row */}
                             <button type="button" onClick={()=>setActiveScanIdx(idx)} className="px-2 bg-blue-600/20 rounded text-blue-400 flex-shrink-0"><ScanBarcode size={14}/></button>
                           </div>
                         </td>
@@ -459,7 +496,8 @@ export default function InventoryPage({ products = [] }) {
                       <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-center gap-1">
                           <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-1.5 bg-indigo-950/50 rounded text-indigo-400"><Edit3 size={14}/></button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); if(window.confirm('Delete Product?')) deleteDoc(doc(db,'pos_products',p.id)); }} className="p-1.5 bg-rose-950/50 rounded text-rose-400"><Trash2 size={14}/></button>
+                          {/* 🌟 window.confirm အစား handleDeleteProduct ကို အသုံးပြုထားပါသည် */}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id, p.name); }} className="p-1.5 bg-rose-950/50 rounded text-rose-400"><Trash2 size={14}/></button>
                         </div>
                       </td>
                     </tr>
@@ -513,7 +551,7 @@ export default function InventoryPage({ products = [] }) {
         </div>
       </div>
 
-      {/* Scanner Modal (🌟 Targeted Specific Unit Line Row Index) */}
+      {/* Scanner Modal */}
       {activeScanIdx !== null && (
         <ScannerModal
           onClose={() => setActiveScanIdx(null)}

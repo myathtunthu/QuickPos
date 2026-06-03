@@ -14,7 +14,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 🌟 Auto-Merge ပြီး/မပြီး မှတ်သားရန် State
+  // Auto-Merge ပြီး/မပြီး မှတ်သားရန် State
   const [autoMergeDone, setAutoMergeDone] = useState(false);
 
   // Modals State
@@ -64,7 +64,6 @@ export default function CustomersPage() {
     const groups = {};
     let hasDuplicates = false;
     
-    // နာမည်၊ ဖုန်း၊ လိပ်စာ တူသူများကို ရှာဖွေ Group ဖွဲ့မည်
     customers.forEach(c => {
       const n = (c.name || '').trim().toLowerCase();
       const p = (c.phone || '').trim();
@@ -76,7 +75,6 @@ export default function CustomersPage() {
       if (groups[key].length > 1) hasDuplicates = true;
     });
 
-    // တူတာမရှိရင် ဘာမှလုပ်စရာမလိုပါ
     if (!hasDuplicates) {
       setAutoMergeDone(true);
       return;
@@ -89,29 +87,24 @@ export default function CustomersPage() {
       for (const key in groups) {
         const group = groups[key];
         if (group.length > 1) {
-          // အဟောင်းဆုံးအကောင့်ကို မူရင်း (Primary) အဖြစ်ထားမည်
           group.sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0));
           
           const primary = group[0];
           let additionalDebt = 0;
 
-          // ကျန်သည့် အကောင့်ပွားများကို ပေါင်းမည်
           for (let i = 1; i < group.length; i++) {
             const duplicate = group[i];
             additionalDebt += (Number(duplicate.totalDebt) || 0);
 
-            // အကောင့်ပွားတွင်ရှိသော အရောင်း/ငွေသွင်းမှတ်တမ်းများကို Primary ထံသို့ ပြောင်းရွှေ့မည်
             const dupRecords = allRecords.filter(r => r.customerId === duplicate.id);
             dupRecords.forEach(rec => {
               batch.update(doc(db, 'pos_records', rec.id), { customerId: primary.id });
             });
 
-            // အကောင့်ပွားကို ဖျက်မည်
             batch.delete(doc(db, 'pos_customers', duplicate.id));
             mergedCount++;
           }
 
-          // Primary အကောင့်သို့ အကြွေးများ စုပေါင်းထည့်မည်
           if (additionalDebt > 0) {
             batch.update(doc(db, 'pos_customers', primary.id), {
               totalDebt: increment(additionalDebt)
@@ -122,12 +115,12 @@ export default function CustomersPage() {
 
       if (mergedCount > 0) {
         await batch.commit();
-        fetchData(); // ပေါင်းပြီးတာနဲ့ ဒေတာပြန်ခေါ်မည်
+        fetchData(); 
       }
     } catch (error) {
       console.error("Auto merge error:", error);
     } finally {
-      setAutoMergeDone(true); // တစ်ခါလုပ်ပြီးပါက နောက်တစ်ခါ ထပ်မလုပ်စေရန်
+      setAutoMergeDone(true); 
     }
   };
 
@@ -185,7 +178,6 @@ export default function CustomersPage() {
     setLoading(true);
 
     try {
-      // အသစ်ထည့်မည်ဆိုပါက နာမည်၊ ဖုန်း၊ လိပ်စာ တူသူ ရှိ/မရှိ စစ်ဆေးပြီး ရှိပါက မထည့်တော့ပါ
       if (!editingCustomer) {
         const key = `${nName.toLowerCase()}_${nPhone}_${nAddress.toLowerCase()}`;
         const existing = customers.find(c => {
@@ -196,7 +188,7 @@ export default function CustomersPage() {
         if (existing) {
            setCustomerModalOpen(false);
            setLoading(false);
-           return; // တူတာရှိနေပြီးဖြစ်၍ ဘာမှမလုပ်ဘဲ ထွက်မည်
+           return; 
         }
       }
 
@@ -297,7 +289,7 @@ export default function CustomersPage() {
           </div>
           {activeTab === 'book' && (
             <button onClick={() => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); }} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors active:scale-95 shadow-lg shadow-cyan-900/50">
-              <Plus size={20}/> အသစ်ထည့်မည်
+              <Plus size={20}/> Add
             </button>
           )}
         </div>
@@ -423,7 +415,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* 3. Ledger Modal (Clickable Invoices) */}
+      {/* 3. Ledger Modal */}
       {isLedgerModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-[#0d1120] border-2 border-blue-500/20 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
@@ -488,7 +480,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* 4. Clickable Receipt Modal (Print View) */}
+      {/* 4. Clickable Receipt Modal */}
       {receiptModal.show && receiptModal.record && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans relative animate-in zoom-in-95">

@@ -26,7 +26,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Admin (Firebase Auth) သို့မဟုတ် Staff (Local Storage Session) ရှိနေပါက Dashboard သို့သွားမည်
+    // Admin သို့မဟုတ် Staff Session ရှိနေပါက Dashboard သို့သွားမည်
     const staffSession = localStorage.getItem('pos_staff_session');
     if ((user && profile) || staffSession) {
       navigate('/dashboard', { replace: true });
@@ -41,30 +41,35 @@ export default function LoginPage() {
     try {
       const input = usernameOrEmail.trim();
 
-      if (input.includes('@')) {
-        // 🌟 အခြေအနေ ၁ - Admin ဝင်ရောက်ခြင်း (Email ပါဝင်ပါက)
-        // AuthContext ၏ ပုံမှန် Firebase Login ကို အသုံးပြုမည်
-        await login(input, password);
-      } else {
-        // 🌟 အခြေအနေ ၂ - Staff ဝင်ရောက်ခြင်း (Username ဖြင့်သာ)
-        const q = query(collection(db, 'pos_users'), where('username', '==', input));
-        const snap = await getDocs(q);
+      // 🌟 အဆင့် ၁ - Staff အကောင့် (Database ထဲက Username) ဟုတ်မဟုတ် အရင်စစ်မည်
+      const q = query(collection(db, 'pos_users'), where('username', '==', input));
+      const snap = await getDocs(q);
 
-        if (snap.empty) {
-          throw { code: 'auth/user-not-found' }; // Error code တူညီစေရန်
-        }
+      let isStaffLogin = false;
 
-        const staffData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+      if (!snap.empty) {
+        const userDataFromDb = { id: snap.docs[0].id, ...snap.docs[0].data() };
         
-        // Password ကို Hash လုပ်ပြီး တိုက်စစ်မည်
-        if (staffData.password !== simpleHash(password)) {
-          throw { code: 'auth/wrong-password' };
-        }
+        // Staff အကောင့်ဖြစ်ပါက (Hash တိုက်စစ်ပြီး ဝင်ခွင့်ပြုမည်)
+        if (userDataFromDb.role === 'staff') {
+          isStaffLogin = true;
+          
+          if (userDataFromDb.password !== simpleHash(password)) {
+            throw { code: 'auth/wrong-password' };
+          }
 
-        // Staff အတွက် Session ကို သိမ်းပြီး Dashboard သို့ ဝင်မည်
-        localStorage.setItem('pos_staff_session', JSON.stringify(staffData));
-        window.location.href = '/dashboard'; // App အား Reload လုပ်ပေးရန် (AuthContext မှ သိရှိစေရန်)
+          // Staff အတွက် Session ကို သိမ်းပြီး Dashboard သို့ ဝင်မည်
+          localStorage.setItem('pos_staff_session', JSON.stringify(userDataFromDb));
+          window.location.href = '/dashboard'; // App အား Reload လုပ်ပေးရန်
+          return;
+        }
       }
+
+      // 🌟 အဆင့် ၂ - Staff မဟုတ်ခဲ့ရင် Admin (Firebase Auth) အဖြစ် မှတ်ယူပြီး Login ဝင်မည်
+      if (!isStaffLogin) {
+        await login(input, password);
+      }
+
     } catch (error) {
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         setErr('Username/Email သို့မဟုတ် Password မှားနေပါသည်!');
@@ -107,7 +112,6 @@ export default function LoginPage() {
         )}
         
         <form onSubmit={handleLogin} className="space-y-6">
-          {/* 🌟 Email အစား text ပြောင်းထားပြီး Username ပါ ဝင်ခွင့်ပြုထားသည် */}
           <input 
             required 
             type="text"

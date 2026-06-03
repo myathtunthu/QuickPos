@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import logger from '../utils/logger'; // 🌟 Production-safe logger
+import logger from '../utils/logger'; 
 
 const AuthContext = createContext();
 
@@ -19,26 +19,35 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
+          // 🌟 အခြေအနေ ၁ - Firebase Admin Login ဝင်ထားပါက
           setUser(firebaseUser);
           
-          // 🌟 အရေးကြီးသည် - Cloud Function မှပေးသော Custom Claims (tenantId, role) များကို ရယူရန် Token အား အတင်း Refresh လုပ်ခြင်း
           await firebaseUser.getIdToken(true);
 
           const userSnap = await getDoc(doc(db, 'pos_users', firebaseUser.uid));
           if (userSnap.exists()) {
             const userData = { id: userSnap.id, ...userSnap.data() };
             setProfile(userData);
-            logger.log('User profile loaded successfully', userData.email);
+            logger.log('Admin profile loaded successfully', userData.email);
           } else {
             setProfile(null);
-            logger.warn('User profile not found in Firestore', firebaseUser.uid);
           }
         } else {
-          setUser(null);
-          setProfile(null);
+          // 🌟 အခြေအနေ ၂ - Firebase Admin မဟုတ်ပါက Local Storage မှ Staff ကို ရှာမည်
+          const staffSession = localStorage.getItem('pos_staff_session');
+          
+          if (staffSession) {
+            const staffData = JSON.parse(staffSession);
+            // Staff အတွက် User Object အတု ဖန်တီးပေးမည် (System က Logged In ဟု သိစေရန်)
+            setUser({ uid: staffData.id, email: staffData.username, isStaff: true });
+            setProfile(staffData);
+            logger.log('Staff profile loaded successfully', staffData.username);
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
         }
       } catch (error) {
-        // 🌟 Error ထွက်ခဲ့လျှင် မျက်နှာပြင်ဖြူမသွားစေရန်နှင့် State များ ရှင်းလင်းရန်
         logger.error('Auth state change error:', error);
         setUser(null);
         setProfile(null);
@@ -57,13 +66,15 @@ export function AuthProvider({ children }) {
       return userCredential;
     } catch (error) {
       logger.error('Login failed', error);
-      throw error; // UI (LoginPage) ဘက်တွင် Alert ပြနိုင်ရန် Error ကို ပြန်ပစ်ပေးသည်
+      throw error; 
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
+      // 🌟 Logout နှိပ်ပါက Staff Session ကိုပါ ဖျက်ပေးမည်
+      localStorage.removeItem('pos_staff_session');
       logger.log('User logged out');
     } catch (error) {
       logger.error('Logout failed', error);
@@ -71,7 +82,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // 🌟 မူလ Permission စစ်ဆေးသည့်စနစ်ကို အပြည့်အစုံ ထိန်းသိမ်းထားပါသည်
   const hasPermission = (perm) => {
     if (!profile) return false;
     if (profile.role === 'admin') return true;
@@ -82,7 +92,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{ 
       user, 
       profile, 
-      userData: profile, // 🌟 Backward compatibility အတွက် မူလအတိုင်း ထားရှိပါသည်
+      userData: profile, 
       loading, 
       login, 
       logout, 

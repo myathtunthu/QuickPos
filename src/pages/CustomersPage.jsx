@@ -1,42 +1,159 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
+import {
+  collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc,
+  writeBatch, serverTimestamp, increment, getDoc
+} from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, Save, Phone } from 'lucide-react';
+import {
+  Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList,
+  X, Save, Phone, Printer, ArrowRightLeft
+} from 'lucide-react';
 
+// ---------- Receipt Modal (for viewing voucher from history) ----------
+const ReceiptModal = ({ record, shopSettings, onClose }) => {
+  const fmt = n => (Number(n) || 0).toLocaleString();
+  const items = record.itemsDetail || [{ name: record.item || 'Item', quantity: 1, unitPrice: record.amount, itemDiscountAmt: 0, unitName: 'ခု' }];
+
+  const doPrint = () => {
+    const w = window.open('', '_blank', 'width=400,height=600');
+    w.document.write(`<html><head><style>body{font-family:sans-serif;width:80mm;padding:10px;margin:0 auto;}</style></head><body>
+      <div style="text-align:center;">
+        <h2>${shopSettings.shopName}</h2>
+        <p>${shopSettings.address || ''}</p>
+        <p>Tel: ${shopSettings.phone || ''}</p>
+        <hr>
+      </div>
+      <table width="100%">
+        ${items.map((item,i) => `<tr>
+          <td>${item.name} ${item.quantity}${item.unitName} x ${fmt(item.unitPrice)}</td>
+          <td align="right">${fmt(item.unitPrice * item.quantity - (item.itemDiscountAmt||0))}</td>
+        </tr>`).join('')}
+      </table>
+      <hr>
+      <div><b>TOTAL:</b> ${fmt(record.amount)} Ks</div>
+      <div>Paid (${record.paymentMethod}): ${fmt(record.paidAmount)} Ks</div>
+      ${record.remainingDebt > 0 ? `<div>Credit: ${fmt(record.remainingDebt)} Ks</div>` : ''}
+      <script>window.onload=()=>{window.print();}</script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white text-black rounded-xl p-5 w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="text-center border-b pb-2 mb-3">
+          <h3 className="font-bold">{shopSettings.shopName}</h3>
+          <p className="text-xs">{record.voucherNo || record.id?.slice(-8)}</p>
+          <p className="text-xs">{record.date} {record.time}</p>
+        </div>
+        <table className="w-full text-xs mb-3">
+          {items.map((item, i) => (
+            <tr key={i} className="border-b">
+              <td className="py-1">{item.name} x{item.quantity} {item.unitName}</td>
+              <td className="text-right">{fmt(item.unitPrice * item.quantity - (item.itemDiscountAmt||0))}</td>
+            </tr>
+          ))}
+        </table>
+        <div className="text-xs space-y-1">
+          <div className="flex justify-between"><span>Subtotal:</span><span>{fmt(record.subtotal || record.amount)} Ks</span></div>
+          {(record.itemDiscount || record.globalDiscount) > 0 && <div className="flex justify-between text-red-500"><span>Discount:</span><span>-{fmt((record.itemDiscount||0)+(record.globalDiscount||0))} Ks</span></div>}
+          <div className="flex justify-between font-bold border-t pt-1"><span>TOTAL:</span><span>{fmt(record.amount)} Ks</span></div>
+          <div className="flex justify-between"><span>Paid ({record.paymentMethod}):</span><span>{fmt(record.paidAmount||0)} Ks</span></div>
+          {record.remainingDebt > 0 && <div className="flex justify-between text-red-600"><span>Credit:</span><span>{fmt(record.remainingDebt)} Ks</span></div>}
+        </div>
+        <button onClick={doPrint} className="w-full mt-4 bg-cyan-600 text-white py-2 rounded-lg flex items-center justify-center gap-1"><Printer size={16}/> Print</button>
+        <button onClick={onClose} className="w-full mt-2 bg-gray-200 py-2 rounded-lg">Close</button>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Merge Modal ----------
+const MergeModal = ({ customers, onClose, onMerge }) => {
+  const [fromId, setFromId] = useState('');
+  const [toId, setToId] = useState('');
+
+  const handleMerge = () => {
+    if (!fromId || !toId || fromId === toId) return;
+    onMerge(fromId, toId);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4">
+      <div className="bg-[#0d1120] border border-cyan-500/20 rounded-2xl p-5 w-full max-w-sm">
+        <h3 className="text-lg font-bold text-cyan-400 mb-4">Merge Customers</h3>
+        <label className="text-xs text-slate-400">From (delete after merge)</label>
+        <select className="w-full bg-black border border-white/10 rounded-lg p-2 text-white mt-1 mb-3" onChange={e => setFromId(e.target.value)} value={fromId}>
+          <option value="">-- Select --</option>
+          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <label className="text-xs text-slate-400">To (keep this customer)</label>
+        <select className="w-full bg-black border border-white/10 rounded-lg p-2 text-white mt-1 mb-3" onChange={e => setToId(e.target.value)} value={toId}>
+          <option value="">-- Select --</option>
+          {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div className="flex gap-2">
+          <button onClick={handleMerge} className="flex-1 bg-cyan-600 py-2 rounded-lg font-bold">Merge</button>
+          <button onClick={onClose} className="flex-1 bg-slate-700 py-2 rounded-lg">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Main Page ----------
 export default function CustomersPage() {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;
+
+  // Tab state: 'customers' or 'history'
+  const [tab, setTab] = useState('customers');
 
   const [customers, setCustomers] = useState([]);
   const [ledgers, setLedgers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modals State
+  // Modals
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [isLedgerModalOpen, setLedgerModalOpen] = useState(false);
+  const [isMergeModalOpen, setMergeModalOpen] = useState(false);
 
-  // Form States
+  // Form states
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '' });
   const [paymentForm, setPaymentForm] = useState({ amount: '', note: '' });
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  // --- Fetch Customers ---
+  // Receipt view
+  const [receiptRecord, setReceiptRecord] = useState(null);
+
+  // Shop settings for receipt
+  const [shopSettings, setShopSettings] = useState({ shopName: 'QuickPOS', phone: '', address: '' });
+
+  // Fetch shop settings
+  useEffect(() => {
+    if (!tenantId) return;
+    getDoc(doc(db, 'pos_settings', tenantId)).then(snap => {
+      if (snap.exists()) setShopSettings(snap.data());
+    }).catch(() => {});
+  }, [tenantId]);
+
+  // Fetch customers
   const fetchCustomers = async () => {
     if (!tenantId) return;
     setLoading(true);
     try {
       const q = query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId));
       const snap = await getDocs(q);
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort by name
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setCustomers(data);
-    } catch (error) {
-      console.error("Error fetching customers:", error);
+    } catch (err) {
+      console.error(err);
     }
     setLoading(false);
   };
@@ -45,400 +162,339 @@ export default function CustomersPage() {
     fetchCustomers();
   }, [tenantId]);
 
-  // --- Filter ---
+  // Filter
   const filteredCustomers = useMemo(() => {
     if (!searchTerm.trim()) return customers;
-    const lowerSearch = searchTerm.toLowerCase();
-    return customers.filter(c => 
-      (c.name || '').toLowerCase().includes(lowerSearch) || 
-      (c.phone || '').includes(lowerSearch)
-    );
+    const s = searchTerm.toLowerCase();
+    return customers.filter(c => (c.name||'').toLowerCase().includes(s) || (c.phone||'').includes(s));
   }, [customers, searchTerm]);
 
-  // --- Save Customer (Add / Edit) ---
+  // Save customer
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
-    if (!customerForm.name.trim()) return alert("Customer အမည် ထည့်ပါ");
-    
+    if (!customerForm.name.trim()) return alert("Name required");
     setLoading(true);
     try {
       const payload = {
         name: customerForm.name.trim(),
         phone: customerForm.phone.trim(),
         address: customerForm.address.trim(),
-        tenantId: tenantId,
+        tenantId,
         updatedAt: serverTimestamp()
       };
-
       if (editingCustomer) {
         await setDoc(doc(db, 'pos_customers', editingCustomer.id), payload, { merge: true });
-        alert("Customer အချက်အလက် ပြင်ဆင်ပြီးပါပြီ။");
       } else {
-        await addDoc(collection(db, 'pos_customers'), {
-          ...payload,
-          totalDebt: 0, 
-          createdAt: serverTimestamp()
-        });
-        alert("Customer အသစ် ထည့်သွင်းပြီးပါပြီ။");
+        await addDoc(collection(db, 'pos_customers'), { ...payload, totalDebt: 0, createdAt: serverTimestamp() });
       }
       setCustomerModalOpen(false);
       fetchCustomers();
-    } catch (error) {
-      console.error(error);
-      alert("Error saving customer.");
-    }
+    } catch (err) { console.error(err); alert("Error saving customer"); }
     setLoading(false);
   };
 
-  // --- Delete Customer ---
+  // Delete
   const handleDeleteCustomer = async (id, name, debt) => {
-    if (debt > 0) {
-      return alert(`အမှား: ${name} တွင် ပေးရန်ကျန်ငွေ (${debt.toLocaleString()} Ks) ရှိနေသဖြင့် ဖျက်၍မရပါ။`);
-    }
-    if (!window.confirm(`${name} ကို ဖျက်ရန် သေချာပါသလား?`)) return;
-
+    if (debt > 0) return alert(`Cannot delete ${name} with outstanding debt`);
+    if (!window.confirm(`Delete ${name}?`)) return;
     try {
       await deleteDoc(doc(db, 'pos_customers', id));
       fetchCustomers();
-    } catch (error) {
-      console.error(error);
-      alert("Error deleting customer.");
-    }
+    } catch (err) { console.error(err); }
   };
 
-  // --- Handle Payment (အကြွေးဆပ်ခြင်း) ---
+  // Payment
   const handlePayment = async (e) => {
     e.preventDefault();
-    const payAmount = Number(paymentForm.amount);
-    if (!payAmount || payAmount <= 0) return alert("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။");
-    
-    if (payAmount > selectedCustomer.totalDebt + 10) return alert(`ဆပ်သည့်ငွေသည် ကျန်ရှိသောအကြွေး (${selectedCustomer.totalDebt.toLocaleString()}) ထက် များနေပါသည်။`);
-
+    const pay = Number(paymentForm.amount);
+    if (!pay || pay <= 0) return alert("Enter valid amount");
+    if (pay > selectedCustomer.totalDebt + 10) return alert("Exceeds balance");
     setLoading(true);
     try {
       const batch = writeBatch(db);
-      
-      const customerRef = doc(db, 'pos_customers', selectedCustomer.id);
-      batch.update(customerRef, {
-        totalDebt: increment(-payAmount)
-      });
-
-      const recordRef = doc(collection(db, 'pos_records'));
-      batch.set(recordRef, {
+      batch.update(doc(db, 'pos_customers', selectedCustomer.id), { totalDebt: increment(-pay) });
+      const ref = doc(collection(db, 'pos_records'));
+      batch.set(ref, {
         type: 'Customer Payment',
-        tenantId: tenantId,
+        tenantId,
         customerId: selectedCustomer.id,
-        personName: selectedCustomer.name, 
-        amount: payAmount,
+        personName: selectedCustomer.name,
+        amount: pay,
         note: paymentForm.note || 'အကြွေးလာဆပ်သည်',
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        cashier: profile?.username || profile?.name || 'Admin',
+        cashier: profile?.username || 'Admin',
         createdAt: serverTimestamp()
       });
-
       await batch.commit();
-      alert("ငွေသွင်းမှတ်တမ်း သိမ်းဆည်းပြီးပါပြီ။");
       setPaymentModalOpen(false);
       fetchCustomers();
-    } catch (error) {
-      console.error(error);
-      alert("Error saving payment.");
-    }
+    } catch (err) { console.error(err); }
     setLoading(false);
   };
 
-  // --- View Ledger (မှတ်တမ်းကြည့်ခြင်း) 🌟 FIXED: Firebase Index Errors ---
+  // View Ledger (with receipt click)
   const viewLedger = async (customer) => {
     setSelectedCustomer(customer);
     setLedgerModalOpen(true);
-    setLedgers([]); 
-    
+    setLedgers([]);
     try {
-      // 🌟 Firebase Index Error မတက်စေရန် Tenant နဲ့သက်ဆိုင်သမျှ အရင်ဆွဲထုတ်မည်
-      const q = query(
-        collection(db, 'pos_records'), 
-        where('tenantId', '==', tenantId)
-      );
+      const q = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
       const snap = await getDocs(q);
-      const allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // 🌟 Frontend (Client-side) ဘက်တွင် လိုအပ်သည်များကိုသာ ပြန်လည်စစ်ထုတ်မည် (အလွန်မြန်ဆန်ပါသည်)
-      const relevantLedgers = allRecords.filter(r => 
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const rel = all.filter(r =>
         (r.customerId === customer.id || r.personName === customer.name) &&
         (r.type === 'Customer Payment' || (r.type === 'Sale' && r.remainingDebt > 0))
       );
+      rel.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setLedgers(rel);
+    } catch (err) { console.error(err); }
+  };
 
-      // 🌟 အချိန်အစဉ်လိုက် အသစ်ဆုံးကို အပေါ်ရောက်အောင် စီမည် (Sort)
-      relevantLedgers.sort((a, b) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-        return timeB - timeA;
+  // Merge customers
+  const handleMerge = async (fromId, toId) => {
+    setLoading(true);
+    try {
+      const batch = writeBatch(db);
+      // Fetch all records of from customer and update customerId to toId, and personName to toCustomer name
+      const toCustomer = customers.find(c => c.id === toId);
+      const fromCustomer = customers.find(c => c.id === fromId);
+      if (!toCustomer || !fromCustomer) return;
+
+      // Update records
+      const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', tenantId)));
+      snap.forEach(docSnap => {
+        const rec = docSnap.data();
+        if (rec.customerId === fromId || rec.personName === fromCustomer.name) {
+          batch.update(docSnap.ref, { customerId: toId, personName: toCustomer.name });
+        }
       });
-      
-      setLedgers(relevantLedgers);
-    } catch (error) {
-      console.error("Error fetching ledger:", error);
-    }
+
+      // Transfer debt
+      const fromDebt = Number(fromCustomer.totalDebt) || 0;
+      const toDebt = Number(toCustomer.totalDebt) || 0;
+      batch.update(doc(db, 'pos_customers', toId), { totalDebt: increment(fromDebt) });
+      batch.delete(doc(db, 'pos_customers', fromId));
+      await batch.commit();
+      fetchCustomers();
+    } catch (err) { console.error(err); alert("Merge failed"); }
+    setLoading(false);
   };
 
-  const openAddModal = () => {
-    setEditingCustomer(null);
-    setCustomerForm({ name: '', phone: '', address: '' });
-    setCustomerModalOpen(true);
+  // Open modals
+  const openAddModal = () => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); };
+  const openEditModal = (c) => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone||'', address: c.address||'' }); setCustomerModalOpen(true); };
+  const openPaymentModal = (c) => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); };
+
+  // History view (all customer-related transactions)
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const fetchHistory = async () => {
+    if (!tenantId) return;
+    setLoading(true);
+    try {
+      const q = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
+      const snap = await getDocs(q);
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const rel = all.filter(r => r.type === 'Customer Payment' || (r.type === 'Sale' && r.customerId) || r.personName);
+      rel.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setHistoryRecords(rel);
+    } catch (err) { console.error(err); }
+    setLoading(false);
   };
 
-  const openEditModal = (c) => {
-    setEditingCustomer(c);
-    setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' });
-    setCustomerModalOpen(true);
-  };
-
-  const openPaymentModal = (c) => {
-    setSelectedCustomer(c);
-    setPaymentForm({ amount: '', note: '' });
-    setPaymentModalOpen(true);
-  };
+  useEffect(() => {
+    if (tab === 'history') fetchHistory();
+  }, [tab, tenantId]);
 
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-20">
-      
-      <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border-2 border-cyan-500/15 shadow-xl gap-5 animate-in fade-in">
-        <div className="text-center md:text-left w-full md:w-auto">
-          <h3 className="font-black text-2xl flex items-center justify-center md:justify-start gap-3"><Users className="text-cyan-500"/> Customers</h3>
-          <p className="text-slate-400 text-sm mt-1">ဖောက်သည်စာရင်းနှင့် အကြွေးမှတ်တမ်းများ</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <div className="relative flex-1 sm:min-w-[250px]">
-            <Search size={20} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder="အမည် သို့မဟုတ် ဖုန်းဖြင့် ရှာရန်..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm"/>
+      {/* Tabs */}
+      <div className="flex gap-2 bg-[#0d1120] p-1.5 rounded-xl">
+        <button onClick={() => setTab('customers')} className={`flex-1 py-2 rounded-lg font-bold text-sm ${tab === 'customers' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}>Customer Book</button>
+        <button onClick={() => setTab('history')} className={`flex-1 py-2 rounded-lg font-bold text-sm ${tab === 'history' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}>Transaction History</button>
+      </div>
+
+      {tab === 'customers' ? (
+        <>
+          <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-6 rounded-3xl border border-cyan-500/15 gap-5">
+            <h3 className="font-black text-2xl flex items-center gap-3"><Users className="text-cyan-500"/> Customers</h3>
+            <div className="flex flex-wrap gap-3 w-full md:w-auto">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={20} className="absolute left-4 top-3.5 text-slate-500"/>
+                <input type="text" placeholder="Search by name or phone..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-3 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm"/>
+              </div>
+              <button onClick={openAddModal} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2"><Plus size={20}/> Add</button>
+              <button onClick={() => setMergeModalOpen(true)} className="bg-indigo-600/20 text-indigo-400 px-4 py-3 rounded-xl font-bold flex items-center gap-2 border border-indigo-500/20"><ArrowRightLeft size={18}/> Merge</button>
+            </div>
           </div>
-          <button onClick={openAddModal} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors active:scale-95 shadow-lg shadow-cyan-900/50">
-            <Plus size={20}/> အသစ်ထည့်မည်
-          </button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-         <div className="bg-[#0d1120] p-5 rounded-2xl border border-white/5 flex items-center gap-4 shadow-lg">
-            <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl"><Users size={24}/></div>
-            <div>
-              <p className="text-slate-400 text-xs font-bold uppercase">Total Customers</p>
-              <p className="text-xl font-black">{customers.length}</p>
-            </div>
-         </div>
-         <div className="bg-[#0d1120] p-5 rounded-2xl border border-amber-500/20 flex items-center gap-4 shadow-lg">
-            <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl"><DollarSign size={24}/></div>
-            <div>
-              <p className="text-slate-400 text-xs font-bold uppercase">Total Pending Debt</p>
-              <p className="text-xl font-black text-amber-400">
-                {customers.reduce((sum, c) => sum + (Number(c.totalDebt) || 0), 0).toLocaleString()} Ks
-              </p>
-            </div>
-         </div>
-      </div>
-
-      <div className="bg-[#0d1120] rounded-3xl border border-white/5 overflow-hidden shadow-xl">
-        
-        {/* Desktop Table View */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-black/40 text-slate-400">
-              <tr>
-                <th className="p-4 font-bold">Customer Info</th>
-                <th className="p-4 font-bold">Contact</th>
-                <th className="p-4 font-bold text-right">Credit Balance</th>
-                <th className="p-4 font-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {loading && <tr><td colSpan="4" className="p-8 text-center text-slate-500">Loading customers...</td></tr>}
-              {!loading && filteredCustomers.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-500">Customer မတွေ့ပါ။</td></tr>}
-              
-              {filteredCustomers.map(c => (
-                <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="p-4">
-                    <p className="font-bold text-white text-base">{c.name}</p>
-                  </td>
-                  <td className="p-4 text-slate-400">
-                    <p>{c.phone || '-'}</p>
-                    <p className="text-xs text-slate-500 truncate max-w-[200px]">{c.address || '-'}</p>
-                  </td>
-                  <td className="p-4 text-right">
-                    {Number(c.totalDebt) > 0 ? (
-                       <span className="font-black text-amber-400 text-base">{Number(c.totalDebt).toLocaleString()} Ks</span>
-                    ) : (
-                       <span className="font-bold text-green-500 text-sm">ရှင်းပြီး</span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center space-x-2">
-                    <button onClick={() => openPaymentModal(c)} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={18}/></button>
-                    <button onClick={() => viewLedger(c)} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={18}/></button>
-                    <button onClick={() => openEditModal(c)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title="ပြင်မည်"><Edit3 size={18}/></button>
-                    <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title="ဖျက်မည်"><Trash2 size={18}/></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="block md:hidden p-4 space-y-4">
-          {loading && <p className="text-center text-slate-500 py-4">Loading customers...</p>}
-          {!loading && filteredCustomers.length === 0 && <p className="text-center text-slate-500 py-4">Customer မတွေ့ပါ။</p>}
-          
-          {filteredCustomers.map(c => (
-            <div key={c.id} className="bg-black/30 border border-white/5 p-4 rounded-2xl flex flex-col gap-4 shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-bold text-white text-lg">{c.name}</h4>
-                  {c.phone && <p className="text-slate-400 text-xs mt-1 flex items-center gap-1"><Phone size={12}/> {c.phone}</p>}
-                  {c.address && <p className="text-slate-500 text-[10px] mt-1 line-clamp-1">{c.address}</p>}
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Balance</p>
-                  {Number(c.totalDebt) > 0 ? (
-                    <p className="font-black text-amber-400 text-lg leading-tight">{Number(c.totalDebt).toLocaleString()} <span className="text-xs">Ks</span></p>
-                  ) : (
-                    <p className="font-bold text-green-500 text-sm mt-1">ရှင်းပြီး</p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-4 gap-2 pt-3 border-t border-white/5">
-                <button onClick={() => openPaymentModal(c)} disabled={Number(c.totalDebt) <= 0} className={`py-2 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}>
-                  <DollarSign size={20}/>
-                </button>
-                <button onClick={() => viewLedger(c)} className="py-2 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all">
-                  <ClipboardList size={20}/>
-                </button>
-                <button onClick={() => openEditModal(c)} className="py-2 flex justify-center items-center bg-indigo-600/20 text-indigo-400 rounded-xl active:bg-indigo-600/40 transition-all">
-                  <Edit3 size={20}/>
-                </button>
-                <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="py-2 flex justify-center items-center bg-rose-600/20 text-rose-400 rounded-xl active:bg-rose-600/40 transition-all">
-                  <Trash2 size={20}/>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* --- MODALS --- */}
-
-      {/* 1. Add/Edit Customer Modal */}
-      {isCustomerModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handleSaveCustomer} className="bg-[#0d1120] border-t-2 sm:border-2 border-cyan-500/20 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-cyan-400">{editingCustomer ? 'Customer ပြင်ရန်' : 'Customer အသစ်'}</h3>
-              <button type="button" onClick={() => setCustomerModalOpen(false)} className="text-slate-400 hover:text-white p-1"><X size={24}/></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 font-bold ml-1">အမည် *</label>
-                <input required value={customerForm.name} onChange={e=>setCustomerForm({...customerForm, name: e.target.value})} className="w-full mt-1 bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-cyan-500 text-sm" placeholder="e.g. U Ba"/>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 font-bold ml-1">ဖုန်းနံပါတ် (Optional)</label>
-                <input type="tel" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm, phone: e.target.value})} className="w-full mt-1 bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-cyan-500 text-sm" placeholder="09..."/>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 font-bold ml-1">လိပ်စာ (Optional)</label>
-                <textarea value={customerForm.address} onChange={e=>setCustomerForm({...customerForm, address: e.target.value})} className="w-full mt-1 bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-cyan-500 text-sm custom-scrollbar" rows="2" placeholder="လိပ်စာ..."></textarea>
-              </div>
-            </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-cyan-600 text-white font-black py-4 rounded-xl active:bg-cyan-700 transition-colors flex justify-center items-center gap-2 shadow-lg shadow-cyan-900/50">
-              <Save size={20}/> {loading ? 'Saving...' : 'သိမ်းမည်'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* 2. Payment Modal */}
-      {isPaymentModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handlePayment} className="bg-[#0d1120] border-t-2 sm:border-2 border-amber-500/30 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-amber-400">ငွေသွင်းမှတ်တမ်း</h3>
-              <button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1"><X size={24}/></button>
-            </div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Credit Balance</p>
-              <p className="text-3xl font-black text-amber-400 mt-2">{Number(selectedCustomer.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-400 font-bold ml-1">ပေးသွင်းမည့် ငွေပမာဏ *</label>
-                <input type="number" required max={selectedCustomer.totalDebt + 10} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full mt-1 bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider" placeholder="0"/>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 font-bold ml-1">မှတ်ချက် (Optional)</label>
-                <input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full mt-1 bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm" placeholder="ဥပမာ - KBZ Pay ဖြင့်လွှဲသည်"/>
-              </div>
-            </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:bg-amber-700 transition-colors shadow-lg shadow-amber-900/50">
-              {loading ? 'Processing...' : 'ငွေသွင်းမည်'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* 3. Ledger Modal */}
-      {isLedgerModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0d1120] border-t-2 sm:border-2 border-blue-500/20 rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[85vh] sm:max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95 overflow-hidden">
-            <div className="p-5 sm:p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20">
-              <div>
-                <h3 className="text-lg sm:text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedCustomer.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 font-bold">Current Debt: <span className="text-amber-400 text-sm">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p>
-              </div>
-              <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
-            </div>
-            
-            <div className="overflow-y-auto custom-scrollbar flex-1 p-4 sm:p-6 bg-black/10">
-              {ledgers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 opacity-50">
-                  <ClipboardList size={48} className="text-slate-500 mb-3"/>
-                  <p className="text-center text-slate-400 font-bold">မှတ်တမ်း မရှိသေးပါ။</p>
-                  <p className="text-center text-xs text-slate-500 mt-1">အကြွေးယူထားခြင်း (သို့) ငွေဆပ်ထားခြင်း မှတ်တမ်းများ ဤနေရာတွင် ပေါ်ပါမည်။</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {ledgers.map(record => (
-                    <div key={record.id} className="bg-[#12182b] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:border-blue-500/30 transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${record.type === 'Customer Payment' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                            {record.type === 'Customer Payment' ? 'Payment In' : 'Credit Sale'}
-                          </span>
-                          <span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span>
-                        </div>
-                        <p className="text-sm font-bold text-slate-200">{record.type === 'Sale' ? `Invoice: ${record.voucherNo || '-'}` : (record.note || 'အကြွေးဆပ်ခြင်း')}</p>
-                        {record.type === 'Sale' && <p className="text-[11px] font-bold text-slate-500 mt-1">Total Bill: {Number(record.amount).toLocaleString()} • Paid: {Number(record.paidAmount).toLocaleString()}</p>}
-                      </div>
-                      <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-white/5 sm:border-0 mt-2 sm:mt-0">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">{record.type === 'Customer Payment' ? 'Amount Received' : 'Debt Added'}</p>
-                        {record.type === 'Customer Payment' ? (
-                          <p className="text-lg font-black text-green-400 mt-0.5">-{Number(record.amount).toLocaleString()} <span className="text-xs">Ks</span></p>
-                        ) : (
-                          <p className="text-lg font-black text-amber-400 mt-0.5">+{Number(record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span></p>
-                        )}
-                      </div>
-                    </div>
+          {/* Customer list (same table/cards as before) */}
+          <div className="bg-[#0d1120] rounded-3xl border border-white/5 overflow-hidden">
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-black/40 text-slate-400">
+                  <tr>
+                    <th className="p-4">Name</th>
+                    <th className="p-4">Phone</th>
+                    <th className="p-4 text-right">Credit Balance</th>
+                    <th className="p-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredCustomers.map(c => (
+                    <tr key={c.id} className="hover:bg-white/[0.02]">
+                      <td className="p-4 font-bold">{c.name}</td>
+                      <td className="p-4 text-slate-400">{c.phone || '-'}</td>
+                      <td className="p-4 text-right">
+                        {Number(c.totalDebt) > 0 ? <span className="font-black text-amber-400">{Number(c.totalDebt).toLocaleString()} Ks</span> : <span className="text-green-500">Settled</span>}
+                      </td>
+                      <td className="p-4 flex justify-center gap-2">
+                        <button onClick={() => openPaymentModal(c)} disabled={Number(c.totalDebt)<=0} className={`p-2 rounded-lg ${Number(c.totalDebt)>0 ? 'bg-amber-600/20 text-amber-400' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={18}/></button>
+                        <button onClick={() => viewLedger(c)} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg"><ClipboardList size={18}/></button>
+                        <button onClick={() => openEditModal(c)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg"><Edit3 size={18}/></button>
+                        <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg"><Trash2 size={18}/></button>
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              )}
+                </tbody>
+              </table>
             </div>
-            
-            <div className="p-4 border-t border-white/5 bg-black/40 text-center block sm:hidden">
-               <button onClick={() => setLedgerModalOpen(false)} className="w-full py-3 bg-white/10 rounded-xl text-sm font-bold text-white active:bg-white/20">Close View</button>
+            {/* Mobile cards (similar structure) */}
+            <div className="block md:hidden p-4 space-y-4">
+              {filteredCustomers.map(c => (
+                <div key={c.id} className="bg-black/30 p-4 rounded-2xl">
+                  <div className="flex justify-between">
+                    <div>
+                      <p className="font-bold text-lg">{c.name}</p>
+                      {c.phone && <p className="text-xs text-slate-400"><Phone size={12} className="inline"/> {c.phone}</p>}
+                    </div>
+                    <div>
+                      {Number(c.totalDebt) > 0 ? <p className="font-black text-amber-400">{Number(c.totalDebt).toLocaleString()} Ks</p> : <p className="text-green-500 text-sm">Settled</p>}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-white/5">
+                    <button onClick={() => openPaymentModal(c)} disabled={Number(c.totalDebt)<=0} className="p-2 rounded-lg bg-amber-600/20 text-amber-400 disabled:bg-gray-800 disabled:text-gray-600"><DollarSign size={18}/></button>
+                    <button onClick={() => viewLedger(c)} className="p-2 rounded-lg bg-blue-600/20 text-blue-400"><ClipboardList size={18}/></button>
+                    <button onClick={() => openEditModal(c)} className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400"><Edit3 size={18}/></button>
+                    <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 rounded-lg bg-rose-600/20 text-rose-400"><Trash2 size={18}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Transaction History View */
+        <div className="bg-[#0d1120] rounded-3xl border border-white/5 p-4">
+          <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><ClipboardList className="text-cyan-400"/> Recent Customer Transactions</h3>
+          {loading ? <p className="text-center text-slate-400 py-4">Loading...</p> : historyRecords.length === 0 ? <p className="text-center text-slate-500 py-4">No records found.</p> : (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+              {historyRecords.map(rec => (
+                <div key={rec.id} className="bg-black/30 p-3 rounded-xl flex justify-between items-center cursor-pointer hover:border-cyan-500/30 border border-white/5" onClick={() => setReceiptRecord(rec)}>
+                  <div>
+                    <p className="font-bold">{rec.personName || 'Unknown'}</p>
+                    <p className="text-xs text-slate-400">{rec.type} | {rec.voucherNo || rec.id.slice(-8)}</p>
+                    <p className="text-xs text-slate-500">{rec.date} {rec.time}</p>
+                  </div>
+                  <div className="text-right">
+                    {rec.type === 'Customer Payment' ? (
+                      <p className="text-green-400 font-bold">-{Number(rec.amount).toLocaleString()} Ks</p>
+                    ) : (
+                      <p className="text-amber-400 font-bold">+{Number(rec.remainingDebt || 0).toLocaleString()} Ks</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODALS */}
+      {/* Customer Form Modal (same as before) */}
+      {isCustomerModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm">
+          <form onSubmit={handleSaveCustomer} className="bg-[#0d1120] border-t-2 sm:border-2 border-cyan-500/20 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-cyan-400">{editingCustomer ? 'Edit Customer' : 'New Customer'}</h3>
+              <button type="button" onClick={() => setCustomerModalOpen(false)} className="text-slate-400"><X size={24}/></button>
+            </div>
+            <div className="space-y-4">
+              <input required value={customerForm.name} onChange={e=>setCustomerForm({...customerForm, name: e.target.value})} placeholder="Name *" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white"/>
+              <input value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm, phone: e.target.value})} placeholder="Phone" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white"/>
+              <textarea value={customerForm.address} onChange={e=>setCustomerForm({...customerForm, address: e.target.value})} placeholder="Address" className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white" rows="2"/>
+            </div>
+            <button type="submit" className="w-full mt-6 bg-cyan-600 py-3 rounded-xl font-bold"><Save size={18} className="inline mr-2"/>Save</button>
+          </form>
+        </div>
+      )}
+
+      {/* Payment Modal (same) */}
+      {isPaymentModalOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm">
+          <form onSubmit={handlePayment} className="bg-[#0d1120] border-t-2 sm:border-2 border-amber-500/30 rounded-t-3xl sm:rounded-3xl p-6 w-full max-w-sm">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-amber-400">Payment</h3>
+              <button type="button" onClick={() => setPaymentModalOpen(false)}><X size={24}/></button>
+            </div>
+            <div className="bg-black/40 p-4 rounded-xl text-center mb-4">
+              <p className="text-sm text-slate-400">Balance: <span className="text-amber-400 font-bold">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p>
+            </div>
+            <input type="number" required value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} placeholder="Amount *" className="w-full bg-black/50 border border-amber-500/20 rounded-xl p-3 text-amber-400 text-xl font-bold text-center"/>
+            <input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} placeholder="Note" className="w-full mt-3 bg-black/50 border border-white/10 rounded-xl p-3 text-white"/>
+            <button type="submit" className="w-full mt-5 bg-amber-600 py-3 rounded-xl font-bold">Submit Payment</button>
+          </form>
+        </div>
+      )}
+
+      {/* Ledger Modal with clickable invoices */}
+      {isLedgerModalOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setLedgerModalOpen(false)}>
+          <div className="bg-[#0d1120] border-t-2 sm:border-2 border-blue-500/20 rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-white/5 flex justify-between items-center bg-black/20">
+              <div>
+                <h3 className="text-lg font-bold text-blue-400">{selectedCustomer.name}</h3>
+                <p className="text-xs text-slate-400">Current Debt: <span className="text-amber-400">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p>
+              </div>
+              <button onClick={() => setLedgerModalOpen(false)}><X size={20}/></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {ledgers.length === 0 ? <p className="text-center text-slate-500 py-8">No records</p> : ledgers.map(rec => (
+                <div key={rec.id} className="bg-black/30 p-3 rounded-xl flex justify-between items-center cursor-pointer hover:border-cyan-500/30 border border-white/5"
+                  onClick={() => { setReceiptRecord(rec); }}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${rec.type === 'Customer Payment' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>{rec.type}</span>
+                      <span className="text-xs text-slate-500">{rec.voucherNo || rec.id.slice(-8)}</span>
+                    </div>
+                    <p className="text-sm mt-1">{rec.note || (rec.type === 'Sale' ? `Invoice: ${rec.voucherNo}` : 'Payment')}</p>
+                    <p className="text-xs text-slate-500">{rec.date} {rec.time}</p>
+                  </div>
+                  <div className="text-right">
+                    {rec.type === 'Customer Payment' ? (
+                      <p className="text-green-400 font-bold">-{Number(rec.amount).toLocaleString()} Ks</p>
+                    ) : (
+                      <p className="text-amber-400 font-bold">+{Number(rec.remainingDebt || 0).toLocaleString()} Ks</p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
+      {/* Merge Modal */}
+      {isMergeModalOpen && (
+        <MergeModal customers={customers} onClose={() => setMergeModalOpen(false)} onMerge={handleMerge} />
+      )}
+
+      {/* Receipt Modal (voucher view) */}
+      {receiptRecord && (
+        <ReceiptModal record={receiptRecord} shopSettings={shopSettings} onClose={() => setReceiptRecord(null)} />
+      )}
     </div>
   );
 }

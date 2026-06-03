@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MonitorPlay, Eye, EyeOff } from 'lucide-react';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 
-// 🌟 AdminPage တွင် သုံးထားသော Hash နှင့် အတိအကျတူညီရပါမည်။
 const simpleHash = str => {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -26,10 +25,26 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Admin သို့မဟုတ် Staff Session ရှိနေပါက Dashboard သို့သွားမည်
     const staffSession = localStorage.getItem('pos_staff_session');
-    if ((user && profile) || staffSession) {
-      navigate('/dashboard', { replace: true });
+    let activeProfile = null;
+
+    if (staffSession) {
+      activeProfile = JSON.parse(staffSession);
+    } else if (user && profile) {
+      activeProfile = profile;
+    }
+
+    if (activeProfile) {
+      let target = '/dashboard';
+      // 🌟 Admin မဟုတ်ဘဲ Dashboard ကြည့်ခွင့်မရှိပါက သက်ဆိုင်ရာ Page သို့ လမ်းလွှဲပေးမည်
+      if (activeProfile.role !== 'admin' && !(activeProfile.permissions || []).includes('view_reports')) {
+         const p = activeProfile.permissions || [];
+         if (p.includes('create_sale')) target = '/entry';
+         else if (p.includes('view_inventory')) target = '/inventory';
+         else if (p.includes('accept_payment')) target = '/customers';
+         else target = '/entry';
+      }
+      navigate(target, { replace: true });
     }
   }, [user, profile, navigate]);
 
@@ -41,38 +56,45 @@ export default function LoginPage() {
     try {
       const input = usernameOrEmail.trim();
 
-      // 🌟 အဆင့် ၁ - Staff အကောင့် (Database ထဲက Username) ဟုတ်မဟုတ် အရင်စစ်မည်
-      const q = query(collection(db, 'pos_users'), where('username', '==', input));
-      const snap = await getDocs(q);
+      const usersSnap = await getDocs(collection(db, 'pos_users'));
+      let matchedUser = null;
 
-      let isStaffLogin = false;
+      usersSnap.forEach(doc => {
+        const data = doc.data();
+        if (data.username && data.username.toLowerCase() === input.toLowerCase()) {
+          matchedUser = { id: doc.id, ...data };
+        }
+      });
 
-      if (!snap.empty) {
-        const userDataFromDb = { id: snap.docs[0].id, ...snap.docs[0].data() };
-        
-        // Staff အကောင့်ဖြစ်ပါက (Hash တိုက်စစ်ပြီး ဝင်ခွင့်ပြုမည်)
-        if (userDataFromDb.role === 'staff') {
-          isStaffLogin = true;
-          
-          if (userDataFromDb.password !== simpleHash(password)) {
-            throw { code: 'auth/wrong-password' };
-          }
+      if (matchedUser) {
+        const isPasswordCorrect = matchedUser.password === simpleHash(password) || matchedUser.password === password;
 
-          // Staff အတွက် Session ကို သိမ်းပြီး Dashboard သို့ ဝင်မည်
-          localStorage.setItem('pos_staff_session', JSON.stringify(userDataFromDb));
-          window.location.href = '/dashboard'; // App အား Reload လုပ်ပေးရန်
+        if (!isPasswordCorrect) {
+          setErr('စကားဝှက် (Password) မှားယွင်းနေပါသည်။ သေချာပြန်စစ်ပေးပါ။');
+          setLoading(false);
           return;
         }
+
+        localStorage.setItem('pos_staff_session', JSON.stringify(matchedUser));
+        
+        let target = '/dashboard';
+        if (matchedUser.role !== 'admin' && !(matchedUser.permissions || []).includes('view_reports')) {
+           const p = matchedUser.permissions || [];
+           if (p.includes('create_sale')) target = '/entry';
+           else if (p.includes('view_inventory')) target = '/inventory';
+           else if (p.includes('accept_payment')) target = '/customers';
+           else target = '/entry';
+        }
+        window.location.href = target; 
+        return;
       }
 
-      // 🌟 အဆင့် ၂ - Staff မဟုတ်ခဲ့ရင် Admin (Firebase Auth) အဖြစ် မှတ်ယူပြီး Login ဝင်မည်
-      if (!isStaffLogin) {
-        await login(input, password);
-      }
+      await login(input, password);
 
     } catch (error) {
+      console.error("Login Error:", error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setErr('Username/Email သို့မဟုတ် Password မှားနေပါသည်!');
+        setErr('Admin Email သို့မဟုတ် Password မှားနေပါသည်!');
       } else if (error.code === 'auth/invalid-email') {
         setErr('Email ပုံစံမှားနေပါသည်!');
       } else if (error.code === 'auth/too-many-requests') {
@@ -106,7 +128,7 @@ export default function LoginPage() {
         </div>
         
         {err && (
-          <p className="text-sm font-bold text-rose-400 bg-rose-500/10 border-2 border-rose-500/20 p-4 rounded-xl mb-8 text-center">
+          <p className="text-sm font-bold text-rose-400 bg-rose-500/10 border-2 border-rose-500/20 p-4 rounded-xl mb-8 text-center animate-fade-in">
             {err}
           </p>
         )}
@@ -129,7 +151,7 @@ export default function LoginPage() {
               placeholder="Password" 
               className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl pr-16 outline-none focus:border-cyan-400"
             />
-            <button type="button" onClick={() => setShow(!show)} className="absolute right-6 top-5 text-slate-500 hover:text-cyan-400">
+            <button type="button" onClick={() => setShow(!show)} className="absolute right-6 top-5 text-slate-500 hover:text-cyan-400 transition-colors">
               {show ? <EyeOff size={28}/> : <Eye size={28}/>}
             </button>
           </div>

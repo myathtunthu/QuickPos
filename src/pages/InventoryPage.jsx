@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../firebase/config';
-import { collection, addDoc, doc, setDoc, deleteDoc, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import useDebounce from '../hooks/useDebounce';
 
-// 🌟 Custom UI & Utilities
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 import logger from '../utils/logger';
@@ -65,14 +64,13 @@ const ScannerModal = ({ onClose, onScan }) => {
 
 // ---------- Inventory Page ----------
 export default function InventoryPage() {
-  const { profile } = useAuth();
+  const { profile, hasPermission } = useAuth(); // 🌟 Permission စစ်ဆေးရန် ခေါ်ယူခြင်း
   const tenantId = profile?.tenantId;
 
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 300);
 
-  // Category Filter State
   const [selCategory, setSelCategory] = useState('All');
 
   const [adding, setAdding] = useState(false);
@@ -90,7 +88,6 @@ export default function InventoryPage() {
     minStock: '5',
   });
 
-  // Fetch real-time products
   useEffect(() => {
     if (!tenantId) return;
     const q = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
@@ -98,7 +95,6 @@ export default function InventoryPage() {
     return () => unsub();
   }, [tenantId]);
 
-  // Extract unique categories
   const categories = useMemo(() => {
     if (!products) return ['General'];
     const cats = new Set(products.map(p => p.category).filter(Boolean));
@@ -153,6 +149,8 @@ export default function InventoryPage() {
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
+    if (!hasPermission('manage_products')) return showToast("ကုန်ပစ္စည်းစီမံခွင့် မရှိပါ။", "error"); // 🌟 Guard
+
     if (submitLock.current) return; 
     
     if (!form.name.trim()) return showToast("Product Name ထည့်ပါ", "error");
@@ -195,6 +193,7 @@ export default function InventoryPage() {
   };
 
   const startEdit = (p) => {
+    if (!hasPermission('manage_products')) return; // 🌟 Guard
     setEditing(p); setAdding(false);
     setForm({
       name: p.name || '', category: p.category || '', baseUnit: p.baseUnit || 'Bottle',
@@ -208,7 +207,6 @@ export default function InventoryPage() {
     setShowNewCategoryInput(false);
   };
 
-  // 🌟 Error တက်နေသော cancelEdit function အား ပြန်လည်ထည့်သွင်းခြင်း
   const cancelEdit = () => {
     setEditing(null);
     setAdding(false);
@@ -216,6 +214,8 @@ export default function InventoryPage() {
   };
 
   const updateStock = async (id, newStock) => {
+    if (!hasPermission('manage_inventory')) return showToast("ကုန်လက်ကျန် ပြင်ခွင့်မရှိပါ။", "error"); // 🌟 Guard
+
     const s = Number(newStock);
     if (!isNaN(s)) {
       try {
@@ -226,6 +226,7 @@ export default function InventoryPage() {
   };
 
   const handleDeleteProduct = (id, name) => {
+    if (!hasPermission('manage_products')) return; // 🌟 Guard
     setConfirmDialog({
       isOpen: true, title: "ပစ္စည်း ဖျက်သိမ်းခြင်း", message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
       onConfirm: async () => {
@@ -262,9 +263,12 @@ export default function InventoryPage() {
             <input type="text" placeholder="Search product..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm shadow-inner transition-colors"/>
           </div>
-          <button onClick={()=>{setAdding(!adding);setEditing(null); if(!adding) resetForm();}} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 text-sm shadow-lg shadow-cyan-900/50 active:scale-95 transition-all">
-            <Plus size={18}/> Add Item
-          </button>
+          {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ Add Button ပြမည် */}
+          {hasPermission('manage_products') && (
+            <button onClick={()=>{setAdding(!adding);setEditing(null); if(!adding) resetForm();}} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 text-sm shadow-lg shadow-cyan-900/50 active:scale-95 transition-all">
+              <Plus size={18}/> Add Item
+            </button>
+          )}
         </div>
       </div>
 
@@ -276,8 +280,8 @@ export default function InventoryPage() {
         ))}
       </div>
 
-      {/* Add / Edit Form */}
-      {(adding || editing) && (
+      {/* Add / Edit Form (Permission Check Included Above) */}
+      {(adding || editing) && hasPermission('manage_products') && (
         <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-5 sm:p-6 rounded-3xl border border-cyan-500/30 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
           <p className="text-sm font-black text-cyan-400 uppercase tracking-wider">{editing ? 'Edit Product' : 'New Product'}</p>
 
@@ -398,7 +402,7 @@ export default function InventoryPage() {
         </form>
       )}
 
-      {/* Mobile Product Card View / Desktop Table View */}
+      {/* Desktop Table View / Mobile Card View */}
       <div className="bg-[#0d1120] border border-cyan-500/15 rounded-3xl overflow-hidden shadow-xl">
         
         {/* Desktop Table View */}
@@ -411,12 +415,12 @@ export default function InventoryPage() {
                 <th className="p-4 text-center">Base Unit</th>
                 <th className="p-4 text-center">Stock</th>
                 <th className="p-4 text-right text-cyan-400">Retail Price</th>
-                <th className="p-4 text-center w-28">Actions</th>
+                {hasPermission('manage_products') && <th className="p-4 text-center w-28">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredProducts.length === 0 && (
-                <tr><td colSpan={6} className="p-10 text-center text-slate-500 font-bold">No products found.</td></tr>
+                <tr><td colSpan={hasPermission('manage_products') ? 6 : 5} className="p-10 text-center text-slate-500 font-bold">No products found.</td></tr>
               )}
               {filteredProducts.map(p => {
                 const isLowStock = (Number(p.stockBase) || Number(p.stock) || 0) <= (Number(p.minStock) || 5);
@@ -436,17 +440,21 @@ export default function InventoryPage() {
                       <td className="p-4 text-center text-slate-400 font-bold">{baseUnitName}</td>
                       <td className={`p-4 text-center font-black text-lg ${isLowStock ? 'text-amber-400' : 'text-white'}`}>{stockVal}</td>
                       <td className="p-4 text-right font-black text-cyan-400 text-base">{fmt(retailPrice)} <span className="text-xs font-bold text-cyan-600">Ks</span></td>
-                      <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-center gap-2">
-                          <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-2 bg-indigo-900/30 border border-indigo-500/20 rounded-lg text-indigo-400 hover:bg-indigo-900/50 transition-colors"><Edit3 size={16}/></button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id, p.name); }} className="p-2 bg-rose-900/30 border border-rose-500/20 rounded-lg text-rose-400 hover:bg-rose-900/50 transition-colors"><Trash2 size={16}/></button>
-                        </div>
-                      </td>
+                      
+                      {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ Edit/Delete Button ပြမည် */}
+                      {hasPermission('manage_products') && (
+                        <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex justify-center gap-2">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(p); }} className="p-2 bg-indigo-900/30 border border-indigo-500/20 rounded-lg text-indigo-400 hover:bg-indigo-900/50 transition-colors"><Edit3 size={16}/></button>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id, p.name); }} className="p-2 bg-rose-900/30 border border-rose-500/20 rounded-lg text-rose-400 hover:bg-rose-900/50 transition-colors"><Trash2 size={16}/></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
 
                     {isExpanded && (
                       <tr className="bg-black/30 border-b-2 border-cyan-500/20">
-                        <td colSpan={6} className="p-6">
+                        <td colSpan={hasPermission('manage_products') ? 6 : 5} className="p-6">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
                               <p className="text-xs text-slate-500 font-black uppercase mb-3 flex items-center gap-2"><Boxes size={14}/> Stock Breakdown</p>
@@ -463,7 +471,14 @@ export default function InventoryPage() {
                               </div>
                               <div className="pt-2 border-t border-white/5">
                                 <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">Manual Adjust Stock (Base)</label>
-                                <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-full bg-black/50 border border-cyan-500/30 rounded-lg px-3 py-2 text-white font-bold outline-none focus:border-cyan-400" />
+                                {/* 🌟 ကုန်လက်ကျန်ပြင်ခွင့် ရှိမှသာ Input ပြမည်၊ မရှိလျှင် စာသားသာပြမည် */}
+                                {hasPermission('manage_inventory') ? (
+                                  <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-full bg-black/50 border border-cyan-500/30 rounded-lg px-3 py-2 text-white font-bold outline-none focus:border-cyan-400" />
+                                ) : (
+                                  <div className="w-full bg-[#0d1120] border border-white/10 rounded-lg px-3 py-2 text-slate-400 font-bold cursor-not-allowed text-center">
+                                    {stockVal}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
@@ -533,10 +548,14 @@ export default function InventoryPage() {
 
                 {isExpanded && (
                   <div className="p-4 bg-black/40 border-t border-cyan-500/10 space-y-4">
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => startEdit(p)} className="flex-1 py-2 bg-indigo-900/30 border border-indigo-500/20 rounded-xl text-indigo-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Edit3 size={16}/> Edit</button>
-                      <button type="button" onClick={() => handleDeleteProduct(p.id, p.name)} className="flex-1 py-2 bg-rose-900/30 border border-rose-500/20 rounded-xl text-rose-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Trash2 size={16}/> Delete</button>
-                    </div>
+                    
+                    {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ ပြမည် */}
+                    {hasPermission('manage_products') && (
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => startEdit(p)} className="flex-1 py-2 bg-indigo-900/30 border border-indigo-500/20 rounded-xl text-indigo-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Edit3 size={16}/> Edit</button>
+                        <button type="button" onClick={() => handleDeleteProduct(p.id, p.name)} className="flex-1 py-2 bg-rose-900/30 border border-rose-500/20 rounded-xl text-rose-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Trash2 size={16}/> Delete</button>
+                      </div>
+                    )}
                     
                     <div className="bg-black/50 p-3 rounded-xl border border-white/5">
                       <p className="text-[10px] text-slate-500 font-black uppercase mb-2">Stock Breakdown</p>
@@ -550,7 +569,14 @@ export default function InventoryPage() {
                       </div>
                       <div className="flex justify-between items-center">
                         <label className="text-[10px] text-slate-500 font-bold">Adjust Base Stock:</label>
-                        <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-20 bg-[#0d1120] border border-cyan-500/30 rounded-lg px-2 py-1.5 text-white font-bold outline-none focus:border-cyan-400 text-center text-sm" />
+                        {/* 🌟 ကုန်လက်ကျန်ပြင်ခွင့် ရှိမှသာ Input ပြမည်၊ မရှိလျှင် စာသားသာပြမည် */}
+                        {hasPermission('manage_inventory') ? (
+                          <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-20 bg-[#0d1120] border border-cyan-500/30 rounded-lg px-2 py-1.5 text-white font-bold outline-none focus:border-cyan-400 text-center text-sm" />
+                        ) : (
+                          <div className="w-20 bg-[#0d1120] border border-white/10 rounded-lg px-2 py-1.5 text-slate-400 font-bold text-center text-sm cursor-not-allowed">
+                            {stockVal}
+                          </div>
+                        )}
                       </div>
                     </div>
 

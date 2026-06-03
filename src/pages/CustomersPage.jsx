@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase/config';
 import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
-import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, Save, Phone, History, Receipt, Printer } from 'lucide-react';
+import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt } from 'lucide-react';
 
 export default function CustomersPage() {
   const { profile } = useAuth();
@@ -10,9 +10,12 @@ export default function CustomersPage() {
 
   const [activeTab, setActiveTab] = useState('book'); // 'book' or 'history'
   const [customers, setCustomers] = useState([]);
-  const [allRecords, setAllRecords] = useState([]); // သမိုင်းကြောင်းနှင့် Ledger အတွက်
+  const [allRecords, setAllRecords] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // 🌟 Auto-Merge ပြီး/မပြီး မှတ်သားရန် State
+  const [autoMergeDone, setAutoMergeDone] = useState(false);
 
   // Modals State
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
@@ -31,14 +34,12 @@ export default function CustomersPage() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      // 1. Fetch Customers
       const custQ = query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId));
       const custSnap = await getDocs(custQ);
       const custData = custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       custData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setCustomers(custData);
 
-      // 2. Fetch Records (For History & Ledger)
       const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
       const recSnap = await getDocs(recQ);
       setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -52,7 +53,85 @@ export default function CustomersPage() {
     fetchData();
   }, [tenantId]);
 
-  // --- Search Filter (Customer Book) ---
+  // 🌟 --- BACKGROUND AUTO MERGE (ခလုတ်နှိပ်စရာမလိုဘဲ အလိုအလျောက် ပေါင်းပေးခြင်း) --- 🌟
+  useEffect(() => {
+    if (customers.length > 0 && allRecords.length > 0 && !autoMergeDone) {
+      checkAndMergeDuplicates();
+    }
+  }, [customers, allRecords, autoMergeDone]);
+
+  const checkAndMergeDuplicates = async () => {
+    const groups = {};
+    let hasDuplicates = false;
+    
+    // နာမည်၊ ဖုန်း၊ လိပ်စာ တူသူများကို ရှာဖွေ Group ဖွဲ့မည်
+    customers.forEach(c => {
+      const n = (c.name || '').trim().toLowerCase();
+      const p = (c.phone || '').trim();
+      const a = (c.address || '').trim().toLowerCase();
+      const key = `${n}_${p}_${a}`;
+      
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+      if (groups[key].length > 1) hasDuplicates = true;
+    });
+
+    // တူတာမရှိရင် ဘာမှလုပ်စရာမလိုပါ
+    if (!hasDuplicates) {
+      setAutoMergeDone(true);
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      let mergedCount = 0;
+
+      for (const key in groups) {
+        const group = groups[key];
+        if (group.length > 1) {
+          // အဟောင်းဆုံးအကောင့်ကို မူရင်း (Primary) အဖြစ်ထားမည်
+          group.sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0));
+          
+          const primary = group[0];
+          let additionalDebt = 0;
+
+          // ကျန်သည့် အကောင့်ပွားများကို ပေါင်းမည်
+          for (let i = 1; i < group.length; i++) {
+            const duplicate = group[i];
+            additionalDebt += (Number(duplicate.totalDebt) || 0);
+
+            // အကောင့်ပွားတွင်ရှိသော အရောင်း/ငွေသွင်းမှတ်တမ်းများကို Primary ထံသို့ ပြောင်းရွှေ့မည်
+            const dupRecords = allRecords.filter(r => r.customerId === duplicate.id);
+            dupRecords.forEach(rec => {
+              batch.update(doc(db, 'pos_records', rec.id), { customerId: primary.id });
+            });
+
+            // အကောင့်ပွားကို ဖျက်မည်
+            batch.delete(doc(db, 'pos_customers', duplicate.id));
+            mergedCount++;
+          }
+
+          // Primary အကောင့်သို့ အကြွေးများ စုပေါင်းထည့်မည်
+          if (additionalDebt > 0) {
+            batch.update(doc(db, 'pos_customers', primary.id), {
+              totalDebt: increment(additionalDebt)
+            });
+          }
+        }
+      }
+
+      if (mergedCount > 0) {
+        await batch.commit();
+        fetchData(); // ပေါင်းပြီးတာနဲ့ ဒေတာပြန်ခေါ်မည်
+      }
+    } catch (error) {
+      console.error("Auto merge error:", error);
+    } finally {
+      setAutoMergeDone(true); // တစ်ခါလုပ်ပြီးပါက နောက်တစ်ခါ ထပ်မလုပ်စေရန်
+    }
+  };
+
+  // --- Search Filter ---
   const filteredCustomers = useMemo(() => {
     if (!searchTerm.trim()) return customers;
     const lowerSearch = searchTerm.toLowerCase();
@@ -62,7 +141,7 @@ export default function CustomersPage() {
     );
   }, [customers, searchTerm]);
 
-  // --- History Merge Logic (ငွေသွင်းမှတ်တမ်းများကို Customer တူလျှင် ပေါင်းပြခြင်း) ---
+  // --- History Merge Logic ---
   const mergedHistory = useMemo(() => {
     const payments = allRecords.filter(r => r.type === 'Customer Payment');
     const merged = {};
@@ -83,13 +162,11 @@ export default function CustomersPage() {
       merged[cId].paymentCount += 1;
       merged[cId].details.push(p);
       
-      // Update last payment date if newer
       if (new Date(p.date) > new Date(merged[cId].lastPaymentDate)) {
         merged[cId].lastPaymentDate = p.date;
       }
     });
 
-    // Search filter for history
     let historyArr = Object.values(merged).sort((a, b) => new Date(b.lastPaymentDate) - new Date(a.lastPaymentDate));
     if (searchTerm.trim()) {
       historyArr = historyArr.filter(h => (h.personName || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -100,12 +177,31 @@ export default function CustomersPage() {
   // --- Save Customer ---
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
-    if (!customerForm.name.trim()) return alert("Customer အမည် ထည့်ပါ");
-    
+    const nName = customerForm.name.trim();
+    const nPhone = customerForm.phone.trim();
+    const nAddress = customerForm.address.trim();
+
+    if (!nName) return alert("Customer အမည် ထည့်ပါ");
     setLoading(true);
+
     try {
+      // အသစ်ထည့်မည်ဆိုပါက နာမည်၊ ဖုန်း၊ လိပ်စာ တူသူ ရှိ/မရှိ စစ်ဆေးပြီး ရှိပါက မထည့်တော့ပါ
+      if (!editingCustomer) {
+        const key = `${nName.toLowerCase()}_${nPhone}_${nAddress.toLowerCase()}`;
+        const existing = customers.find(c => {
+           const cKey = `${(c.name||'').trim().toLowerCase()}_${(c.phone||'').trim()}_${(c.address||'').trim().toLowerCase()}`;
+           return cKey === key;
+        });
+
+        if (existing) {
+           setCustomerModalOpen(false);
+           setLoading(false);
+           return; // တူတာရှိနေပြီးဖြစ်၍ ဘာမှမလုပ်ဘဲ ထွက်မည်
+        }
+      }
+
       const payload = {
-        name: customerForm.name.trim(), phone: customerForm.phone.trim(), address: customerForm.address.trim(),
+        name: nName, phone: nPhone, address: nAddress,
         tenantId: tenantId, updatedAt: serverTimestamp()
       };
 
@@ -164,7 +260,6 @@ export default function CustomersPage() {
       (r.type === 'Customer Payment' || (r.type === 'Sale' && Number(r.remainingDebt) > 0))
     );
     
-    // Sort oldest to newest to calculate running balance
     relevant.sort((a, b) => {
       const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
       const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
@@ -178,7 +273,6 @@ export default function CustomersPage() {
       return { ...r, runningBalance };
     });
 
-    // Reverse back to show newest on top
     return withBalance.reverse();
   }, [allRecords, selectedCustomer]);
 
@@ -260,7 +354,7 @@ export default function CustomersPage() {
           </div>
         )}
 
-        {/* --- PAYMENT HISTORY TAB (Merged) --- */}
+        {/* --- PAYMENT HISTORY TAB --- */}
         {activeTab === 'history' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -364,7 +458,6 @@ export default function CustomersPage() {
                             <span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span>
                           </div>
                           
-                          {/* 🌟 Clickable Invoice Hint */}
                           {isSale ? (
                              <div>
                                <p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p>

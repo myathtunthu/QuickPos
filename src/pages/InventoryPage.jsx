@@ -72,7 +72,7 @@ export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearch = useDebounce(searchTerm, 300);
 
-  // 🌟 Category Filter State အသစ်
+  // Category Filter State
   const [selCategory, setSelCategory] = useState('All');
 
   const [adding, setAdding] = useState(false);
@@ -134,6 +134,7 @@ export default function InventoryPage() {
 
   const addPackageUnit = () => setForm(p => ({ ...p, packageUnits: [...p.packageUnits, { name: '', multiplier: '', barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' }] }));
   const removePackageUnit = (index) => setForm(p => ({ ...p, packageUnits: p.packageUnits.filter((_, i) => i !== index) }));
+  
   const resetForm = () => {
     setForm({ name: '', category: '', baseUnit: 'Bottle', packageUnits: [{ name: 'Bottle', multiplier: 1, barcodes: { retail: '' }, prices: { retail: '', wholesaleA: '', wholesaleB: '', wholesaleC: '' }, costPrice: '' }], minStock: '5' });
     setShowNewCategoryInput(false);
@@ -207,6 +208,13 @@ export default function InventoryPage() {
     setShowNewCategoryInput(false);
   };
 
+  // 🌟 Error တက်နေသော cancelEdit function အား ပြန်လည်ထည့်သွင်းခြင်း
+  const cancelEdit = () => {
+    setEditing(null);
+    setAdding(false);
+    resetForm();
+  };
+
   const updateStock = async (id, newStock) => {
     const s = Number(newStock);
     if (!isNaN(s)) {
@@ -230,7 +238,6 @@ export default function InventoryPage() {
     });
   };
 
-  // 🌟 Filter Logic Updated with Category
   const filteredProducts = useMemo(() => {
     let result = products;
     if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
@@ -261,7 +268,7 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* 🌟 Categories Filter Horizontal Scroll */}
+      {/* Categories Filter Horizontal Scroll */}
       <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2 pt-1 px-1">
         <button onClick={() => setSelCategory('All')} className={`px-5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-md ${selCategory === 'All' ? 'bg-cyan-600 text-white' : 'bg-[#0d1120] text-slate-400 border border-white/5 hover:border-cyan-500/30'}`}>All</button>
         {categories.map(cat => (
@@ -391,7 +398,7 @@ export default function InventoryPage() {
         </form>
       )}
 
-      {/* 🌟 Mobile Product Card View / Desktop Table View */}
+      {/* Mobile Product Card View / Desktop Table View */}
       <div className="bg-[#0d1120] border border-cyan-500/15 rounded-3xl overflow-hidden shadow-xl">
         
         {/* Desktop Table View */}
@@ -494,7 +501,7 @@ export default function InventoryPage() {
           </table>
         </div>
 
-        {/* 🌟 Mobile Card View */}
+        {/* Mobile Card View */}
         <div className="block sm:hidden divide-y divide-white/5">
           {filteredProducts.length === 0 && (
             <div className="p-8 text-center text-slate-500 font-bold">No products found.</div>

@@ -12,6 +12,11 @@ import {
 } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
+// 🌟 New UI & Utility Imports (PDF လမ်းညွှန်ချက်အရ ထည့်သွင်းထားပါသည်)
+import ConfirmDialog from '../components/UI/ConfirmDialog';
+import { showToast } from '../components/UI/Toast';
+import logger from '../utils/logger';
+
 import ProductSearch from '../components/entry/ProductSearch';
 import ProductGrid from '../components/entry/ProductGrid';
 import ProductDropdown from '../components/entry/ProductDropdown';
@@ -59,7 +64,8 @@ const ScannerModal = ({ onClose, onScan }) => {
         });
       })
       .catch((err) => {
-        console.error('Camera error:', err);
+        // 🌟 console.error အစား logger.error ကို အသုံးပြုထားပါသည်
+        logger.error('Camera error:', err);
         setCameraError(true);
       });
 
@@ -130,6 +136,10 @@ export default function EntryPage({ products = [] }) {
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
 
+  // 🌟 Custom Dialog States
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
+
   const submitLock = useRef(false);
 
   const {
@@ -171,7 +181,10 @@ export default function EntryPage({ products = [] }) {
         setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
         setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        logger.error('Error fetching initial data:', err); 
+        showToast('ဒေတာများရယူရာတွင် အမှားအယွင်းရှိနေပါသည်', 'error');
+      }
     };
 
     fetchAllData();
@@ -184,7 +197,9 @@ export default function EntryPage({ products = [] }) {
       const q = query(collection(db, 'pos_drafts'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(20));
       const snap = await getDocs(q);
       setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      logger.error('Error fetching drafts:', err); 
+    }
   };
 
   useEffect(() => {
@@ -218,24 +233,39 @@ export default function EntryPage({ products = [] }) {
     const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
     const response = addToCart(product, defaultUnit, 'retail', 1);
     if (response.success) setProdSearch('');
-    else alert(response.message);
+    else showToast(response.message, 'error'); // 🌟 Replaced alert
   }, [addToCart]);
 
   const handleTabChange = (tab) => {
-    if (cart.length > 0 && !window.confirm("Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?")) return;
+    if (cart.length > 0) {
+      // 🌟 Replaced window.confirm
+      setConfirmDialog({
+        isOpen: true,
+        title: "Tab ပြောင်းလဲခြင်း",
+        message: "Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?",
+        onConfirm: () => {
+          setEntryTab(tab); 
+          clearCart();
+          setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        }
+      });
+      return;
+    }
     setEntryTab(tab); clearCart();
   };
 
-  const handleHoldInvoice = async () => {
+  const handleHoldInvoiceClick = () => {
     if (cart.length === 0) return;
     if (cart.some(x => x.quantity === '' || Number(x.quantity) <= 0)) {
-      alert("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။");
+      showToast("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။", "error");
       return;
     }
+    // 🌟 Replaced prompt
+    setPromptModal({ isOpen: true, name: personSearch || "" });
+  };
 
-    const name = prompt("ခဏဆိုင်းထားမည့် ဘေလ်အတွက် မှတ်သားရန်အမည် (ဥပမာ - စားပွဲ ၃):", personSearch || "");
-    if (name === null) return;
-
+  const executeHoldInvoice = async (name) => {
+    if (!name.trim()) return;
     setLoading(true);
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
@@ -252,29 +282,61 @@ export default function EntryPage({ products = [] }) {
         personSearch: personSearch || '', selectedPerson: selectedPerson || null, newPersonPhone: newPersonPhone || '', newPersonAddress: newPersonAddress || '',
         globalDiscountAmt: globalDiscountAmt || '', globalDiscountType: globalDiscountType || '%', paymentMethod: paymentMethod || 'Cash', paidAmount: paidAmount || '', createdAt: serverTimestamp()
       });
-      alert("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။");
+      showToast("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။", "success");
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); fetchDrafts();
-    } catch (err) { alert("Error saving draft: " + err.message); }
+    } catch (err) { 
+      logger.error('Error saving draft:', err);
+      showToast("Error saving draft: " + err.message, "error"); 
+    }
     setLoading(false);
+    setPromptModal({ isOpen: false, name: '' });
   };
 
-  const restoreDraft = async (draft) => {
-    if (cart.length > 0 && !window.confirm("လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?")) return;
+  const restoreDraft = (draft) => {
+    if (cart.length > 0) {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Draft ပြန်လည်ရယူခြင်း",
+        message: "လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?",
+        onConfirm: () => executeRestoreDraft(draft)
+      });
+      return;
+    }
+    executeRestoreDraft(draft);
+  };
+
+  const executeRestoreDraft = async (draft) => {
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
     clearCart(); setEntryTab(draft.type || 'Sale'); setPersonSearch(draft.personSearch || ''); setSelectedPerson(draft.selectedPerson || null);
     setNewPersonPhone(draft.newPersonPhone || ''); setNewPersonAddress(draft.newPersonAddress || ''); setGlobalDiscountAmt(draft.globalDiscountAmt || '');
     setGlobalDiscountType(draft.globalDiscountType || '%'); setPaymentMethod(draft.paymentMethod || 'Cash'); setPaidAmount(draft.paidAmount || '');
     if (draft.cart && Array.isArray(draft.cart)) setCart(draft.cart.map(item => ({ ...item, id: item.id || Date.now() + Math.random() })));
     try {
       await deleteDoc(doc(db, 'pos_drafts', draft.id));
-      fetchDrafts(); setShowDrafts(false); alert("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။");
-    } catch (err) { console.error(err); }
+      fetchDrafts(); setShowDrafts(false); 
+      showToast("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။", "success");
+    } catch (err) { 
+      logger.error('Error restoring draft:', err); 
+    }
   };
 
-  const deleteDraft = async (id) => {
-    if (window.confirm('Draft ကိုဖျက်မှာ သေချာပါသလား?')) {
-      await deleteDoc(doc(db, 'pos_drafts', id)); fetchDrafts();
-    }
+  const deleteDraft = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: "Draft ဖျက်သိမ်းခြင်း",
+      message: "ဤ Draft အား ဖျက်မှာ သေချာပါသလား?",
+      onConfirm: async () => {
+        setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+        try {
+          await deleteDoc(doc(db, 'pos_drafts', id)); 
+          fetchDrafts();
+          showToast("Draft ဖျက်သိမ်းပြီးပါပြီ", "success");
+        } catch (err) {
+          logger.error('Error deleting draft:', err);
+        }
+      }
+    });
   };
 
   const submitExpense = async () => {
@@ -297,7 +359,6 @@ export default function EntryPage({ products = [] }) {
         cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
       });
 
-      // 🌟 FIXED: tenantId ကို မဖြစ်မနေ ထည့်သွင်းပေးပြီး { merge: true } အသုံးပြုထားပါသည်
       if (counterSnap.exists()) {
         batch.set(counterRef, { expenseCount: increment(1), tenantId: tenantId }, { merge: true });
       } else {
@@ -305,8 +366,12 @@ export default function EntryPage({ products = [] }) {
       }
       
       await batch.commit();
-      setExpenseTitle(''); setExpenseAmt(''); alert("Expense Saved!");
-    } catch (err) { alert("Error saving expense"); }
+      setExpenseTitle(''); setExpenseAmt(''); 
+      showToast("Expense သိမ်းဆည်းပြီးပါပြီ!", "success");
+    } catch (err) { 
+      logger.error('Error saving expense:', err);
+      showToast("Error saving expense", "error"); 
+    }
     submitLock.current = false; setLoading(false);
   };
 
@@ -315,7 +380,7 @@ export default function EntryPage({ products = [] }) {
     if (cart.length === 0 || !tenantId) return;
 
     const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
-    if (invalidItem) return alert(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`);
+    if (invalidItem) return showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`, "error");
 
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -326,7 +391,7 @@ export default function EntryPage({ products = [] }) {
     let personNameForRecord = selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
     if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
-      alert(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`);
+      showToast(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`, "error");
       return;
     }
 
@@ -334,7 +399,7 @@ export default function EntryPage({ products = [] }) {
       for (const item of cart) {
         const prodData = products.find(p => p.id === item.productId);
         const currentStockBase = Number(prodData?.stockBase) || Number(prodData?.stock) || 0;
-        if (item.baseQuantity > currentStockBase) return alert(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`);
+        if (item.baseQuantity > currentStockBase) return showToast(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`, "error");
       }
     }
 
@@ -351,7 +416,6 @@ export default function EntryPage({ products = [] }) {
           totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
       } else if (personIdForRecord && remainingDebt > 0) {
-        // 🌟 FIXED: Customer/Supplier အကြွေးတိုးရာတွင် tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const personRef = doc(db, collectionName, personIdForRecord);
         batch.set(personRef, { totalDebt: increment(remainingDebt), tenantId: tenantId }, { merge: true });
@@ -383,11 +447,9 @@ export default function EntryPage({ products = [] }) {
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
         const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
         const prodRef = doc(db, 'pos_products', item.productId);
-        // 🌟 FIXED: Product Stock အတိုးအလျှော့လုပ်ရာတွင်လည်း tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
         batch.set(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange), tenantId: tenantId }, { merge: true });
       });
 
-      // 🌟 FIXED: Voucher Counter တိုးရာတွင် tenantId အမြဲပါအောင် set(merge) အသုံးပြုထားသည်
       if (counterSnap.exists()) {
         batch.set(counterRef, { [countField]: increment(1), tenantId: tenantId }, { merge: true });
       } else {
@@ -404,8 +466,8 @@ export default function EntryPage({ products = [] }) {
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       
     } catch (err) { 
-      console.error("Firebase Save Error: ", err); 
-      alert("Error saving transaction! Please check your internet connection and try again."); 
+      logger.error("Firebase Save Error: ", err); 
+      showToast("Error saving transaction! Please check your internet connection and try again.", "error"); 
     }
     
     submitLock.current = false; setLoading(false);
@@ -420,7 +482,7 @@ export default function EntryPage({ products = [] }) {
     if (match) {
       const { product, unit } = match;
       const res = addToCart(product, unit, 'retail', 1);
-      if (!res.success) alert(res.message);
+      if (!res.success) showToast(res.message, 'error');
       else {
         try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -432,7 +494,7 @@ export default function EntryPage({ products = [] }) {
         } catch (e) {}
       }
     } else {
-      alert(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`);
+      showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`, "error");
     }
   };
 
@@ -446,6 +508,35 @@ export default function EntryPage({ products = [] }) {
           @page { margin: 0; }
         }
       `}</style>
+
+      {/* 🌟 New Component: ConfirmDialog implementation */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
+      />
+
+      {/* 🌟 New Component: Inline Prompt replacement for 'Hold Invoice' */}
+      {promptModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:hidden">
+          <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-xl font-black text-cyan-400 mb-4">ခဏဆိုင်းထားမည့် ဘေလ်အမည်</h3>
+            <input 
+              autoFocus
+              value={promptModal.name} 
+              onChange={e => setPromptModal({ ...promptModal, name: e.target.value })} 
+              className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-cyan-500 mb-6" 
+              placeholder="ဥပမာ - စားပွဲ ၃"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => executeHoldInvoice(promptModal.name)} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold">သိမ်းမည်</button>
+              <button onClick={() => setPromptModal({ isOpen: false, name: '' })} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold">ပယ်ဖျက်မည်</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
 
@@ -552,7 +643,7 @@ export default function EntryPage({ products = [] }) {
             <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
               <div className="flex justify-between items-center mb-2 pl-1 pr-1">
                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
-                <button onClick={handleHoldInvoice} disabled={cart.length === 0}
+                <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
                   className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
                 >
                   <PauseCircle size={12}/> Pause / Hold

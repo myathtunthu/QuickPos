@@ -6,22 +6,21 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 
 // Components
-import ErrorBoundary from './components/ErrorBoundary'; 
-import Toast from './components/UI/Toast'; // 🌟 Toast ကို Import ခေါ်ထားပါသည်
+import ErrorBoundary from './components/ErrorBoundary';
+import Toast from './components/UI/Toast';
 
 // Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EntryPage from './pages/EntryPage';
 import InventoryPage from './pages/InventoryPage';
-import ReportsPage from './pages/ReportsPage';
+// ❌ import ReportsPage from './pages/ReportsPage';  // ဖယ်ထားပါ
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 import RecordsPage from './pages/RecordsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
 
-// 🌟 Phase 2: Pages အသစ်များ လှမ်းခေါ်ခြင်း
 import CustomersPage from './pages/CustomersPage';
 import SuppliersPage from './pages/SuppliersPage';
 import DraftsPage from './pages/DraftsPage';
@@ -31,7 +30,6 @@ import Layout from './components/UI/Layout';
 
 const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
-  
   if (loading) {
     return (
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
@@ -39,7 +37,6 @@ const ProtectedRoute = ({ children }) => {
       </div>
     );
   }
-  
   if (!user || !profile) return <Navigate to="/login" replace />;
   return children;
 };
@@ -51,26 +48,23 @@ function AppContent() {
 
   useEffect(() => {
     if (!profile?.tenantId) return;
-    
-    // Realtime Sync for Records
+
     const unsubRecords = onSnapshot(
       query(collection(db, 'pos_records'), where('tenantId', '==', profile.tenantId)),
       snap => setAllRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    
-    // Realtime Sync for Products
+
     const unsubProducts = onSnapshot(
       query(collection(db, 'pos_products'), where('tenantId', '==', profile.tenantId)),
       snap => setAllProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-    
-    return () => { 
-      unsubRecords(); 
-      unsubProducts(); 
+
+    return () => {
+      unsubRecords();
+      unsubProducts();
     };
   }, [profile?.tenantId]);
 
-  // 🌟 Auto-map missing packageUnits for backward compatibility
   const mappedProducts = useMemo(() => {
     return allProducts.map(prod => {
       if (prod.packageUnits?.length > 0) return prod;
@@ -100,25 +94,22 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/mttadminacc" element={<SuperAdminPage />} />
-        
+
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage records={allRecords} />} />
           <Route path="entry" element={<EntryPage products={mappedProducts} />} />
           <Route path="inventory" element={<InventoryPage products={mappedProducts} />} />
-          
-          {/* 🌟 Phase 2: Routes အသစ်များ */}
           <Route path="customers" element={<CustomersPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="drafts" element={<DraftsPage />} />
-
-          <Route path="reports" element={<ReportsPage records={allRecords} />} />
+          {/* ❌ ReportsPage Route ဖယ်ရှား */}
           <Route path="ledger" element={<LedgerPage records={allRecords} />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="records" element={<RecordsPage />} />
         </Route>
-        
+
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>
@@ -130,7 +121,6 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <LanguageProvider>
-          {/* 🌟 နေရာတိုင်းမှာ စာလေးတွေ ပေါ်လာအောင် Toast ကို ဤနေရာတွင် ထည့်သွင်းထားပါသည် */}
           <Toast />
           <AppContent />
         </LanguageProvider>

@@ -3,14 +3,14 @@ import { db, auth } from '../firebase/config';
 import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
-import { Settings, Cloud, Download, Upload, Lock, Save, ExternalLink, Key, HelpCircle, MessageCircle, Store, Wallet } from 'lucide-react';
+import { Settings, Cloud, Download, Upload, Lock, Save, Key, HelpCircle, MessageCircle } from 'lucide-react';
 
-// 🌟 UI & Utilities
+// 🌟 UI & Utilities (alert များကို အစားထိုးရန်)
 import { showToast } from '../components/UI/Toast';
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import logger from '../utils/logger';
 
-// 🌟 Password Encryption Utility
+// 🌟 Security: ပိုမိုလုံခြုံသော Password ကုဒ်ဝှက်စနစ် (Super Admin Auto-login အတွက်)
 const SECRET_SALT = "QPOS_SECURE_99";
 const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
 
@@ -47,8 +47,8 @@ export default function SettingsPage() {
           setClosingBalance(data.closingBalance || '');
         }
       } catch (error) {
-        logger.error('Failed to fetch settings', error);
-        showToast('Settings failed to load', 'error');
+        logger.error('Failed to fetch settings:', error);
+        showToast("ဆက်တင်များ ရယူရာတွင် အမှားဖြစ်နေပါသည်။", "error");
       }
     };
     fetchSettings();
@@ -56,9 +56,7 @@ export default function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      await setDoc(doc(db, 'pos_settings', profile.tenantId), { 
-        shopName, tgToken, tgChatId, geminiKey 
-      }, { merge: true });
+      await setDoc(doc(db, 'pos_settings', profile.tenantId), { shopName, tgToken, tgChatId, geminiKey }, { merge: true });
       showToast("ဆက်တင်များ သိမ်းဆည်းပြီးပါပြီ။", "success");
     } catch (error) { 
       logger.error('Error saving settings:', error);
@@ -75,29 +73,41 @@ export default function SettingsPage() {
       showToast("လက်ကျန်ငွေစာရင်း သိမ်းဆည်းပြီးပါပြီ။", "success");
     } catch (error) { 
       logger.error('Error saving balance:', error);
-      showToast("Error saving balance", "error"); 
+      showToast("လက်ကျန်ငွေစာရင်း သိမ်းဆည်းရာတွင် အမှားဖြစ်နေပါသည်။", "error"); 
     }
   };
 
   const handleChangePassword = async () => {
-    if (!oldPassword.trim() || !newPassword.trim()) return showToast("စကားဝှက်အဟောင်းနှင့် အသစ်ကို ဖြည့်ပါ။", "error");
-    if (newPassword.length < 6) return showToast("အနည်းဆုံး (၆) လုံး လိုအပ်ပါသည်။", "error");
-
-    const user = auth.currentUser;
+    if (!oldPassword.trim() || !newPassword.trim()) return showToast("စကားဝှက်ဟောင်းနှင့် အသစ်ကို ဖြည့်ပါ။", "error");
+    if (newPassword.length < 6) return showToast("စကားဝှက်အသစ်သည် အနည်းဆုံး ၆ လုံး ရှိရပါမည်။", "error");
+    
     setIsChangingPwd(true);
     try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("User not found");
+
+      // 🌟 Firebase Auth ဖြင့် စကားဝှက်အဟောင်းကို စစ်ဆေးခြင်း
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
+      
+      // 🌟 စကားဝှက်အသစ်သို့ ပြောင်းလဲခြင်း
       await updatePassword(user, newPassword);
 
-      await setDoc(doc(db, 'pos_users', user.uid), { encryptedKey: encodeAuth(newPassword) }, { merge: true });
+      // 🌟 Database တွင် Encrypted Key အဖြစ်သာ သိမ်းဆည်းခြင်း (simpleHash အစား)
+      await setDoc(doc(db, 'pos_users', profile.id || user.uid), { 
+        encryptedKey: encodeAuth(newPassword) 
+      }, { merge: true });
 
-      showToast("စကားဝှက် ပြောင်းလဲပြီးပါပြီ။ ပြန်လည် Login ဝင်ပါ။", "success");
-      setOldPassword(''); setNewPassword('');
+      showToast("စကားဝှက် ပြောင်းလဲပြီးပါပြီ။ လုံခြုံရေးအရ ပြန်လည် Login ဝင်ပါ။", "success");
+      setOldPassword(''); setNewPassword(''); 
       logout();
-    } catch (error) {
-      logger.error('Password change error:', error);
-      showToast("စကားဝှက်ပြောင်းလဲခြင်း မအောင်မြင်ပါ။ စကားဝှက်အဟောင်း မှန်/မမှန် စစ်ဆေးပါ။", "error");
+    } catch (error) { 
+      logger.error('Error changing password:', error);
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+        showToast("စကားဝှက်အဟောင်း မှားနေပါသည်။", "error");
+      } else {
+        showToast("စကားဝှက်ပြောင်းလဲရာတွင် အမှားဖြစ်နေပါသည်။", "error"); 
+      }
     } finally {
       setIsChangingPwd(false);
     }
@@ -106,8 +116,8 @@ export default function SettingsPage() {
   const exportAllCSV = async () => {
     setConfirmDialog({
       isOpen: true,
-      title: "Data Export",
-      message: "မှတ်တမ်းအားလုံးကို CSV ဖိုင်အဖြစ် ဒေါင်းလုဒ်လုပ်မှာ သေချာပါသလား?",
+      title: "မှတ်တမ်းများ ဒေါင်းလုဒ်လုပ်ခြင်း",
+      message: "အရောင်းမှတ်တမ်းများအားလုံးကို CSV ဖိုင်အဖြစ် ဒေါင်းလုဒ်လုပ်မှာ သေချာပါသလား?",
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
         try {
@@ -122,9 +132,10 @@ export default function SettingsPage() {
           });
           const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Records_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+          showToast("CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။", "success");
         } catch (error) { 
           logger.error('Error exporting CSV:', error);
-          showToast("Error exporting CSV", "error"); 
+          showToast("Export လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။", "error"); 
         }
       }
     });
@@ -135,14 +146,14 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 text-white pb-10 space-y-6">
-      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}/>
       
+      {/* Confirm Dialog */}
+      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}/>
+
       {/* Header */}
-      <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Settings size={32} className="text-cyan-500"/>
-          <h3 className="font-black text-2xl">Settings</h3>
-        </div>
+      <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center gap-4">
+        <Settings size={32} className="text-cyan-500"/>
+        <h3 className="font-black text-2xl">Settings</h3>
       </div>
 
       {/* 📚 Setup Guides */}
@@ -216,7 +227,7 @@ export default function SettingsPage() {
         
         {/* General + API Config */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Store size={20}/> General & API Config</h4>
+          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2">General & API Config</h4>
           <div>
             <label className="text-sm font-bold text-slate-400 block mb-2">Shop Name</label>
             <input value={shopName} onChange={e => setShopName(e.target.value)} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
@@ -248,10 +259,10 @@ export default function SettingsPage() {
 
         {/* Daily Balance */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-purple-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Wallet size={20}/> Daily Balance</h4>
+          <h4 className="text-lg font-black text-purple-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Save size={20}/> Daily Balance</h4>
           <div className="grid grid-cols-2 gap-4">
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Opening Balance</label><input type="number" placeholder="ဖွင့်လက်ကျန်" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-400"/></div>
-            <div><label className="text-sm font-bold text-slate-400 block mb-2">Closing Balance</label><input type="number" placeholder="ပိတ်လက်ကျန်" value={closingBalance} onChange={e => setClosingBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-purple-400"/></div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Opening Balance</label><input type="number" placeholder="ဖွင့်လက်ကျန်" value={openingBalance} onChange={e => setOpeningBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
+            <div><label className="text-sm font-bold text-slate-400 block mb-2">Closing Balance</label><input type="number" placeholder="ပိတ်လက်ကျန်" value={closingBalance} onChange={e => setClosingBalance(e.target.value)} className="w-full bg-black/50 border border-purple-500/20 rounded-xl px-4 py-3 text-white outline-none"/></div>
           </div>
           <button onClick={saveBalance} className="w-full py-4 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/40 text-purple-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={18}/> Save Balance</button>
         </div>

@@ -3,6 +3,7 @@ import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/f
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
+import { Navigate } from 'react-router-dom'; // 🌟 အသစ် ထည့်ထားသည်
 import {
   Zap, DollarSign, CreditCard, MinusCircle,
   AlertTriangle, TrendingUp, Clock3, Calendar, Activity, Search, X
@@ -12,7 +13,6 @@ import {
   ResponsiveContainer, CartesianGrid
 } from 'recharts';
 
-// 🌟 Date အတိအကျရရန် Records Page နည်းတူ တွက်ချက်ခြင်း (Import Error ဖြေရှင်းပြီး)
 function getRecordDateISO(r) {
   if (r.date && r.date.includes('-')) return r.date;
   if (r.date && r.date.includes('/')) {
@@ -32,6 +32,15 @@ export default function DashboardPage() {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;
 
+  // 🌟 Dashboard ကြည့်ခွင့်မရှိပါက လုပ်ပိုင်ခွင့်ရှိသော စာမျက်နှာသို့ အလိုအလျောက် ပို့ပေးမည်
+  if (profile && profile.role !== 'admin' && !(profile.permissions || []).includes('view_reports')) {
+    const perms = profile.permissions || [];
+    if (perms.includes('create_sale')) return <Navigate to="/entry" replace />;
+    if (perms.includes('view_inventory')) return <Navigate to="/inventory" replace />;
+    if (perms.includes('accept_payment')) return <Navigate to="/customers" replace />;
+    return <Navigate to="/entry" replace />;
+  }
+
   const [records, setRecords] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -43,7 +52,6 @@ export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Realtime Data Fetching
   useEffect(() => {
     if (!tenantId) { setDataLoading(false); return; }
     const q = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(1000));
@@ -67,7 +75,6 @@ export default function DashboardPage() {
     return map;
   }, [products]);
 
-  // 🌟 မှန်ကန်သော Date ဖြင့် စစ်ထုတ်ခြင်း
   const periodRecs = useMemo(() => {
     const d = new Date();
     const todayISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -96,14 +103,12 @@ export default function DashboardPage() {
     });
   }, [records, dashPeriod, dateRange, searchTerm]);
 
-  // Record Types
   const salesRecs = useMemo(() => periodRecs.filter(r => (r.type||'').toLowerCase() === 'sale'), [periodRecs]);
   const purchaseRecs = useMemo(() => periodRecs.filter(r => (r.type||'').toLowerCase() === 'purchase'), [periodRecs]);
   const expenseRecs = useMemo(() => periodRecs.filter(r => (r.type||'').toLowerCase() === 'expense'), [periodRecs]);
   const paymentInRecs = useMemo(() => periodRecs.filter(r => r.type === 'Customer Payment'), [periodRecs]);
   const paymentOutRecs = useMemo(() => periodRecs.filter(r => r.type === 'Supplier Payment'), [periodRecs]);
 
-  // Totals
   const totalSales = useMemo(() => salesRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [salesRecs]);
   const totalPurchases = useMemo(() => purchaseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [purchaseRecs]);
   const totalExpenses = useMemo(() => expenseRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0), [expenseRecs]);
@@ -112,7 +117,6 @@ export default function DashboardPage() {
   const cashOut = totalPurchases + totalExpenses + paymentOutRecs.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const cashFlowBalance = cashIn - cashOut;
 
-  // COGS & Profit (True Net Profit)
   const totalCOGS = useMemo(() => {
     return salesRecs.reduce((sum, r) => {
       const items = r.itemsDetail || r.items || [];
@@ -128,11 +132,9 @@ export default function DashboardPage() {
   const profitMargin = totalSales > 0 ? ((netProfit / totalSales) * 100).toFixed(1) : 0;
   const orderCount = salesRecs.length;
 
-  // Debt Totals
   const totalCustomerDebt = useMemo(() => customers.reduce((sum, c) => sum + (Number(c.totalDebt) || 0), 0), [customers]);
   const totalSupplierDebt = useMemo(() => suppliers.reduce((sum, s) => sum + (Number(s.totalDebt) || 0), 0), [suppliers]);
 
-  // Growth Calculation
   const getDailySales = (daysAgo) => {
     const d = new Date(); d.setDate(d.getDate() - daysAgo);
     const targetISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -143,7 +145,6 @@ export default function DashboardPage() {
   const yesterdaySales = getDailySales(1);
   const growthPercent = yesterdaySales > 0 ? ((todaySales - yesterdaySales) / yesterdaySales * 100).toFixed(1) : 0;
 
-  // Daily Summary (Hours & Categories)
   const dailySummary = useMemo(() => {
     const avgOrder = orderCount > 0 ? totalSales / orderCount : 0;
     const hours = salesRecs.map(r => {
@@ -174,7 +175,6 @@ export default function DashboardPage() {
     return { avgOrder, bestHour, bestCategory, customers: orderCount };
   }, [salesRecs, orderCount, totalSales, productMap]);
 
-  // Top Products
   const topProducts = useMemo(() => {
     const map = {};
     salesRecs.forEach(r => {
@@ -201,7 +201,6 @@ export default function DashboardPage() {
     return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [salesRecs, productMap]);
 
-  // Chart Data
   const chartData = useMemo(() => {
     const days = [];
     const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -230,7 +229,6 @@ export default function DashboardPage() {
 
   const recentSales = useMemo(() => salesRecs.slice(0, 5), [salesRecs]);
 
-  // Low Stock
   const lowStock = useMemo(() => products.filter(p => (Number(p.stockBase) ?? Number(p.stock) ?? 0) <= (Number(p.minStock) || 5)), [products]);
   const getStockColor = (s) => s <= 0 ? 'text-[#f43f5e] bg-[#f43f5e]/10' : s <= 5 ? 'text-[#f59e0b] bg-[#f59e0b]/10' : 'text-[#06b6d4] bg-[#06b6d4]/10';
 
@@ -249,7 +247,6 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#060816] overflow-x-hidden">
       <div className="p-4 sm:p-6 space-y-6 text-white pb-36 max-w-7xl mx-auto">
         
-        {/* ─── HEADER & FILTER ─── */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
           <h1 className="text-2xl font-black text-[#06b6d4] tracking-wider flex items-center gap-2">
             <Zap size={24} className="text-[#06b6d4] animate-pulse"/>
@@ -282,7 +279,6 @@ export default function DashboardPage() {
 
         <motion.div variants={containerVars} initial="hidden" animate="visible" className="space-y-6">
           
-          {/* ─── CASH FLOW CARD ─── */}
           <motion.div variants={itemVars} className="rounded-2xl p-6 bg-gradient-to-br from-[#06b6d4]/20 via-[#0f172a] to-black border border-[#06b6d4]/30 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10"><Activity size={100} /></div>
             <div className="relative z-10 flex justify-between items-start flex-wrap gap-4">
@@ -303,7 +299,6 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
-          {/* ─── STATS CARDS ─── */}
           <motion.div variants={itemVars} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: "အရောင်းစုစုပေါင်း (Revenue)", val: totalSales, color: "text-[#06b6d4]", icon: DollarSign, bg: "from-[#06b6d4]/10" },
@@ -321,7 +316,6 @@ export default function DashboardPage() {
             ))}
           </motion.div>
 
-          {/* ─── CHARTS & SUMMARY ─── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <motion.div variants={itemVars} className="lg:col-span-2 bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
               <h2 className="text-sm font-black mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-[#06b6d4]"/> Sales & Profit Trend (7 Days)</h2>
@@ -355,7 +349,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* ─── TOP PRODUCTS ─── */}
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
               <h2 className="text-sm font-black mb-4 flex items-center gap-2">🏆 Top Selling Products</h2>
               {topProducts.length === 0 ? (
@@ -378,7 +371,6 @@ export default function DashboardPage() {
               )}
             </motion.div>
 
-            {/* ─── RECENT TRANSACTIONS ─── */}
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
               <h2 className="text-sm font-black mb-4 flex items-center gap-2">💳 Recent Transactions</h2>
               {recentSales.length === 0 ? (

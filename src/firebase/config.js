@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
-// 🌟 Firebase v10+ အသစ်အရ Offline Data (Cache) သိမ်းဆည်းရန် import များကို ပြောင်းလဲထားပါသည်
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -15,11 +14,5 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// 🌟 Offline Persistence ကို ပုံစံအသစ်ဖြင့် Setup လုပ်ခြင်း (Warning ဖြေရှင်းပြီး)
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ 
-    tabManager: persistentMultipleTabManager() 
-  })
-});
-
+export const db = getFirestore(app);
 export const auth = getAuth(app);

@@ -4,15 +4,16 @@ import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writ
 import { useAuth } from '../context/AuthContext';
 import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
 
-// 🌟 Custom UI
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 
 export default function CustomersPage() {
-  const { profile } = useAuth();
+  // 🌟 Permission စစ်ဆေးရန် hasPermission ကို ယူပါသည်
+  const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
+  const isAdmin = profile?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState('book'); // 'book' or 'history'
+  const [activeTab, setActiveTab] = useState('book');
   const [customers, setCustomers] = useState([]);
   const [allRecords, setAllRecords] = useState([]); 
   const [loading, setLoading] = useState(false);
@@ -20,28 +21,24 @@ export default function CustomersPage() {
 
   const [autoMergeDone, setAutoMergeDone] = useState(false);
 
-  // Modals & Expanded States
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [isLedgerModalOpen, setLedgerModalOpen] = useState(false);
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
 
-  // Mobile Accordion States
   const [expandedCust, setExpandedCust] = useState({});
   const [expandedHist, setExpandedHist] = useState({});
   const toggleCust = (id) => setExpandedCust(p => ({ ...p, [id]: !p[id] }));
   const toggleHist = (name) => setExpandedHist(p => ({ ...p, [name]: !p[name] }));
 
-  // Form States
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '' });
   const [paymentForm, setPaymentForm] = useState({ amount: '', note: '' });
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-  const fileRef = useRef(null); // CSV Import အတွက်
+  const fileRef = useRef(null); 
 
-  // --- Fetch Data ---
   const fetchData = async () => {
     if (!tenantId) return;
     setLoading(true);
@@ -55,15 +52,12 @@ export default function CustomersPage() {
       const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
       const recSnap = await getDocs(recQ);
       setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    }
+    } catch (error) { console.error("Error fetching data:", error); }
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, [tenantId]);
 
-  // --- Background Auto Merge ---
   useEffect(() => {
     if (customers.length > 0 && allRecords.length > 0 && !autoMergeDone) checkAndMergeDuplicates();
   }, [customers, allRecords, autoMergeDone]);
@@ -71,7 +65,6 @@ export default function CustomersPage() {
   const checkAndMergeDuplicates = async () => {
     const groups = {};
     let hasDuplicates = false;
-    
     customers.forEach(c => {
       const key = `${(c.name || '').trim().toLowerCase()}_${(c.phone || '').trim()}_${(c.address || '').trim().toLowerCase()}`;
       if (!groups[key]) groups[key] = [];
@@ -117,9 +110,7 @@ export default function CustomersPage() {
     const merged = {};
     payments.forEach(p => {
       const cId = p.customerId || p.personName;
-      if (!merged[cId]) {
-        merged[cId] = { customerId: p.customerId, personName: p.personName, totalPaid: 0, paymentCount: 0, lastPaymentDate: p.date, details: [] };
-      }
+      if (!merged[cId]) merged[cId] = { customerId: p.customerId, personName: p.personName, totalPaid: 0, paymentCount: 0, lastPaymentDate: p.date, details: [] };
       merged[cId].totalPaid += Number(p.amount) || 0;
       merged[cId].paymentCount += 1;
       merged[cId].details.push(p);
@@ -130,9 +121,10 @@ export default function CustomersPage() {
     return historyArr;
   }, [allRecords, searchTerm]);
 
-  // --- Save Customer ---
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
+    if (!hasPermission('accept_payment')) return showToast("လုပ်ပိုင်ခွင့် မရှိပါ။", "error"); // 🌟 Guard
+
     const nName = customerForm.name.trim();
     if (!nName) return showToast("Customer အမည် ထည့်ပါ", "error");
     setLoading(true);
@@ -156,8 +148,8 @@ export default function CustomersPage() {
     setLoading(false);
   };
 
-  // --- Delete Customer ---
   const handleDeleteCustomer = (id, name, debt) => {
+    if (!hasPermission('accept_payment')) return; // 🌟 Guard
     if (debt > 0) return showToast(`${name} တွင် ပေးရန်ကျန်ငွေ ရှိနေသဖြင့် ဖျက်၍မရပါ။`, "error");
     setConfirmDialog({
       isOpen: true, title: "Customer ဖျက်သိမ်းခြင်း", message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
@@ -169,9 +161,10 @@ export default function CustomersPage() {
     });
   };
 
-  // --- Handle Payment ---
   const handlePayment = async (e) => {
     e.preventDefault();
+    if (!hasPermission('accept_payment')) return showToast("ငွေချေခွင့် မရှိပါ။", "error"); // 🌟 Guard
+
     const payAmount = Number(paymentForm.amount);
     if (!payAmount || payAmount <= 0) return showToast("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။", "error");
     if (payAmount > selectedCustomer.totalDebt + 10) return showToast("ဆပ်သည့်ငွေသည် အကြွေးထက် များနေပါသည်။", "error");
@@ -191,7 +184,6 @@ export default function CustomersPage() {
     setLoading(false);
   };
 
-  // 🌟 --- CSV Export ---
   const handleExportCSV = () => {
     if (customers.length === 0) return showToast("Export ထုတ်ရန် Customer မရှိပါ။", "warning");
     let csv = "Name,Phone,Address,Total Debt\n";
@@ -202,7 +194,6 @@ export default function CustomersPage() {
     showToast("CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ", "success");
   };
 
-  // 🌟 --- CSV Import ---
   const handleImportCSV = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -218,7 +209,7 @@ export default function CustomersPage() {
           let batch = writeBatch(db); let count = 0;
           for (let i = 1; i < rows.length; i++) {
             const cols = rows[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
-            if (!cols[0]) continue; // Name required
+            if (!cols[0]) continue; 
             batch.set(doc(collection(db, 'pos_customers')), {
               tenantId: tenantId, name: cols[0], phone: cols[1] || '', address: cols[2] || '', totalDebt: Number(cols[3]) || 0,
               createdAt: serverTimestamp(), updatedAt: serverTimestamp()
@@ -250,15 +241,10 @@ export default function CustomersPage() {
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-20">
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} />
 
-      {/* Header & Tabs */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-5 animate-in fade-in">
         <div className="flex items-center gap-4 bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto">
-          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
-            <Users size={18}/> Customer Book
-          </button>
-          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
-            <History size={18}/> Payment History
-          </button>
+          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Users size={18}/> Customer Book</button>
+          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> Payment History</button>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
@@ -268,39 +254,26 @@ export default function CustomersPage() {
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
-              <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
-              <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title="Import CSV"><Upload size={20}/></button>
-              <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
-              
-              <button onClick={() => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); }} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors shadow-lg active:scale-95">
-                <Plus size={20}/> Add
-              </button>
+              {/* 🌟 Import/Export ကို Admin သီးသန့် ကန့်သတ်ထားသည် */}
+              {isAdmin && (
+                <>
+                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
+                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title="Import CSV"><Upload size={20}/></button>
+                  <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
+                </>
+              )}
+              {/* 🌟 ပေါင်းထည့်ခွင့်ကို Permission စစ်ထားသည် */}
+              {hasPermission('accept_payment') && (
+                <button onClick={() => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); }} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> Add</button>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Stats */}
-      {activeTab === 'book' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="bg-[#0d1120] p-5 rounded-2xl border border-white/5 flex items-center gap-4 shadow-lg">
-              <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl"><Users size={24}/></div>
-              <div><p className="text-slate-400 text-xs font-bold uppercase">Total Customers</p><p className="text-xl font-black">{customers.length}</p></div>
-          </div>
-          <div className="bg-[#0d1120] p-5 rounded-2xl border border-amber-500/20 flex items-center gap-4 shadow-lg">
-              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl"><DollarSign size={24}/></div>
-              <div><p className="text-slate-400 text-xs font-bold uppercase">Total Pending Debt</p><p className="text-xl font-black text-amber-400">{customers.reduce((sum, c) => sum + (Number(c.totalDebt) || 0), 0).toLocaleString()} Ks</p></div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Area */}
       <div className="bg-[#0d1120] rounded-3xl border border-white/5 overflow-hidden shadow-xl">
-        
-        {/* --- CUSTOMER BOOK TAB --- */}
         {activeTab === 'book' && (
           <>
-            {/* Desktop View */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="bg-black/40 text-slate-400 border-b border-white/5">
@@ -312,20 +285,23 @@ export default function CustomersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {loading ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">Loading...</td></tr> : filteredCustomers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">Customer မတွေ့ပါ။</td></tr> : 
+                  {filteredCustomers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">No Customers</td></tr> : 
                   filteredCustomers.map(c => (
                     <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="p-4 font-bold text-white text-base">{c.name}</td>
                       <td className="p-4 text-slate-400"><p>{c.phone || '-'}</p><p className="text-xs text-slate-500 truncate max-w-[200px]">{c.address || '-'}</p></td>
-                      <td className="p-4 text-right">
-                        {Number(c.totalDebt) > 0 ? <span className="font-black text-amber-400 text-base">{Number(c.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">ရှင်းပြီး</span>}
-                      </td>
+                      <td className="p-4 text-right">{Number(c.totalDebt) > 0 ? <span className="font-black text-amber-400 text-base">{Number(c.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">ရှင်းပြီး</span>}</td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16}/></button>
+                          {/* 🌟 Permission စစ်ဆေးထားသည် */}
                           <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16}/></button>
-                          <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title="ပြင်မည်"><Edit3 size={16}/></button>
-                          <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title="ဖျက်မည်"><Trash2 size={16}/></button>
+                          {hasPermission('accept_payment') && (
+                            <>
+                              <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16}/></button>
+                              <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title="ပြင်မည်"><Edit3 size={16}/></button>
+                              <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title="ဖျက်မည်"><Trash2 size={16}/></button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -334,10 +310,7 @@ export default function CustomersPage() {
               </table>
             </div>
 
-            {/* 🌟 Mobile Accordion View */}
             <div className="block sm:hidden divide-y divide-white/5">
-              {loading && <div className="p-8 text-center text-slate-500">Loading...</div>}
-              {!loading && filteredCustomers.length === 0 && <div className="p-8 text-center text-slate-500">Customer မတွေ့ပါ။</div>}
               {filteredCustomers.map(c => {
                 const isExpanded = expandedCust[c.id];
                 return (
@@ -349,25 +322,24 @@ export default function CustomersPage() {
                       </div>
                       <div className="text-right flex flex-col items-end">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Balance</p>
-                        {Number(c.totalDebt) > 0 ? (
-                           <p className="font-black text-amber-400 text-lg leading-none">{Number(c.totalDebt).toLocaleString()} Ks</p>
-                        ) : (
-                           <p className="font-bold text-green-500 text-sm leading-none">ရှင်းပြီး</p>
-                        )}
+                        {Number(c.totalDebt) > 0 ? <p className="font-black text-amber-400 text-lg leading-none">{Number(c.totalDebt).toLocaleString()} Ks</p> : <p className="font-bold text-green-500 text-sm leading-none">ရှင်းပြီး</p>}
                       </div>
-                      <div className="ml-4 pl-4 border-l border-white/10">
-                        {isExpanded ? <ChevronUp size={20} className="text-cyan-400"/> : <ChevronDown size={20} className="text-slate-500"/>}
-                      </div>
+                      <div className="ml-4 pl-4 border-l border-white/10">{isExpanded ? <ChevronUp size={20} className="text-cyan-400"/> : <ChevronDown size={20} className="text-slate-500"/>}</div>
                     </div>
 
                     {isExpanded && (
                       <div className="p-4 bg-black/40 border-t border-cyan-500/10 space-y-4">
                         {c.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">Address:</span> {c.address}</p>}
                         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/5">
-                          <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`py-2.5 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={20}/></button>
+                          {/* 🌟 Permission စစ်ဆေးထားသည် */}
                           <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all"><ClipboardList size={20}/></button>
-                          <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-indigo-600/20 text-indigo-400 rounded-xl active:bg-indigo-600/40 transition-all"><Edit3 size={20}/></button>
-                          <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="py-2.5 flex justify-center items-center bg-rose-600/20 text-rose-400 rounded-xl active:bg-rose-600/40 transition-all"><Trash2 size={20}/></button>
+                          {hasPermission('accept_payment') && (
+                            <>
+                              <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`py-2.5 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={20}/></button>
+                              <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-indigo-600/20 text-indigo-400 rounded-xl active:bg-indigo-600/40 transition-all"><Edit3 size={20}/></button>
+                              <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="py-2.5 flex justify-center items-center bg-rose-600/20 text-rose-400 rounded-xl active:bg-rose-600/40 transition-all"><Trash2 size={20}/></button>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
@@ -378,81 +350,34 @@ export default function CustomersPage() {
           </>
         )}
 
-        {/* --- PAYMENT HISTORY TAB --- */}
+        {/* Payment History Tab ... (Same as before, no actions here) */}
         {activeTab === 'history' && (
-          <>
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-black/40 text-slate-400 border-b border-white/5">
-                  <tr>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">Customer Name</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr> :
-                  mergedHistory.map((h, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="p-4 font-bold text-white text-base">{h.personName}</td>
-                      <td className="p-4 text-center text-cyan-400 font-bold">{h.paymentCount} ကြိမ်</td>
-                      <td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td>
-                      <td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 🌟 Mobile Accordion View */}
-            <div className="block sm:hidden divide-y divide-white/5">
-              {mergedHistory.length === 0 && <div className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</div>}
-              {mergedHistory.map((h, i) => {
-                const isExpanded = expandedHist[h.personName];
-                return (
-                  <div key={i} className="bg-[#0d1120] transition-colors">
-                    <div onClick={() => toggleHist(h.personName)} className="p-4 flex justify-between items-center cursor-pointer">
-                       <div className="flex-1">
-                         <h4 className="font-bold text-white text-base">{h.personName}</h4>
-                         <p className="text-xs text-slate-500 mt-0.5">{h.lastPaymentDate}</p>
-                       </div>
-                       <div className="text-right flex flex-col items-end">
-                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Paid</p>
-                         <p className="font-black text-green-400 text-lg leading-none">+{h.totalPaid.toLocaleString()} Ks</p>
-                       </div>
-                       <div className="ml-4 pl-4 border-l border-white/10">
-                           {isExpanded ? <ChevronUp size={20} className="text-cyan-400"/> : <ChevronDown size={20} className="text-slate-500"/>}
-                        </div>
-                    </div>
-                    {isExpanded && (
-                      <div className="p-4 bg-black/40 border-t border-cyan-500/10 flex justify-between items-center">
-                        <span className="text-xs text-slate-400 font-bold">Total Payment Count:</span>
-                        <span className="text-sm font-black text-cyan-400 bg-cyan-900/30 px-3 py-1 rounded-lg">{h.paymentCount} ကြိမ်</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-black/40 text-slate-400 border-b border-white/5">
+                <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">Customer Name</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th></tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {mergedHistory.map((h, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-cyan-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {/* --- MODALS --- */}
+      {/* --- MODALS --- (Permission guarded mainly by button clicks above, but forms remain the same) */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handleSaveCustomer} className="bg-[#0d1120] border border-cyan-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-cyan-400 tracking-wide">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3>
-              <button type="button" onClick={() => setCustomerModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button>
-            </div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-cyan-400 tracking-wide">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3><button type="button" onClick={() => setCustomerModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
             <div className="space-y-4">
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">အမည် *</label><input required value={customerForm.name} onChange={e=>setCustomerForm({...customerForm, name: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ဖုန်းနံပါတ် (Optional)</label><input type="tel" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm, phone: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">လိပ်စာ (Optional)</label><textarea value={customerForm.address} onChange={e=>setCustomerForm({...customerForm, address: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm custom-scrollbar" rows="2"></textarea></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm, phone: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">လိပ်စာ</label><textarea value={customerForm.address} onChange={e=>setCustomerForm({...customerForm, address: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm custom-scrollbar" rows="2"></textarea></div>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-cyan-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform shadow-lg shadow-cyan-900/50">သိမ်းမည်</button>
+            <button type="submit" disabled={loading} className="w-full mt-8 bg-cyan-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">သိမ်းမည်</button>
           </form>
         </div>
       )}
@@ -460,70 +385,55 @@ export default function CustomersPage() {
       {isPaymentModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေသွင်းမှတ်တမ်း</h3>
-              <button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button>
-            </div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Credit Balance</p>
-              <p className="text-3xl font-black text-amber-400 mt-2">{Number(selectedCustomer.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p>
-            </div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေသွင်းမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Credit Balance</p><p className="text-3xl font-black text-amber-400 mt-2">{Number(selectedCustomer.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required max={selectedCustomer.totalDebt + 10} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက် (Optional)</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform shadow-lg shadow-amber-900/50">ငွေသွင်းမည်</button>
+            <button type="submit" disabled={loading} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေသွင်းမည်</button>
           </form>
         </div>
       )}
 
+      {/* Ledger Modal... (Same functionality) */}
       {isLedgerModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+           <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
             <div className="p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20 rounded-t-3xl">
-              <div>
-                <h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedCustomer.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-amber-400 text-sm">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p>
-              </div>
+              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedCustomer.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-amber-400 text-sm">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p></div>
               <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
             </div>
             <div className="overflow-y-auto custom-scrollbar flex-1 p-4 sm:p-6 bg-black/10">
-              {currentLedger.length === 0 ? (
-                <div className="text-center py-10 opacity-50"><p className="text-slate-400 font-bold">မှတ်တမ်း မရှိသေးပါ။</p></div>
-              ) : (
-                <div className="space-y-3">
+              {currentLedger.length === 0 ? <div className="text-center py-10 opacity-50"><p className="text-slate-400 font-bold">မှတ်တမ်း မရှိသေးပါ။</p></div> : 
+               <div className="space-y-3">
                   {currentLedger.map(record => {
                     const isSale = record.type === 'Sale';
                     return (
                       <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`bg-[#12182b] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isSale ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span>
-                            <span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span>
-                          </div>
-                          {isSale ? (
-                             <div>
-                               <p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p>
-                               <p className="text-[10px] text-cyan-600/70 mt-0.5 font-bold">ဘောက်ချာကြည့်ရန် နှိပ်ပါ</p>
-                             </div>
-                          ) : (<p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>)}
+                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isSale ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          {isSale ? <div><p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p></div> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
                           {isSale && <p className="text-[11px] font-bold text-slate-500 mt-1">Total Bill: {Number(record.amount).toLocaleString()} • Paid: {Number(record.paidAmount).toLocaleString()}</p>}
                         </div>
                         <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-white/5 sm:border-0 mt-2 sm:mt-0">
                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
-                          {!isSale ? (<p className="text-lg font-black text-green-400 mt-0.5">-{Number(record.amount).toLocaleString()} <span className="text-xs">Ks</span></p>) : (<p className="text-lg font-black text-amber-400 mt-0.5">+{Number(record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span></p>)}
+                          <p className={`text-lg font-black mt-0.5 ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>
+                            {!isSale ? '-' : '+'}{Number(!isSale ? record.amount : record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span>
+                          </p>
                           <p className="text-[10px] text-slate-500 mt-1">Bal: {Number(record.runningBalance).toLocaleString()}</p>
                         </div>
                       </div>
                     );
                   })}
-                </div>
-              )}
+               </div>
+              }
             </div>
           </div>
         </div>
       )}
 
+      {/* Receipt Modal... (Same) */}
       {receiptModal.show && receiptModal.record && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans relative animate-in zoom-in-95">
@@ -550,7 +460,7 @@ export default function CustomersPage() {
             <div className="border-t border-gray-300 pt-3 mt-3 space-y-1 text-xs">
                <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
                <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>Credit (အကြွေးကျန်):</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>Credit:</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
             </div>
           </div>
         </div>

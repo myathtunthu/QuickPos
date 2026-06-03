@@ -6,7 +6,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 
 // Components
-import ErrorBoundary from './components/ErrorBoundary'; // 🌟 Added ErrorBoundary
+import ErrorBoundary from './components/ErrorBoundary'; 
+import Toast from './components/UI/Toast'; // 🌟 Toast ကို Import ခေါ်ထားပါသည်
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -126,10 +127,11 @@ function AppContent() {
 
 function App() {
   return (
-    // 🌟 Wrapped entire App with ErrorBoundary to prevent White Screen of Death
     <ErrorBoundary>
       <AuthProvider>
         <LanguageProvider>
+          {/* 🌟 နေရာတိုင်းမှာ စာလေးတွေ ပေါ်လာအောင် Toast ကို ဤနေရာတွင် ထည့်သွင်းထားပါသည် */}
+          <Toast />
           <AppContent />
         </LanguageProvider>
       </AuthProvider>

@@ -2,9 +2,21 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MonitorPlay, Eye, EyeOff } from 'lucide-react';
+import { db } from '../firebase/config';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+
+// 🌟 AdminPage တွင် သုံးထားသော Hash နှင့် အတိအကျတူညီရပါမည်။
+const simpleHash = str => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return 'h_' + h.toString(16).padStart(8, '0');
+};
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [err, setErr] = useState('');
@@ -14,7 +26,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && profile) {
+    // Admin (Firebase Auth) သို့မဟုတ် Staff (Local Storage Session) ရှိနေပါက Dashboard သို့သွားမည်
+    const staffSession = localStorage.getItem('pos_staff_session');
+    if ((user && profile) || staffSession) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, profile, navigate]);
@@ -25,16 +39,41 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email.trim(), password);
+      const input = usernameOrEmail.trim();
+
+      if (input.includes('@')) {
+        // 🌟 အခြေအနေ ၁ - Admin ဝင်ရောက်ခြင်း (Email ပါဝင်ပါက)
+        // AuthContext ၏ ပုံမှန် Firebase Login ကို အသုံးပြုမည်
+        await login(input, password);
+      } else {
+        // 🌟 အခြေအနေ ၂ - Staff ဝင်ရောက်ခြင်း (Username ဖြင့်သာ)
+        const q = query(collection(db, 'pos_users'), where('username', '==', input));
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+          throw { code: 'auth/user-not-found' }; // Error code တူညီစေရန်
+        }
+
+        const staffData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        
+        // Password ကို Hash လုပ်ပြီး တိုက်စစ်မည်
+        if (staffData.password !== simpleHash(password)) {
+          throw { code: 'auth/wrong-password' };
+        }
+
+        // Staff အတွက် Session ကို သိမ်းပြီး Dashboard သို့ ဝင်မည်
+        localStorage.setItem('pos_staff_session', JSON.stringify(staffData));
+        window.location.href = '/dashboard'; // App အား Reload လုပ်ပေးရန် (AuthContext မှ သိရှိစေရန်)
+      }
     } catch (error) {
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setErr('Email သို့မဟုတ် Password မှားနေပါသည်!');
+        setErr('Username/Email သို့မဟုတ် Password မှားနေပါသည်!');
       } else if (error.code === 'auth/invalid-email') {
         setErr('Email ပုံစံမှားနေပါသည်!');
       } else if (error.code === 'auth/too-many-requests') {
         setErr('အကောင့်ဝင်ရန် ကြိုးစားမှုများလွန်းနေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။');
       } else {
-        setErr('Login မအောင်မြင်ပါ: ' + error.message);
+        setErr('Login မအောင်မြင်ပါ: ' + (error.message || 'Unknown Error'));
       }
     } finally {
       setLoading(false);
@@ -68,12 +107,13 @@ export default function LoginPage() {
         )}
         
         <form onSubmit={handleLogin} className="space-y-6">
+          {/* 🌟 Email အစား text ပြောင်းထားပြီး Username ပါ ဝင်ခွင့်ပြုထားသည် */}
           <input 
             required 
-            type="email"
-            value={email} 
-            onChange={e => setEmail(e.target.value)} 
-            placeholder="Email" 
+            type="text"
+            value={usernameOrEmail} 
+            onChange={e => setUsernameOrEmail(e.target.value)} 
+            placeholder="Email သို့မဟုတ် Username" 
             className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl outline-none focus:border-cyan-400"
           />
           <div className="relative">

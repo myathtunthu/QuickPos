@@ -8,19 +8,18 @@ import { LanguageProvider } from './context/LanguageContext';
 // Components
 import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/UI/Toast';
+import OfflineIndicator from './components/UI/OfflineIndicator'; // ✅ ထည့်လိုက်ပါ
 
 // Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EntryPage from './pages/EntryPage';
 import InventoryPage from './pages/InventoryPage';
-// ❌ import ReportsPage from './pages/ReportsPage';  // ဖယ်ထားပါ
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 import RecordsPage from './pages/RecordsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
-
 import CustomersPage from './pages/CustomersPage';
 import SuppliersPage from './pages/SuppliersPage';
 import DraftsPage from './pages/DraftsPage';
@@ -91,6 +90,8 @@ function AppContent() {
 
   return (
     <BrowserRouter>
+      {/* ✅ Offline Indicator ကို Routes အပေါ်မှာ ထားပါ – စာမျက်နှာတိုင်းတွင် ပေါ်နေမည် */}
+      <OfflineIndicator />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/mttadminacc" element={<SuperAdminPage />} />
@@ -103,7 +104,6 @@ function AppContent() {
           <Route path="customers" element={<CustomersPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />
           <Route path="drafts" element={<DraftsPage />} />
-          {/* ❌ ReportsPage Route ဖယ်ရှား */}
           <Route path="ledger" element={<LedgerPage records={allRecords} />} />
           <Route path="admin" element={<AdminPage />} />
           <Route path="settings" element={<SettingsPage />} />

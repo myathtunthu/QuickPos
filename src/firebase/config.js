@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+// 🌟 Firebase v10+ အသစ်အရ Offline Data (Cache) သိမ်းဆည်းရန် import များကို ပြောင်းလဲထားပါသည်
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -14,16 +15,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-
-// Enable offline persistence for Firestore
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // Multiple tabs open, persistence can only be enabled in one tab at a time
-    console.warn('Offline persistence already enabled in another tab');
-  } else if (err.code === 'unimplemented') {
-    // Browser does not support IndexedDB
-    console.warn('This browser does not support offline storage');
-  }
+// 🌟 Offline Persistence ကို ပုံစံအသစ်ဖြင့် Setup လုပ်ခြင်း (Warning ဖြေရှင်းပြီး)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ 
+    tabManager: persistentMultipleTabManager() 
+  })
 });
+
+export const auth = getAuth(app);

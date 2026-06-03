@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   collection, doc, writeBatch, serverTimestamp, increment,
-  getDoc, getDocs, query, where, orderBy, limit, setDoc, deleteDoc
+  getDoc, getDocs, query, where, orderBy, limit, setDoc, deleteDoc,
+  runTransaction
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +28,7 @@ import PaymentSection from '../components/entry/PaymentSection';
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // 🌟 Loading ပြရန် State အသစ်
+  const [isProcessing, setIsProcessing] = useState(false);
   const readerRef = useRef(null);
   const streamRef = useRef(null);
   
@@ -69,11 +70,9 @@ const ScannerModal = ({ onClose, onScan }) => {
             
             lastScannedRef.current = { code: result.text, time: now };
             
-            // 🌟 Barcode ဖတ်မိသည်နှင့် Processing Loading ပြမည်
             setIsProcessing(true);
             if (onScanRef.current) onScanRef.current(result.text); 
 
-            // ၁ စက္ကန့်ကြာလျှင် Loading ပြန်ဖျောက်ပြီး နောက်တစ်ခု ဆက်ဖတ်ခွင့်ပေးမည်
             setTimeout(() => {
               setIsProcessing(false);
             }, 1000);
@@ -106,7 +105,6 @@ const ScannerModal = ({ onClose, onScan }) => {
             <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
           )}
 
-          {/* 🌟 Loading Box (ဖတ်လိုက်တိုင်း ခဏပေါ်လာမည့် အပိုင်း) */}
           {isProcessing && (
             <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-10 transition-opacity">
               <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3"></div>
@@ -401,6 +399,7 @@ export default function EntryPage({ products = [] }) {
     submitLock.current = false; setLoading(false);
   };
 
+  // ========== OFFLINE-FRIENDLY SUBMIT TRANSACTION ==========
   const submitTransaction = async () => {
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
@@ -433,6 +432,7 @@ export default function EntryPage({ products = [] }) {
     try {
       const batch = writeBatch(db);
 
+      // 1. Customer/Supplier handling
       if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const newPersonRef = doc(collection(db, collectionName));
@@ -444,58 +444,83 @@ export default function EntryPage({ products = [] }) {
       } else if (personIdForRecord && remainingDebt > 0) {
         const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
         const personRef = doc(db, collectionName, personIdForRecord);
-        batch.set(personRef, { totalDebt: increment(remainingDebt), tenantId: tenantId }, { merge: true });
+        batch.update(personRef, { totalDebt: increment(remainingDebt) });
       }
 
+      // 2. Get next voucher number using Firestore transaction (works offline!)
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
-      const counterSnap = await getDoc(counterRef);
       const countField = `${entryTab.toLowerCase()}Count`;
-      const nextCount = (counterSnap.exists() ? (counterSnap.data()[countField] || 0) : 0) + 1;
+
+      let nextCount = 1;
+      try {
+        const counterTxResult = await runTransaction(db, async (transaction) => {
+          const counterSnap = await transaction.get(counterRef);
+          if (counterSnap.exists()) {
+            const current = counterSnap.data()[countField] || 0;
+            const newVal = current + 1;
+            transaction.update(counterRef, { [countField]: newVal });
+            return newVal;
+          } else {
+            transaction.set(counterRef, { [countField]: 1 });
+            return 1;
+          }
+        });
+        nextCount = counterTxResult;
+      } catch (counterErr) {
+        logger.warn('Counter transaction failed, using fallback', counterErr);
+        nextCount = Date.now(); // Fallback unique number if offline transaction somehow fails
+      }
+
       const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
 
+      // 3. Prepare main record
       const ref = doc(collection(db, 'pos_records'));
       const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
       const record = {
-        id: ref.id, type: entryTab || 'Sale', tenantId: tenantId, personName: personNameForRecord, customerId: entryTab === 'Sale' ? personIdForRecord : null, supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
+        id: ref.id, type: entryTab || 'Sale', tenantId: tenantId,
+        personName: personNameForRecord,
+        customerId: entryTab === 'Sale' ? personIdForRecord : null,
+        supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
         cashier: cashierName, time: currentTime, voucherNo: voucherNo,
         itemsDetail: cart.map(i => ({
-          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1, unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail', baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
+          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
+          unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
+          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
+          baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
         })),
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0, globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
-        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount, date: entryDate || todayISO, createdAt: serverTimestamp()
+        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
+        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
+        date: entryDate || todayISO, createdAt: serverTimestamp()
       };
       batch.set(ref, record);
 
+      // 4. Update stock
       cart.forEach(item => {
         if (!item.productId) return;
         const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
         const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
         const prodRef = doc(db, 'pos_products', item.productId);
-        batch.set(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange), tenantId: tenantId }, { merge: true });
+        batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
       });
 
-      if (counterSnap.exists()) {
-        batch.set(counterRef, { [countField]: increment(1), tenantId: tenantId }, { merge: true });
-      } else {
-        batch.set(counterRef, { [countField]: 1, tenantId: tenantId });
-      }
-
+      // 5. Commit batch
       await batch.commit();
 
       setReceiptModal({ show: true, record });
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
-      
+
+      // Refresh customer list
       const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      
-    } catch (err) { 
-      logger.error("Firebase Save Error: ", err); 
-      showToast("Error saving transaction! Please check your internet connection and try again.", "error"); 
+
+    } catch (err) {
+      logger.error("Firebase Save Error: ", err);
+      showToast("Error saving transaction! Please check your internet connection and try again.", "error");
     }
-    
+
     submitLock.current = false; setLoading(false);
   };
 

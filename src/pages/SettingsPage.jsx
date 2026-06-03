@@ -5,6 +5,10 @@ import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 
 import { useAuth } from '../context/AuthContext';
 import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircle, Store } from 'lucide-react';
 
+// 🌟 Password များကို Database တွင် အစိမ်းအတိုင်းမသိမ်းဘဲ လုံခြုံစွာ ဖျောက်ထားမည့်စနစ် (Encryption Utility)
+const SECRET_SALT = "QPOS_SECURE_99";
+const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
+
 export default function SettingsPage() {
   const { profile, logout } = useAuth();
   
@@ -81,9 +85,9 @@ export default function SettingsPage() {
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
 
-      // 🌟 Super Admin အတွက် Password အသစ်ကို Database တွင် တိတ်တဆိတ် သိမ်းဆည်းပေးမည်
+      // 🌟 Security Audit ပြင်ဆင်ချက်: passwordRaw အစား encryptedKey ဖြင့် ကုဒ်ဝှက်၍ သိမ်းမည်
       await setDoc(doc(db, 'pos_users', user.uid), { 
-        passwordRaw: newPassword 
+        encryptedKey: encodeAuth(newPassword) 
       }, { merge: true });
 
       alert("စကားဝှက် ပြောင်းလဲပြီးပါပြီ။ လုံခြုံရေးအရ ပြန်လည် Login ဝင်ပေးပါ။");

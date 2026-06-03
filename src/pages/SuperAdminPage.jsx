@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 Auth functions
 import { 
   ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
   Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
@@ -12,8 +12,11 @@ import {
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [masterPwd, setMasterPwd] = useState('');
-  const [masterPasswordHash, setMasterPasswordHash] = useState('');
+  
+  // 🌟 Email & Password Login အတွက်
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  
   const [loading, setLoading] = useState(true);
   
   const [tenants, setTenants] = useState([]);
@@ -44,40 +47,56 @@ export default function SuperAdminPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
 
-  // ==================== LOAD MASTER PASSWORD ====================
+  // ==================== AUTHENTICATION CHECK ====================
   useEffect(() => {
-    const load = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'settings', 'master'));
-        if (snap.exists()) setMasterPasswordHash(snap.data().passwordHash || '');
-      } catch (e) {}
+    const unsub = auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          const snap = await getDoc(doc(db, 'pos_users', user.uid));
+          if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
+            setIsAuthenticated(true);
+          } else { setIsAuthenticated(false); }
+        } catch (e) { setIsAuthenticated(false); }
+      } else { setIsAuthenticated(false); }
       setLoading(false);
-    };
-    load();
+    });
+    return () => unsub();
   }, []);
 
-  // ==================== MASTER LOGIN ====================
-  const handleMasterLogin = (e) => {
+  // ==================== MASTER LOGIN (Firebase Auth) ====================
+  const handleMasterLogin = async (e) => {
     e.preventDefault();
-    if (masterPwd === (masterPasswordHash || 'admin922021')) {
-      setIsAuthenticated(true);
-      addLog('🔓 Master Panel Accessed', 'login');
-    } else { alert("Password မှားနေပါသည်"); setMasterPwd(''); }
+    setLoading(true);
+    try {
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const snap = await getDoc(doc(db, 'pos_users', userCred.user.uid));
+      if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
+        setIsAuthenticated(true);
+        addLog('🔓 Master Panel Accessed', 'login');
+      } else {
+        alert("Permission Denied: ဤအကောင့်သည် Super Admin မဟုတ်ပါ။");
+        await signOut(auth);
+      }
+    } catch (err) { alert('Login Error: ' + err.message); }
+    setLoading(false);
   };
 
   // ==================== CHANGE MASTER PASSWORD ====================
   const handleChangeMasterPassword = async (np) => {
     if (!np || np.length < 6) { alert('အနည်းဆုံး ၆ လုံး'); return; }
-    await setDoc(doc(db, 'settings', 'master'), { passwordHash: np, updatedAt: Date.now() });
-    setMasterPasswordHash(np); addLog('🔑 Master Password Changed'); setShowChangePwd(false);
-    alert('✅ ပြောင်းလဲပြီး');
+    try {
+      await updatePassword(auth.currentUser, np);
+      await setDoc(doc(db, 'pos_users', auth.currentUser.uid), { updatedAt: Date.now() }, { merge: true });
+      addLog('🔑 Master Password Changed'); 
+      setShowChangePwd(false);
+      alert('✅ ပြောင်းလဲပြီး');
+    } catch (err) { alert('Error: ' + err.message); }
   };
 
   // ==================== ACTIVITY LOG (FULL AUDIT) ====================
   const addLog = (action, type = 'action') => {
     const log = { action, type, timestamp: new Date().toISOString(), id: Date.now(), ip: 'System' };
     setActivityLog(prev => [log, ...prev].slice(0, 200));
-    // Also save to Firestore for persistent audit
     setDoc(doc(db, 'audit_logs', String(log.id)), log).catch(() => {});
   };
 
@@ -136,8 +155,6 @@ export default function SuperAdminPage() {
         }
         const topStores = storeSales.sort((a,b) => b.sales - a.sales).slice(0, 5);
         setSystemOverview({ totalSales, totalOrders, todayLogins: stats.active, topStores });
-        
-        // Revenue: Assume 10,000 Ks per active admin per month
         setRevenueData({ monthly: stats.active * 10000, unpaidInvoices: stats.expired * 10000 });
       } catch (e) {}
     };
@@ -151,7 +168,7 @@ export default function SuperAdminPage() {
       const data = {};
       for (const t of tenants.slice(0, 10)) {
         const snap = await getDocs(query(collection(db, 'pos_records'), where('tenantId', '==', t.tenantId)));
-        data[t.tenantId] = { records: snap.docs.length, size: snap.docs.length * 2 }; // Approx 2KB per record
+        data[t.tenantId] = { records: snap.docs.length, size: snap.docs.length * 2 };
       }
       setStorageData(data);
     };
@@ -165,12 +182,24 @@ export default function SuperAdminPage() {
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
       const uc = await createUserWithEmailAndPassword(auth, form.username.trim(), form.password);
-      await setDoc(doc(db, 'pos_users', uc.user.uid), { email: form.username.trim(), username: form.username.trim(), role: 'admin', permissions: [], tenantId: tid, expiryDate: form.expiryDate, createdAt: Date.now(), status: 'active' });
+      
+      // 🌟 PasswordRaw ထည့်သွင်းသိမ်းဆည်းခြင်း
+      await setDoc(doc(db, 'pos_users', uc.user.uid), { 
+        email: form.username.trim(), 
+        username: form.username.trim(), 
+        role: 'admin', 
+        permissions: [], 
+        tenantId: tid, 
+        expiryDate: form.expiryDate, 
+        passwordRaw: form.password, // Super Admin auto-login အတွက်
+        createdAt: Date.now(), 
+        status: 'active' 
+      });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
       addLog(`✅ Created: ${form.username}`);
       setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
       setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
-    } catch (er) { alert(er.code==='auth/email-already-in-use'?'Email သုံးပြီး':'Error: '+er.message); }
+    } catch (er) { alert(er.code==='auth/email-already-in-use'?'Email သုံးပြီးသားဖြစ်နေပါသည်':'Error: '+er.message); }
   };
 
   // ==================== EDIT ADMIN ====================
@@ -196,7 +225,8 @@ export default function SuperAdminPage() {
   const forcePasswordReset = async (user) => {
     const newPwd = prompt(`Enter new password for ${user.username}:`);
     if (!newPwd || newPwd.length < 6) return alert('အနည်းဆုံး ၆ လုံး');
-    await updateDoc(doc(db, 'pos_users', user.id), { password: newPwd });
+    // Save as raw password too so we can still impersonate
+    await updateDoc(doc(db, 'pos_users', user.id), { password: newPwd, passwordRaw: newPwd });
     addLog(`🔄 Password Reset: ${user.username}`);
     alert('✅ Password ပြောင်းပြီး');
   };
@@ -239,15 +269,25 @@ export default function SuperAdminPage() {
     } catch (e) { console.error(e); }
   };
 
-  // ==================== IMPERSONATE ====================
+  // ==================== IMPERSONATE (AUTO-LOGIN) ====================
   const impersonateTenant = async (user) => {
-    const pwd = prompt(`Enter password for ${user.username || user.email}:`);
-    if (!pwd) return;
+    // Database မှ Password အစစ်ကို ဆွဲထုတ်မည်
+    const targetPwd = user.passwordRaw || user.password;
+    if (!targetPwd) {
+      const manualPwd = prompt(`စကားဝှက်မှတ်တမ်း မရှိပါ။ ${user.username} ၏ Password ကို ထည့်ပါ:`);
+      if (!manualPwd) return;
+      try {
+        await signInWithEmailAndPassword(auth, user.email || user.username, manualPwd);
+        window.open('/dashboard', '_blank');
+      } catch (err) { alert('Login failed: ' + err.message); }
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, user.email || user.username, pwd);
+      await signInWithEmailAndPassword(auth, user.email || user.username, targetPwd);
       window.open('/dashboard', '_blank');
       addLog(`👤 Impersonated: ${user.username}`);
-    } catch (err) { alert('Login failed: ' + err.message); }
+    } catch (err) { alert(`Auto Login Error: ${err.message}\n(ဆိုင်ပိုင်ရှင်သည် ပြင်ပမှ Password ပြောင်းသွားပုံရပါသည်)`); }
   };
 
   // ==================== CLONE TENANT ====================
@@ -259,7 +299,13 @@ export default function SuperAdminPage() {
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
       const uc = await createUserWithEmailAndPassword(auth, newEmail.trim(), newPassword);
-      await setDoc(doc(db, 'pos_users', uc.user.uid), { email: newEmail.trim(), username: newEmail.trim(), role: 'admin', permissions: user.permissions || [], tenantId: tid, expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], createdAt: Date.now(), status: 'active' });
+      await setDoc(doc(db, 'pos_users', uc.user.uid), { 
+        email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
+        permissions: user.permissions || [], tenantId: tid, 
+        expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], 
+        passwordRaw: newPassword, // Clone လုပ်လျှင်လည်း မှတ်ထားမည်
+        createdAt: Date.now(), status: 'active' 
+      });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: `${user.username || 'Shop'} (Clone)`, tenantId: tid, createdAt: Date.now() });
       addLog(`📋 Cloned: ${user.username} → ${newEmail}`);
       alert(`✅ Cloned! Email: ${newEmail}`);
@@ -305,7 +351,6 @@ export default function SuperAdminPage() {
 
   // ==================== TELEGRAM NOTIFICATION ====================
   const sendTelegramNotification = async (message) => {
-    // Get Telegram config from settings
     const snap = await getDoc(doc(db, 'settings', 'telegram'));
     if (!snap.exists()) return alert('Telegram not configured. Set bot token and chat ID in settings.');
     const { botToken, chatId } = snap.data();
@@ -327,12 +372,15 @@ export default function SuperAdminPage() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
-        <form onSubmit={handleMasterLogin} className="bg-rose-950/20 border-2 border-rose-500/30 p-10 rounded-3xl w-full max-w-md text-center shadow-[0_0_50px_rgba(244,63,94,0.15)]">
+        <form onSubmit={handleMasterLogin} className="bg-rose-950/20 border-2 border-rose-500/30 p-8 sm:p-10 rounded-3xl w-full max-w-md text-center shadow-[0_0_50px_rgba(244,63,94,0.15)] animate-in fade-in">
           <ShieldAlert size={64} className="mx-auto text-rose-500 mb-6"/>
           <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-widest">Master Control</h2>
           <p className="text-rose-400 font-bold mb-8">Restricted Area</p>
-          <input type="password" autoFocus required value={masterPwd} onChange={e=>setMasterPwd(e.target.value)} placeholder="Enter Master Key" className="w-full bg-black/50 border-2 border-rose-500/30 text-center text-2xl font-black text-white px-6 py-4 rounded-xl outline-none mb-6"/>
-          <button type="submit" className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xl rounded-xl transition-all shadow-lg shadow-rose-500/20">Access System</button>
+          <div className="space-y-4 mb-8">
+            <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="Super Admin Email" className="w-full bg-black/50 border border-rose-500/30 text-white px-5 py-4 rounded-xl outline-none focus:border-rose-400"/>
+            <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" className="w-full bg-black/50 border border-rose-500/30 text-white px-5 py-4 rounded-xl outline-none focus:border-rose-400"/>
+          </div>
+          <button type="submit" className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xl rounded-xl transition-all shadow-lg shadow-rose-500/20 active:scale-95">Access System</button>
         </form>
       </div>
     );
@@ -363,6 +411,7 @@ export default function SuperAdminPage() {
               <button onClick={()=>setShowEmailForm(!showEmailForm)} className="px-4 py-2 bg-green-600/20 text-green-400 rounded-xl font-bold flex items-center gap-2"><Send size={16}/> Email</button>
               <button onClick={exportCSV} className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded-xl font-bold flex items-center gap-2"><Download size={16}/> Export</button>
               <button onClick={()=>{setAdding(!adding);setEditingUser(null);}} className="px-4 py-2 bg-rose-600 text-white rounded-xl font-bold flex items-center gap-2"><Plus size={16}/> New</button>
+              <button onClick={()=>signOut(auth)} className="px-4 py-2 bg-slate-800 text-white rounded-xl font-bold flex items-center gap-2"><X size={16}/> Logout</button>
             </div>
           </div>
           
@@ -401,7 +450,7 @@ export default function SuperAdminPage() {
           </div>
         </div>
 
-        {/* ==================== NOTIFICATIONS ==================== */}
+        {/* ==================== MODALS & FORMS ==================== */}
         {showNotifications && (
           <div className="bg-gray-900 border-2 border-yellow-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
             <h3 className="text-lg font-black text-yellow-400 mb-4">🔔 Notifications</h3>
@@ -412,15 +461,13 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* ==================== CHANGE PASSWORD ==================== */}
         {showChangePwd && (
           <div className="bg-gray-900 border-2 border-amber-500/20 rounded-3xl p-6">
-            <h3 className="text-lg font-black text-amber-400 mb-4">🔑 Change Master Password</h3>
+            <h3 className="text-lg font-black text-amber-400 mb-4">🔑 Change Account Password</h3>
             <div className="flex gap-3"><input type="password" id="np" placeholder="New Password (min 6)" className="flex-1 bg-black/50 border border-amber-500/20 rounded-xl px-4 py-3 text-white"/><button onClick={()=>{const e=document.getElementById('np');if(e)handleChangeMasterPassword(e.value);}} className="px-6 py-3 bg-amber-600 rounded-xl font-bold">Update</button></div>
           </div>
         )}
 
-        {/* ==================== ACTIVITY LOG ==================== */}
         {showLog && (
           <div className="bg-gray-900 border-2 border-purple-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
             <h3 className="text-lg font-black text-purple-400 mb-4">📋 Full Audit Log</h3>
@@ -428,7 +475,6 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* ==================== BULK EMAIL FORM ==================== */}
         {showEmailForm && (
           <div className="bg-gray-900 border-2 border-green-500/20 rounded-3xl p-6 space-y-3">
             <h3 className="text-lg font-black text-green-400">📧 Bulk Email ({filteredTenants.length} admins)</h3>
@@ -438,7 +484,6 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* ==================== ADD TENANT FORM ==================== */}
         {adding && (
           <form onSubmit={handleCreateTenant} className="bg-gray-900 border-2 border-cyan-500/20 rounded-3xl p-6 space-y-4">
             <h3 className="text-lg font-black text-cyan-400">Register New Shop</h3>
@@ -452,7 +497,6 @@ export default function SuperAdminPage() {
           </form>
         )}
 
-        {/* ==================== TENANT ANALYTICS ==================== */}
         {showAnalytics && selectedTenant && tenantAnalytics && (
           <div className="bg-gray-900 border-2 border-cyan-500/20 rounded-3xl p-6">
             <div className="flex justify-between items-center mb-4">
@@ -465,7 +509,6 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* ==================== INVOICE MODAL ==================== */}
         {showInvoice && selectedInvoiceTenant && (
           <div className="bg-gray-900 border-2 border-green-500/20 rounded-3xl p-6">
             <div className="flex justify-between items-center mb-4">
@@ -484,7 +527,7 @@ export default function SuperAdminPage() {
         )}
 
         {/* ==================== SEARCH + FILTER + BULK ==================== */}
-        <div className="flex gap-3 flex-wrap items-center">
+        <div className="flex gap-3 flex-wrap items-center mt-6">
           <div className="relative flex-1 min-w-[200px]"><Search size={18} className="absolute left-4 top-3 text-slate-500"/><input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search admin..." className="w-full bg-gray-900 border border-white/10 rounded-xl pl-12 pr-4 py-3"/></div>
           <div className="flex gap-2">{['all','active','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
           {selectedIds.length > 0 && (
@@ -510,35 +553,46 @@ export default function SuperAdminPage() {
                     <div className={`p-3 rounded-xl ${isExpired?'bg-rose-500/10 text-rose-500':isBlocked?'bg-purple-500/10 text-purple-500':'bg-emerald-500/10 text-emerald-500'}`}><Store size={28}/></div>
                     <div>
                       <p className="font-black text-xl">{t.username||t.email}</p>
-                      <p className="text-xs text-slate-500">Tenant: {t.tenantId}</p>
-                      <div className="flex gap-2 mt-1 flex-wrap">
+                      <p className="text-xs text-slate-500 mt-1">Tenant ID: {t.tenantId}</p>
+                      
+                      {/* 🌟 Super Admin အတွက် Password ဖော်ပြပေးမည့် နေရာ */}
+                      <p className="text-xs mt-1.5 flex items-center gap-1 font-bold text-amber-400">
+                        <Key size={12}/> Pwd: <span className="bg-black/50 px-2 py-0.5 rounded text-white tracking-wider">{t.passwordRaw || t.password || 'N/A'}</span>
+                      </p>
+
+                      <div className="flex gap-2 mt-2 flex-wrap">
                         <span className={`text-xs font-bold ${isExpired?'text-rose-400':isBlocked?'text-purple-400':'text-emerald-400'}`}>{isExpired?'⚠️ Expired':isBlocked?'🚫 Blocked':'✓ Active'}</span>
                         <span className="text-xs text-slate-500">| 📦 {storage.records} recs (~{storage.size}KB)</span>
                       </div>
-                      <div className="flex gap-2 mt-2 flex-wrap">
-                        <button onClick={()=>loadTenantAnalytics(t)} className="text-xs text-cyan-400 hover:underline"><Eye size={12} className="inline"/> Analytics</button>
-                        <button onClick={()=>backupTenantData(t)} className="text-xs text-blue-400 hover:underline"><Cloud size={12} className="inline"/> Backup</button>
-                        <button onClick={()=>generateInvoice(t)} className="text-xs text-green-400 hover:underline"><FileText size={12} className="inline"/> Invoice</button>
-                        <button onClick={()=>sendTelegramNotification(`Admin Update: ${t.username} - Status: ${isExpired?'Expired':'Active'}`)} className="text-xs text-sky-400 hover:underline"><Send size={12} className="inline"/> Telegram</button>
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        <button onClick={()=>loadTenantAnalytics(t)} className="text-xs px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg hover:bg-cyan-600/40"><Eye size={12} className="inline mr-1"/> Analytics</button>
+                        <button onClick={()=>backupTenantData(t)} className="text-xs px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40"><Cloud size={12} className="inline mr-1"/> Backup</button>
+                        <button onClick={()=>generateInvoice(t)} className="text-xs px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/40"><FileText size={12} className="inline mr-1"/> Invoice</button>
+                        <button onClick={()=>sendTelegramNotification(`Admin Update: ${t.username} - Status: ${isExpired?'Expired':'Active'}`)} className="text-xs px-3 py-1.5 bg-sky-600/20 text-sky-400 rounded-lg hover:bg-sky-600/40"><Send size={12} className="inline mr-1"/> Notify</button>
                       </div>
                     </div>
                   </div>
                   {editingUser?.id===t.id?(
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 items-center mt-4 sm:mt-0">
                       <input value={editForm.username} onChange={e=>setEditForm({...editForm,username:e.target.value})} placeholder="Username" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-32"/>
                       <input value={editForm.password} onChange={e=>setEditForm({...editForm,password:e.target.value})} placeholder="New Pwd" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-24"/>
                       <button onClick={handleEditSave} className="p-2 bg-indigo-600 rounded-lg"><Save size={16}/></button>
                       <button onClick={()=>setEditingUser(null)} className="p-2 bg-slate-700 rounded-lg"><X size={16}/></button>
                     </div>
                   ):(
-                    <div className="flex gap-2 items-center flex-wrap">
+                    <div className="flex gap-2 items-center flex-wrap mt-4 sm:mt-0">
                       <input type="date" defaultValue={t.expiryDate} onBlur={e=>updateExpiry(t.id,e.target.value)} className={`bg-black border rounded-lg px-3 py-2 text-sm ${isExpired?'border-rose-500/30 text-rose-300':'border-emerald-500/30 text-emerald-300'}`}/>
-                      <button onClick={()=>startEdit(t)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg"><Edit3 size={16}/></button>
-                      <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg"><RotateCcw size={16}/></button>
+                      <button onClick={()=>startEdit(t)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg" title="Edit"><Edit3 size={16}/></button>
+                      <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg" title="Force Reset Password"><RotateCcw size={16}/></button>
                       <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>
-                      <button onClick={()=>cloneTenant(t)} className="p-2 bg-cyan-600/20 text-cyan-400 rounded-lg"><Copy size={16}/></button>
-                      <button onClick={()=>impersonateTenant(t)} className="p-2 bg-purple-600/20 text-purple-400 rounded-lg"><Zap size={16}/></button>
-                      <button onClick={()=>deleteTenant(t.id,t.username)} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg"><Trash2 size={16}/></button>
+                      
+                      {/* 🌟 Auto Login ခလုတ် */}
+                      <button onClick={()=>impersonateTenant(t)} className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 font-bold rounded-lg flex items-center gap-2 transition-colors border border-purple-500/30">
+                        <Zap size={16}/> Auto Login
+                      </button>
+                      
+                      <button onClick={()=>cloneTenant(t)} className="p-2 bg-cyan-600/20 text-cyan-400 rounded-lg" title="Clone"><Copy size={16}/></button>
+                      <button onClick={()=>deleteTenant(t.id,t.username)} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg" title="Delete"><Trash2 size={16}/></button>
                     </div>
                   )}
                 </div>

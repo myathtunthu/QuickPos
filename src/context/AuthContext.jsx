@@ -19,33 +19,24 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // 🌟 အခြေအနေ ၁ - Firebase Admin Login ဝင်ထားပါက
+          // 🌟 ၁။ Firebase Auth ဖြင့် အောင်မြင်စွာ ဝင်ထားမှသာ လက်ခံမည် (Local Storage လုံးဝ မသုံးတော့ပါ)
           setUser(firebaseUser);
           
           await firebaseUser.getIdToken(true);
 
+          // 🌟 ၂။ Firebase Auth ရဲ့ UID ဖြင့် Database ထဲမှ User Data ကို လှမ်းဆွဲမည်
           const userSnap = await getDoc(doc(db, 'pos_users', firebaseUser.uid));
           if (userSnap.exists()) {
             const userData = { id: userSnap.id, ...userSnap.data() };
             setProfile(userData);
-            logger.log('Admin profile loaded successfully', userData.email);
+            logger.log('Profile loaded successfully', userData.email || userData.username);
           } else {
             setProfile(null);
           }
         } else {
-          // 🌟 အခြေအနေ ၂ - Firebase Admin မဟုတ်ပါက Local Storage မှ Staff ကို ရှာမည်
-          const staffSession = localStorage.getItem('pos_staff_session');
-          
-          if (staffSession) {
-            const staffData = JSON.parse(staffSession);
-            setUser({ uid: staffData.id, email: staffData.username, isStaff: true });
-            setProfile(staffData);
-            logger.log('Staff profile loaded successfully', staffData.username);
-          } else {
-            // လုံးဝ Login မဝင်ထားပါက သေချာစွာ ရှင်းလင်းမည်
-            setUser(null);
-            setProfile(null);
-          }
+          // 🌟 ၃။ တရားဝင် Login ဝင်မထားပါက သေချာစွာ ရှင်းလင်းမည်
+          setUser(null);
+          setProfile(null);
         }
       } catch (error) {
         logger.error('Auth state change error:', error);
@@ -72,19 +63,16 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      // ၁။ Local Storage ထဲက Staff မှတ်တမ်းကို အရင်ဆုံး ဖျက်ပစ်ပါမည်
+      // Local Storage အဟောင်းများရှိနေသေးလျှင်ပါ တစ်ပါတည်း ရှင်းလင်းမည်
       localStorage.removeItem('pos_staff_session');
       
-      // ၂။ App Memory (State) ထဲမှ User Data များကို ချက်ချင်း ရှင်းလင်းပါမည်
       setUser(null);
       setProfile(null);
 
-      // ၃။ Firebase Admin Account ဝင်ထားလျှင် ထွက်ပါမည်
       if (auth.currentUser) {
         await signOut(auth);
       }
       
-      // ၄။ အရေးကြီးဆုံး: Login မျက်နှာပြင်သို့ အတင်း (Force) ပြန်ပို့ပြီး App အား အသစ်ပြန်ဖွင့်ပါမည် (Cache ရှင်းစေရန်)
       window.location.href = '/login';
     } catch (error) {
       logger.error('Logout failed', error);

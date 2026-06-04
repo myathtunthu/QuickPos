@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { db } from '../firebase/config';
 import { collection, addDoc, doc, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext'; // 🌟 Language ယူရန်
 import { Boxes, Search, Plus, Save, Trash2, Edit3, ScanBarcode, X, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import useDebounce from '../hooks/useDebounce';
@@ -12,6 +13,7 @@ import logger from '../utils/logger';
 
 // ---------- Scanner Modal ----------
 const ScannerModal = ({ onClose, onScan }) => {
+  const { t } = useLanguage();
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const readerRef = useRef(null);
@@ -48,15 +50,15 @@ const ScannerModal = ({ onClose, onScan }) => {
     <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
       <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
         <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
-          <h3 className="font-black text-gray-800">Scan Barcode</h3>
+          <h3 className="font-black text-gray-800">{t('scanBarcode')}</h3>
           <button type="button" onClick={onClose} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
         </div>
         {cameraError ? (
-          <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
+          <div className="p-6 text-center text-red-500 font-bold">{t('error')}</div>
         ) : (
           <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
         )}
-        <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">ကင်မရာကို Barcode သို့ ချိန်ပါ</div>
+        <div className="p-4 bg-gray-100 text-center text-xs text-gray-500 font-bold">{t('pointCamera')}</div>
       </div>
     </div>
   );
@@ -64,7 +66,8 @@ const ScannerModal = ({ onClose, onScan }) => {
 
 // ---------- Inventory Page ----------
 export default function InventoryPage() {
-  const { profile, hasPermission } = useAuth(); // 🌟 Permission စစ်ဆေးရန် ခေါ်ယူခြင်း
+  const { profile, hasPermission } = useAuth(); 
+  const { t } = useLanguage(); // 🌟 Translation
   const tenantId = profile?.tenantId;
 
   const [products, setProducts] = useState([]);
@@ -103,6 +106,23 @@ export default function InventoryPage() {
 
   const fmt = n => (Number(n) || 0).toLocaleString();
   const toggleRow = (id) => setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+
+  // 🌟 Audit Log မှတ်သားမည့် Function
+  const logAudit = async (action, details) => {
+    try {
+      await addDoc(collection(db, 'pos_audit_logs'), {
+        tenantId,
+        action,
+        details,
+        user: profile?.username || profile?.email || 'Unknown',
+        userId: profile?.id || 'Unknown',
+        timestamp: Date.now(),
+        date: new Date().toISOString()
+      });
+    } catch (e) {
+      logger.error("Audit log failed", e);
+    }
+  };
 
   const getUnitBreakdown = (stock, packageUnits) => {
     if (!packageUnits || packageUnits.length === 0) return [];
@@ -149,11 +169,11 @@ export default function InventoryPage() {
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!hasPermission('manage_products')) return showToast("ကုန်ပစ္စည်းစီမံခွင့် မရှိပါ။", "error"); // 🌟 Guard
+    if (!hasPermission('manage_products')) return showToast(t('error'), "error"); 
 
     if (submitLock.current) return; 
     
-    if (!form.name.trim()) return showToast("Product Name ထည့်ပါ", "error");
+    if (!form.name.trim()) return showToast(t('productName'), "error");
     if (!tenantId) return showToast("No tenant ID found.", "error");
 
     const validUnits = form.packageUnits.filter(u => u.name.trim() !== '');
@@ -181,10 +201,14 @@ export default function InventoryPage() {
     try {
       if (editing) {
         await setDoc(doc(db, 'pos_products', editing.id), payload, { merge: true });
-        showToast("Product updated successfully!", "success"); setEditing(null);
+        // 🌟 Audit Log (Edit Product)
+        logAudit('UPDATE_PRODUCT', { productId: editing.id, productName: payload.name });
+        showToast(t('success'), "success"); setEditing(null);
       } else {
-        await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: tenantId, stock: 0, stockBase: 0, createdAt: Date.now() });
-        showToast("Product added successfully!", "success"); setAdding(false);
+        const docRef = await addDoc(collection(db, 'pos_products'), { ...payload, tenantId: tenantId, stock: 0, stockBase: 0, createdAt: Date.now() });
+        // 🌟 Audit Log (Create Product)
+        logAudit('CREATE_PRODUCT', { productId: docRef.id, productName: payload.name });
+        showToast(t('success'), "success"); setAdding(false);
       }
       resetForm();
     } catch (error) { 
@@ -193,7 +217,7 @@ export default function InventoryPage() {
   };
 
   const startEdit = (p) => {
-    if (!hasPermission('manage_products')) return; // 🌟 Guard
+    if (!hasPermission('manage_products')) return; 
     setEditing(p); setAdding(false);
     setForm({
       name: p.name || '', category: p.category || '', baseUnit: p.baseUnit || 'Bottle',
@@ -214,27 +238,36 @@ export default function InventoryPage() {
   };
 
   const updateStock = async (id, newStock) => {
-    if (!hasPermission('manage_inventory')) return showToast("ကုန်လက်ကျန် ပြင်ခွင့်မရှိပါ။", "error"); // 🌟 Guard
+    if (!hasPermission('manage_inventory')) return showToast(t('error'), "error"); 
 
     const s = Number(newStock);
     if (!isNaN(s)) {
       try {
-        await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
-        showToast("Stock updated successfully!", "success");
-      } catch (err) { logger.error('Error updating stock:', err); showToast("Error updating stock", "error"); }
+        const prodData = products.find(p => p.id === id);
+        const oldStock = Number(prodData?.stockBase) || Number(prodData?.stock) || 0;
+        
+        if (oldStock !== s) {
+          await setDoc(doc(db, 'pos_products', id), { stock: s, stockBase: s }, { merge: true });
+          // 🌟 Audit Log (Manual Stock Update)
+          logAudit('MANUAL_STOCK_ADJUSTMENT', { productId: id, productName: prodData?.name, oldStock: oldStock, newStock: s });
+          showToast(t('stockUpdated'), "success");
+        }
+      } catch (err) { logger.error('Error updating stock:', err); showToast(t('errorUpdatingStock'), "error"); }
     }
   };
 
   const handleDeleteProduct = (id, name) => {
-    if (!hasPermission('manage_products')) return; // 🌟 Guard
+    if (!hasPermission('manage_products')) return; 
     setConfirmDialog({
-      isOpen: true, title: "ပစ္စည်း ဖျက်သိမ်းခြင်း", message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
+      isOpen: true, title: t('delete'), message: t('deleteProductConfirm'),
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
         try {
           await deleteDoc(doc(db, 'pos_products', id));
-          showToast("Product deleted successfully!", "success");
-        } catch (err) { logger.error('Error deleting product:', err); showToast("Failed to delete product.", "error"); }
+          // 🌟 Audit Log (Delete Product)
+          logAudit('DELETE_PRODUCT', { productId: id, productName: name });
+          showToast(t('success'), "success");
+        } catch (err) { logger.error('Error deleting product:', err); showToast(t('error'), "error"); }
       }
     });
   };
@@ -256,17 +289,16 @@ export default function InventoryPage() {
 
       {/* Header & Search */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-cyan-500/15 gap-5 shadow-xl">
-        <h3 className="font-black text-2xl flex items-center gap-2 tracking-wide"><Boxes className="text-cyan-500"/> Inventory</h3>
+        <h3 className="font-black text-2xl flex items-center gap-2 tracking-wide"><Boxes className="text-cyan-500"/> {t('inventory')}</h3>
         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
           <div className="relative flex-1 min-w-[220px]">
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder="Search product..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
+            <input type="text" placeholder={t('searchProduct')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm shadow-inner transition-colors"/>
           </div>
-          {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ Add Button ပြမည် */}
           {hasPermission('manage_products') && (
             <button onClick={()=>{setAdding(!adding);setEditing(null); if(!adding) resetForm();}} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 text-sm shadow-lg shadow-cyan-900/50 active:scale-95 transition-all">
-              <Plus size={18}/> Add Item
+              <Plus size={18}/> {t('addItem')}
             </button>
           )}
         </div>
@@ -274,27 +306,27 @@ export default function InventoryPage() {
 
       {/* Categories Filter Horizontal Scroll */}
       <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2 pt-1 px-1">
-        <button onClick={() => setSelCategory('All')} className={`px-5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-md ${selCategory === 'All' ? 'bg-cyan-600 text-white' : 'bg-[#0d1120] text-slate-400 border border-white/5 hover:border-cyan-500/30'}`}>All</button>
-        {categories.map(cat => (
+        <button onClick={() => setSelCategory('All')} className={`px-5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-md ${selCategory === 'All' ? 'bg-cyan-600 text-white' : 'bg-[#0d1120] text-slate-400 border border-white/5 hover:border-cyan-500/30'}`}>{t('allCategories')}</button>
+        {categories.filter(cat => cat !== 'General').map(cat => (
           <button key={cat} onClick={() => setSelCategory(cat)} className={`px-5 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all shadow-md ${selCategory === cat ? 'bg-cyan-600 text-white' : 'bg-[#0d1120] text-slate-400 border border-white/5 hover:border-cyan-500/30'}`}>{cat}</button>
         ))}
       </div>
 
-      {/* Add / Edit Form (Permission Check Included Above) */}
+      {/* Add / Edit Form */}
       {(adding || editing) && hasPermission('manage_products') && (
         <form onSubmit={handleSaveProduct} className="bg-[#0d1120] p-5 sm:p-6 rounded-3xl border border-cyan-500/30 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-          <p className="text-sm font-black text-cyan-400 uppercase tracking-wider">{editing ? 'Edit Product' : 'New Product'}</p>
+          <p className="text-sm font-black text-cyan-400 uppercase tracking-wider">{editing ? t('editProduct') : t('newProduct')}</p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="text-xs text-slate-400 font-bold mb-1.5 block">Product Name *</label>
+              <label className="text-xs text-slate-400 font-bold mb-1.5 block">{t('productName')}</label>
               <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Shark Energy Drink" className="w-full bg-black/50 border border-cyan-500/20 p-3 rounded-xl text-white outline-none text-sm focus:border-cyan-400"/>
             </div>
             <div>
-              <label className="text-xs text-slate-400 font-bold mb-1.5 block">Category</label>
+              <label className="text-xs text-slate-400 font-bold mb-1.5 block">{t('category')}</label>
               {showNewCategoryInput ? (
                 <div className="flex gap-2">
-                  <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder="New Category" className="flex-1 bg-black/50 border border-green-500/40 p-3 rounded-xl text-white outline-none text-sm focus:border-green-400" autoFocus />
+                  <input value={form.category} onChange={e => setForm({...form, category: e.target.value})} placeholder={t('category')} className="flex-1 bg-black/50 border border-green-500/40 p-3 rounded-xl text-white outline-none text-sm focus:border-green-400" autoFocus />
                   <button type="button" onClick={() => setShowNewCategoryInput(false)} className="px-3 bg-slate-800 rounded-xl text-xs font-bold">✕</button>
                 </div>
               ) : (
@@ -302,22 +334,22 @@ export default function InventoryPage() {
                   if (e.target.value === '__add_new__') { setShowNewCategoryInput(true); setForm(prev => ({...prev, category: ''})); }
                   else setForm({...form, category: e.target.value});
                 }} className="w-full bg-black/50 border border-cyan-500/20 p-3 rounded-xl text-white outline-none text-sm focus:border-cyan-400">
-                  <option value="">Select Category</option>
+                  <option value="">{t('selectCategory')}</option>
                   {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  <option value="__add_new__">+ Add New Category</option>
+                  <option value="__add_new__">{t('addNewCategory')}</option>
                 </select>
               )}
             </div>
             <div>
-              <label className="text-xs text-slate-400 font-bold mb-1.5 block">Base Unit</label>
+              <label className="text-xs text-slate-400 font-bold mb-1.5 block">{t('baseUnit')}</label>
               <input value={form.baseUnit} onChange={e=>setForm({...form,baseUnit:e.target.value})} placeholder="e.g. Bottle, Pcs" className="w-full bg-black/50 border border-cyan-500/20 p-3 rounded-xl text-white outline-none text-sm focus:border-cyan-400"/>
             </div>
           </div>
 
           <div className="border-t border-white/5 pt-5">
             <div className="flex justify-between items-center mb-4">
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2"><Package size={14}/> Package Units</p>
-              <button type="button" onClick={addPackageUnit} className="px-3 py-2 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-cyan-600/30 transition-colors"><Plus size={14}/> Add Unit</button>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-2"><Package size={14}/> {t('packageUnits')}</p>
+              <button type="button" onClick={addPackageUnit} className="px-3 py-2 bg-cyan-600/20 text-cyan-400 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-cyan-600/30 transition-colors"><Plus size={14}/> {t('addUnit')}</button>
             </div>
             
             {/* Mobile form view */}
@@ -328,21 +360,21 @@ export default function InventoryPage() {
                     <button type="button" onClick={()=>removePackageUnit(idx)} className="absolute top-4 right-4 p-1.5 bg-rose-900/30 text-rose-400 rounded-lg"><Trash2 size={14}/></button>
                   )}
                   <div className="grid grid-cols-2 gap-3 pr-10">
-                    <div><label className="text-[10px] text-slate-500 font-bold">Unit Name</label><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Box" className="w-full bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none"/></div>
-                    <div><label className="text-[10px] text-slate-500 font-bold">Qty (Multiplier)</label><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="e.g. 24" className="w-full bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none text-center"/></div>
+                    <div><label className="text-[10px] text-slate-500 font-bold">{t('unitName')}</label><input value={unit.name} onChange={e=>updatePackageUnit(idx,'name',e.target.value)} placeholder="e.g. Box" className="w-full bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-slate-500 font-bold">{t('qtyMultiplier')}</label><input type="number" value={unit.multiplier} onChange={e=>updatePackageUnit(idx,'multiplier',e.target.value)} placeholder="e.g. 24" className="w-full bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none text-center"/></div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 font-bold">Barcode</label>
+                    <label className="text-[10px] text-slate-500 font-bold">{t('barcode')}</label>
                     <div className="flex gap-2 mt-1">
-                      <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder="Scan or Type" className="flex-1 bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none"/>
+                      <input value={unit.barcodes?.retail || ''} onChange={e=>updatePackageUnit(idx,'barcodes.retail',e.target.value)} placeholder={t('scanOrType')} className="flex-1 bg-black/50 border border-cyan-500/20 p-2.5 rounded-lg text-white text-xs outline-none"/>
                       <button type="button" onClick={()=>setActiveScanIdx(idx)} className="px-4 bg-blue-600/20 rounded-lg text-blue-400 flex items-center justify-center border border-blue-500/20"><ScanBarcode size={18}/></button>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/5">
-                    <div><label className="text-[10px] text-cyan-400 font-bold">Retail Price</label><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-cyan-500/30 p-2 rounded text-cyan-300 text-xs outline-none"/></div>
-                    <div><label className="text-[10px] text-amber-500 font-bold">Wholesale A</label><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-amber-500/20 p-2 rounded text-amber-300 text-xs outline-none"/></div>
-                    <div><label className="text-[10px] text-amber-500 font-bold">Wholesale B</label><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-amber-500/20 p-2 rounded text-amber-300 text-xs outline-none"/></div>
-                    <div><label className="text-[10px] text-blue-400 font-bold">Cost Price</label><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-blue-500/30 p-2 rounded text-blue-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-cyan-400 font-bold">{t('retailPrice')}</label><input type="number" value={unit.prices.retail} onChange={e=>updatePackageUnit(idx,'prices.retail',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-cyan-500/30 p-2 rounded text-cyan-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-amber-500 font-bold">{t('wholesaleA')}</label><input type="number" value={unit.prices.wholesaleA} onChange={e=>updatePackageUnit(idx,'prices.wholesaleA',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-amber-500/20 p-2 rounded text-amber-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-amber-500 font-bold">{t('wholesaleB')}</label><input type="number" value={unit.prices.wholesaleB} onChange={e=>updatePackageUnit(idx,'prices.wholesaleB',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-amber-500/20 p-2 rounded text-amber-300 text-xs outline-none"/></div>
+                    <div><label className="text-[10px] text-blue-400 font-bold">{t('costPrice')}</label><input type="number" value={unit.costPrice} onChange={e=>updatePackageUnit(idx,'costPrice',e.target.value)} placeholder="0" className="w-full bg-black/50 border border-blue-500/30 p-2 rounded text-blue-300 text-xs outline-none"/></div>
                   </div>
                 </div>
               ))}
@@ -354,14 +386,14 @@ export default function InventoryPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">
-                      <th className="p-2 text-left w-[120px]">Unit Name</th>
-                      <th className="p-2 w-[80px]">Qty (×Base)</th>
-                      <th className="p-2 w-[150px]">Barcode</th>
-                      <th className="p-2 w-[90px] text-cyan-400">Retail</th>
-                      <th className="p-2 w-[90px] text-amber-500">Whole A</th>
-                      <th className="p-2 w-[90px] text-amber-500">Whole B</th>
-                      <th className="p-2 w-[90px] text-amber-500">Whole C</th>
-                      <th className="p-2 w-[90px] text-blue-400">Cost</th>
+                      <th className="p-2 text-left w-[120px]">{t('unitName')}</th>
+                      <th className="p-2 w-[80px]">{t('qtyMultiplier')}</th>
+                      <th className="p-2 w-[150px]">{t('barcode')}</th>
+                      <th className="p-2 w-[90px] text-cyan-400">{t('retailPrice')}</th>
+                      <th className="p-2 w-[90px] text-amber-500">{t('wholesaleA')}</th>
+                      <th className="p-2 w-[90px] text-amber-500">{t('wholesaleB')}</th>
+                      <th className="p-2 w-[90px] text-amber-500">{t('wholesaleC')}</th>
+                      <th className="p-2 w-[90px] text-blue-400">{t('costPrice')}</th>
                       <th className="p-2 w-[40px]"></th>
                     </tr>
                   </thead>
@@ -391,13 +423,13 @@ export default function InventoryPage() {
           </div>
 
           <div className="pt-2">
-            <label className="text-xs text-slate-400 font-bold mb-1.5 block">Min Stock Alert (Base Unit)</label>
+            <label className="text-xs text-slate-400 font-bold mb-1.5 block">{t('minStockAlert')}</label>
             <input type="number" value={form.minStock} onChange={e=>setForm({...form,minStock:e.target.value})} placeholder="5" className="w-full sm:w-1/3 bg-black/50 border border-amber-500/20 p-3 rounded-xl text-amber-300 outline-none text-sm focus:border-amber-400"/>
           </div>
 
           <div className="flex gap-4 pt-4 border-t border-white/5">
-            <button type="submit" className="flex-1 sm:flex-none sm:w-48 bg-cyan-600 text-white p-3 rounded-xl font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-900/50"><Save size={18}/> Save Product</button>
-            <button type="button" onClick={cancelEdit} className="flex-1 sm:flex-none sm:w-32 bg-black/50 border border-white/10 text-slate-300 rounded-xl font-bold hover:bg-white/5 transition-colors">Cancel</button>
+            <button type="submit" className="flex-1 sm:flex-none sm:w-48 bg-cyan-600 text-white p-3 rounded-xl font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-900/50"><Save size={18}/> {t('saveProduct')}</button>
+            <button type="button" onClick={cancelEdit} className="flex-1 sm:flex-none sm:w-32 bg-black/50 border border-white/10 text-slate-300 rounded-xl font-bold hover:bg-white/5 transition-colors">{t('cancel')}</button>
           </div>
         </form>
       )}
@@ -411,16 +443,16 @@ export default function InventoryPage() {
             <thead>
               <tr className="text-slate-400 text-[11px] uppercase font-bold tracking-wider bg-black/40 border-b border-white/5">
                 <th className="p-4 w-10"></th>
-                <th className="p-4">Product Name</th>
-                <th className="p-4 text-center">Base Unit</th>
-                <th className="p-4 text-center">Stock</th>
-                <th className="p-4 text-right text-cyan-400">Retail Price</th>
-                {hasPermission('manage_products') && <th className="p-4 text-center w-28">Actions</th>}
+                <th className="p-4">{t('productName')}</th>
+                <th className="p-4 text-center">{t('baseUnit')}</th>
+                <th className="p-4 text-center">{t('stock')}</th>
+                <th className="p-4 text-right text-cyan-400">{t('retailPrice')}</th>
+                {hasPermission('manage_products') && <th className="p-4 text-center w-28">{t('actions')}</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredProducts.length === 0 && (
-                <tr><td colSpan={hasPermission('manage_products') ? 6 : 5} className="p-10 text-center text-slate-500 font-bold">No products found.</td></tr>
+                <tr><td colSpan={hasPermission('manage_products') ? 6 : 5} className="p-10 text-center text-slate-500 font-bold">{t('noProductsFound')}</td></tr>
               )}
               {filteredProducts.map(p => {
                 const isLowStock = (Number(p.stockBase) || Number(p.stock) || 0) <= (Number(p.minStock) || 5);
@@ -435,13 +467,12 @@ export default function InventoryPage() {
                       <td className="p-4">{isExpanded ? <ChevronUp size={16} className="text-cyan-400"/> : <ChevronDown size={16} className="text-slate-500"/>}</td>
                       <td className="p-4 font-bold text-white flex items-center gap-3">
                         {p.name}
-                        {isLowStock && <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full tracking-wider">Low Stock</span>}
+                        {isLowStock && <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full tracking-wider">{t('lowStock')}</span>}
                       </td>
                       <td className="p-4 text-center text-slate-400 font-bold">{baseUnitName}</td>
                       <td className={`p-4 text-center font-black text-lg ${isLowStock ? 'text-amber-400' : 'text-white'}`}>{stockVal}</td>
                       <td className="p-4 text-right font-black text-cyan-400 text-base">{fmt(retailPrice)} <span className="text-xs font-bold text-cyan-600">Ks</span></td>
                       
-                      {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ Edit/Delete Button ပြမည် */}
                       {hasPermission('manage_products') && (
                         <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-center gap-2">
@@ -457,7 +488,7 @@ export default function InventoryPage() {
                         <td colSpan={hasPermission('manage_products') ? 6 : 5} className="p-6">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
-                              <p className="text-xs text-slate-500 font-black uppercase mb-3 flex items-center gap-2"><Boxes size={14}/> Stock Breakdown</p>
+                              <p className="text-xs text-slate-500 font-black uppercase mb-3 flex items-center gap-2"><Boxes size={14}/> {t('stockBreakdown')}</p>
                               <div className="space-y-2 mb-4">
                                 {getUnitBreakdown(stockVal, p.packageUnits || []).filter(b => b.qty > 0).map((b, i) => (
                                   <div key={i} className="flex justify-between items-center border-b border-white/5 pb-1 last:border-0">
@@ -466,12 +497,11 @@ export default function InventoryPage() {
                                   </div>
                                 ))}
                                 {getUnitBreakdown(stockVal, p.packageUnits || []).filter(b => b.qty > 0).length === 0 && (
-                                  <p className="text-xs text-slate-500 italic">No stock available.</p>
+                                  <p className="text-xs text-slate-500 italic">{t('noStock')}</p>
                                 )}
                               </div>
                               <div className="pt-2 border-t border-white/5">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">Manual Adjust Stock (Base)</label>
-                                {/* 🌟 ကုန်လက်ကျန်ပြင်ခွင့် ရှိမှသာ Input ပြမည်၊ မရှိလျှင် စာသားသာပြမည် */}
+                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">{t('manualAdjustStock')}</label>
                                 {hasPermission('manage_inventory') ? (
                                   <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-full bg-black/50 border border-cyan-500/30 rounded-lg px-3 py-2 text-white font-bold outline-none focus:border-cyan-400" />
                                 ) : (
@@ -482,7 +512,7 @@ export default function InventoryPage() {
                               </div>
                             </div>
                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
-                              <p className="text-xs text-slate-500 font-black uppercase mb-3 flex items-center gap-2"><Package size={14}/> Units & Retail Prices</p>
+                              <p className="text-xs text-slate-500 font-black uppercase mb-3 flex items-center gap-2"><Package size={14}/> {t('unitsRetailPrices')}</p>
                               <div className="space-y-2">
                                 {p.packageUnits?.map((u, i) => (
                                   <div key={i} className="flex justify-between items-center border-b border-white/5 pb-1 last:border-0">
@@ -493,12 +523,12 @@ export default function InventoryPage() {
                               </div>
                             </div>
                             <div className="bg-black/40 p-4 rounded-2xl border border-white/5 shadow-inner">
-                              <p className="text-xs text-slate-500 font-black uppercase mb-3">Product Details</p>
+                              <p className="text-xs text-slate-500 font-black uppercase mb-3">{t('productDetails')}</p>
                               <div className="space-y-2">
-                                <p className="text-sm"><span className="text-slate-500">Category:</span> <span className="font-bold text-white">{p.category || 'General'}</span></p>
-                                <p className="text-sm"><span className="text-slate-500">Min Alert:</span> <span className="font-bold text-amber-400">{p.minStock || 5}</span></p>
+                                <p className="text-sm"><span className="text-slate-500">{t('category')}:</span> <span className="font-bold text-white">{p.category || 'General'}</span></p>
+                                <p className="text-sm"><span className="text-slate-500">{t('minStockAlert')}:</span> <span className="font-bold text-amber-400">{p.minStock || 5}</span></p>
                                 <div className="pt-2 border-t border-white/5">
-                                  <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Barcodes</p>
+                                  <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">{t('barcodes')}</p>
                                   {p.packageUnits?.filter(u => u.barcodes?.retail).map((u, i) => (
                                     <p key={i} className="text-xs text-slate-300 font-mono bg-black/50 px-2 py-1 rounded mb-1">{u.name}: {u.barcodes.retail}</p>
                                   ))}
@@ -519,7 +549,7 @@ export default function InventoryPage() {
         {/* Mobile Card View */}
         <div className="block sm:hidden divide-y divide-white/5">
           {filteredProducts.length === 0 && (
-            <div className="p-8 text-center text-slate-500 font-bold">No products found.</div>
+            <div className="p-8 text-center text-slate-500 font-bold">{t('noProductsFound')}</div>
           )}
           {filteredProducts.map(p => {
             const isLowStock = (Number(p.stockBase) || Number(p.stock) || 0) <= (Number(p.minStock) || 5);
@@ -549,16 +579,15 @@ export default function InventoryPage() {
                 {isExpanded && (
                   <div className="p-4 bg-black/40 border-t border-cyan-500/10 space-y-4">
                     
-                    {/* 🌟 ပစ္စည်းစီမံခွင့် ရှိမှသာ ပြမည် */}
                     {hasPermission('manage_products') && (
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => startEdit(p)} className="flex-1 py-2 bg-indigo-900/30 border border-indigo-500/20 rounded-xl text-indigo-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Edit3 size={16}/> Edit</button>
-                        <button type="button" onClick={() => handleDeleteProduct(p.id, p.name)} className="flex-1 py-2 bg-rose-900/30 border border-rose-500/20 rounded-xl text-rose-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Trash2 size={16}/> Delete</button>
+                        <button type="button" onClick={() => startEdit(p)} className="flex-1 py-2 bg-indigo-900/30 border border-indigo-500/20 rounded-xl text-indigo-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Edit3 size={16}/> {t('edit')}</button>
+                        <button type="button" onClick={() => handleDeleteProduct(p.id, p.name)} className="flex-1 py-2 bg-rose-900/30 border border-rose-500/20 rounded-xl text-rose-400 font-bold flex justify-center items-center gap-2 active:scale-95"><Trash2 size={16}/> {t('delete')}</button>
                       </div>
                     )}
                     
                     <div className="bg-black/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-[10px] text-slate-500 font-black uppercase mb-2">Stock Breakdown</p>
+                      <p className="text-[10px] text-slate-500 font-black uppercase mb-2">{t('stockBreakdown')}</p>
                       <div className="space-y-1 mb-3">
                         {getUnitBreakdown(stockVal, p.packageUnits || []).filter(b => b.qty > 0).map((b, i) => (
                           <div key={i} className="flex justify-between items-center bg-black/30 px-2 py-1.5 rounded-lg border border-white/5">
@@ -568,8 +597,7 @@ export default function InventoryPage() {
                         ))}
                       </div>
                       <div className="flex justify-between items-center">
-                        <label className="text-[10px] text-slate-500 font-bold">Adjust Base Stock:</label>
-                        {/* 🌟 ကုန်လက်ကျန်ပြင်ခွင့် ရှိမှသာ Input ပြမည်၊ မရှိလျှင် စာသားသာပြမည် */}
+                        <label className="text-[10px] text-slate-500 font-bold">{t('manualAdjustStock')}:</label>
                         {hasPermission('manage_inventory') ? (
                           <input type="number" defaultValue={stockVal} onBlur={e => updateStock(p.id, e.target.value)} className="w-20 bg-[#0d1120] border border-cyan-500/30 rounded-lg px-2 py-1.5 text-white font-bold outline-none focus:border-cyan-400 text-center text-sm" />
                         ) : (
@@ -581,7 +609,7 @@ export default function InventoryPage() {
                     </div>
 
                     <div className="bg-black/50 p-3 rounded-xl border border-white/5 space-y-1.5">
-                      <p className="text-[10px] text-slate-500 font-black uppercase mb-1">Package Prices</p>
+                      <p className="text-[10px] text-slate-500 font-black uppercase mb-1">{t('unitsRetailPrices')}</p>
                       {p.packageUnits?.map((u, i) => (
                         <div key={i} className="flex justify-between text-xs border-b border-white/5 pb-1 last:border-0">
                           <span className="font-bold text-slate-300">{u.name} <span className="text-slate-600">(x{u.multiplier})</span></span>

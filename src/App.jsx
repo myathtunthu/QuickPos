@@ -5,11 +5,9 @@ import { db } from './firebase/config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 
-// Components
 import ErrorBoundary from './components/ErrorBoundary';
 import Toast from './components/UI/Toast';
 
-// Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EntryPage from './pages/EntryPage';
@@ -19,34 +17,23 @@ import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 import RecordsPage from './pages/RecordsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
-
 import CustomersPage from './pages/CustomersPage';
 import SuppliersPage from './pages/SuppliersPage';
 import DraftsPage from './pages/DraftsPage';
 
-// Layout
 import Layout from './components/UI/Layout';
 
-const LoadingScreen = () => {
-  return (
-    <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-};
+const LoadingScreen = () => (
+  <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
+    <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <LoadingScreen />;
-
-  if (!user || !profile) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (profile.active === false) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user || !profile) return <Navigate to="/login" replace />;
 
   return children;
 };
@@ -55,16 +42,11 @@ const AdminOnlyRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
 
   if (loading) return <LoadingScreen />;
-
-  if (!user || !profile) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!user || !profile) return <Navigate to="/login" replace />;
 
   const isAdmin = profile.role === 'admin' || profile.role === 'owner';
 
-  if (!isAdmin) {
-    return <Navigate to="/entry" replace />;
-  }
+  if (!isAdmin) return <Navigate to="/entry" replace />;
 
   return children;
 };
@@ -73,14 +55,8 @@ const PermissionRoute = ({ permission, children, fallback = '/entry' }) => {
   const { user, profile, loading, hasPermission } = useAuth();
 
   if (loading) return <LoadingScreen />;
-
-  if (!user || !profile) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (!hasPermission(permission)) {
-    return <Navigate to={fallback} replace />;
-  }
+  if (!user || !profile) return <Navigate to="/login" replace />;
+  if (!hasPermission(permission)) return <Navigate to={fallback} replace />;
 
   return children;
 };
@@ -95,20 +71,12 @@ function AppContent() {
 
     const unsubRecords = onSnapshot(
       query(collection(db, 'pos_records'), where('tenantId', '==', profile.tenantId)),
-      (snap) => setAllRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (error) => {
-        console.error('Records subscription failed:', error);
-        setAllRecords([]);
-      }
+      (snap) => setAllRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     const unsubProducts = onSnapshot(
       query(collection(db, 'pos_products'), where('tenantId', '==', profile.tenantId)),
-      (snap) => setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (error) => {
-        console.error('Products subscription failed:', error);
-        setAllProducts([]);
-      }
+      (snap) => setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     return () => {
@@ -135,9 +103,7 @@ function AppContent() {
               wholesaleC: prod.wholesalePriceC || 0,
             },
             costPrice: prod.costPrice || 0,
-            barcodes: {
-              retail: prod.barcode || '',
-            },
+            barcodes: { retail: prod.barcode || '' },
           },
         ],
       };
@@ -149,6 +115,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
+        {/* Super Admin setup page - public */}
         <Route path="/mttadminacc" element={<SuperAdminPage />} />
 
         <Route
@@ -245,7 +212,7 @@ function AppContent() {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/entry" replace />} />
       </Routes>
     </BrowserRouter>
   );

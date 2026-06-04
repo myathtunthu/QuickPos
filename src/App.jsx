@@ -27,16 +27,61 @@ import DraftsPage from './pages/DraftsPage';
 // Layout
 import Layout from './components/UI/Layout';
 
+const LoadingScreen = () => {
+  return (
+    <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+};
+
 const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+
+  if (loading) return <LoadingScreen />;
+
+  if (!user || !profile) {
+    return <Navigate to="/login" replace />;
   }
-  if (!user || !profile) return <Navigate to="/login" replace />;
+
+  if (profile.active === false) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
+const AdminOnlyRoute = ({ children }) => {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+
+  if (!user || !profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const isAdmin = profile.role === 'admin' || profile.role === 'owner';
+
+  if (!isAdmin) {
+    return <Navigate to="/entry" replace />;
+  }
+
+  return children;
+};
+
+const PermissionRoute = ({ permission, children, fallback = '/entry' }) => {
+  const { user, profile, loading, hasPermission } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+
+  if (!user || !profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!hasPermission(permission)) {
+    return <Navigate to={fallback} replace />;
+  }
+
   return children;
 };
 
@@ -50,12 +95,20 @@ function AppContent() {
 
     const unsubRecords = onSnapshot(
       query(collection(db, 'pos_records'), where('tenantId', '==', profile.tenantId)),
-      snap => setAllRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      (snap) => setAllRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (error) => {
+        console.error('Records subscription failed:', error);
+        setAllRecords([]);
+      }
     );
 
     const unsubProducts = onSnapshot(
       query(collection(db, 'pos_products'), where('tenantId', '==', profile.tenantId)),
-      snap => setAllProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      (snap) => setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (error) => {
+        console.error('Products subscription failed:', error);
+        setAllProducts([]);
+      }
     );
 
     return () => {
@@ -65,8 +118,9 @@ function AppContent() {
   }, [profile?.tenantId]);
 
   const mappedProducts = useMemo(() => {
-    return allProducts.map(prod => {
+    return allProducts.map((prod) => {
       if (prod.packageUnits?.length > 0) return prod;
+
       return {
         ...prod,
         stockBase: prod.stockBase ?? prod.stock ?? 0,
@@ -81,7 +135,9 @@ function AppContent() {
               wholesaleC: prod.wholesalePriceC || 0,
             },
             costPrice: prod.costPrice || 0,
-            barcodes: { retail: prod.barcode || '' },
+            barcodes: {
+              retail: prod.barcode || '',
+            },
           },
         ],
       };
@@ -92,23 +148,111 @@ function AppContent() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/mttadminacc" element={<SuperAdminPage />} />
 
-        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route
+          path="/mttadminacc"
+          element={
+            <AdminOnlyRoute>
+              <SuperAdminPage />
+            </AdminOnlyRoute>
+          }
+        />
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage records={allRecords} />} />
-          <Route path="entry" element={<EntryPage products={mappedProducts} />} />
-          <Route path="inventory" element={<InventoryPage products={mappedProducts} />} />
-          <Route path="customers" element={<CustomersPage />} />
-          <Route path="suppliers" element={<SuppliersPage />} />
+
+          <Route
+            path="dashboard"
+            element={
+              <PermissionRoute permission="view_reports" fallback="/entry">
+                <DashboardPage records={allRecords} />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="entry"
+            element={
+              <PermissionRoute permission="create_sale" fallback="/inventory">
+                <EntryPage products={mappedProducts} />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="inventory"
+            element={
+              <PermissionRoute permission="view_inventory" fallback="/entry">
+                <InventoryPage products={mappedProducts} />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="customers"
+            element={
+              <PermissionRoute permission="view_customers" fallback="/entry">
+                <CustomersPage />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="suppliers"
+            element={
+              <PermissionRoute permission="view_suppliers" fallback="/entry">
+                <SuppliersPage />
+              </PermissionRoute>
+            }
+          />
+
           <Route path="drafts" element={<DraftsPage />} />
-          <Route path="ledger" element={<LedgerPage records={allRecords} />} />
-          <Route path="admin" element={<AdminPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="records" element={<RecordsPage />} />
+
+          <Route
+            path="ledger"
+            element={
+              <PermissionRoute permission="view_reports" fallback="/entry">
+                <LedgerPage records={allRecords} />
+              </PermissionRoute>
+            }
+          />
+
+          <Route
+            path="admin"
+            element={
+              <AdminOnlyRoute>
+                <AdminPage />
+              </AdminOnlyRoute>
+            }
+          />
+
+          <Route
+            path="settings"
+            element={
+              <AdminOnlyRoute>
+                <SettingsPage />
+              </AdminOnlyRoute>
+            }
+          />
+
+          <Route
+            path="records"
+            element={
+              <PermissionRoute permission="view_sales" fallback="/entry">
+                <RecordsPage />
+              </PermissionRoute>
+            }
+          />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MonitorPlay, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
+import { auth, db } from '../firebase/config'; // 🌟 auth ကိုပါ လှမ်းခေါ်ထားပါသည်
+import { collection, getDocs } from 'firebase/firestore';
+
+const simpleHash = str => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return 'h_' + h.toString(16).padStart(8, '0');
+};
 
 export default function LoginPage() {
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
@@ -67,8 +78,46 @@ export default function LoginPage() {
         localStorage.removeItem('pos_saved_creds'); // အမှန်မခြစ်ထားလျှင် ဖျက်ပစ်မည်
       }
 
-      // 🌟 Firebase Auth ဖြင့်သာ တိုက်ရိုက် လုံခြုံစွာ Login ဝင်မည် (ကိုယ်တိုင် Logout မလုပ်မချင်း အကောင့်မထွက်ပါ)
-      await login(authEmail, password);
+      try {
+        // 🌟 Firebase Auth ဖြင့် တိုက်ရိုက် Login ဝင်ကြည့်မည်
+        await login(authEmail, password);
+      } catch (authError) {
+        // 🌟 အကယ်၍ "User မရှိပါ (auth/user-not-found)" ဟု Error တက်လာပါက 
+        // Database ထဲတွင် (Admin ဖန်တီးပေးထားသော) Staff အကောင့်ရှိ/မရှိ သွားစစ်မည်
+        if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential') {
+          
+          let dbUserMatch = null;
+          const usersSnap = await getDocs(collection(db, 'pos_users'));
+          usersSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.username && data.username.toLowerCase() === input) {
+              dbUserMatch = data;
+            }
+          });
+
+          // 🌟 Database ထဲတွင် Staff အမည် တွေ့ရပြီး စကားဝှက်လည်း မှန်ကန်ပါက
+          if (dbUserMatch && (dbUserMatch.password === password || dbUserMatch.password === simpleHash(password))) {
+            import('firebase/auth').then(async ({ createUserWithEmailAndPassword }) => {
+               try {
+                 // 🌟 နောက်ကွယ်မှ Firebase Auth ကို အလိုအလျောက် ဖန်တီးပေးမည်
+                 await createUserWithEmailAndPassword(auth, authEmail, password);
+                 // ပြီးပါက အလိုအလျောက် Login ဝင်သွားမည်ဖြစ်၍ အောက်သို့မဆက်တော့ပါ
+               } catch (createErr) {
+                 setErr('အကောင့်အသစ် ချိတ်ဆက်ရာတွင် အမှားအယွင်းဖြစ်နေပါသည်။ Admin အား ဆက်သွယ်ပါ။');
+                 setLoading(false);
+               }
+            });
+            return; 
+          } else if (dbUserMatch && dbUserMatch.password !== password) {
+            setErr('စကားဝှက် (Password) မှားယွင်းနေပါသည်။ သေချာပြန်စစ်ပေးပါ။');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // အခြား Error များဖြစ်ပါက မူလ Error အတိုင်း ဆက်သွားမည်
+        throw authError; 
+      }
 
     } catch (error) {
       console.error("Login Error:", error);

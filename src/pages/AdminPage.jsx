@@ -1,28 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase/config'; // 🌟 auth ကို လှမ်းခေါ်ထားပါသည်
+import { db, auth } from '../firebase/config';
 import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; // 🌟 Firebase Auth စနစ်ကို လှမ်းခေါ်ထားပါသည်
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; 
 import { useAuth } from '../context/AuthContext';
 import { Users, Plus, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 
+// 🌟 Permission အသစ်များ ထပ်တိုးထားပါသည်
 const PERMISSION_OPTIONS = [
   { key: 'create_sale', label: 'အရောင်းလုပ်ခွင့်' },
   { key: 'view_sales', label: 'အရောင်းမှတ်တမ်းကြည့်ခွင့်' },
-  { key: 'accept_payment', label: 'ကြွေးဆပ်လက်ခံခွင့်' },
+  { key: 'view_customers', label: 'Customer စာရင်းကြည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'manage_customers', label: 'Customer စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'accept_payment', label: 'Customer ကြွေးဆပ်လက်ခံခွင့်' },
+  { key: 'view_suppliers', label: 'Supplier စာရင်းကြည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'manage_suppliers', label: 'Supplier စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'create_purchase', label: 'အဝယ်/Supplier ငွေချေခွင့်' },
   { key: 'view_inventory', label: 'ကုန်လက်ကျန်ကြည့်ခွင့်' },
-  { key: 'create_purchase', label: 'အဝယ်လုပ်ခွင့်' },
-  { key: 'create_expense', label: 'စရိတ်ထည့်ခွင့်' },
   { key: 'manage_inventory', label: 'ကုန်လက်ကျန်ပြင်ခွင့်' },
   { key: 'manage_products', label: 'ကုန်ပစ္စည်းစီမံခွင့်' },
-  { key: 'manage_users', label: 'User စီမံခွင့်' },
+  { key: 'create_expense', label: 'စရိတ်ထည့်ခွင့်' },
   { key: 'delete_records', label: 'မှတ်တမ်းဖျက်ခွင့်' },
   { key: 'view_reports', label: 'Dashboard/Report ကြည့်ခွင့်' },
+  { key: 'manage_users', label: 'User စီမံခွင့်' },
   { key: 'settings', label: 'ဆက်တင်ပြင်ခွင့်' },
 ];
 
-const DEFAULT_STAFF_PERMS = ['create_sale', 'view_sales', 'accept_payment', 'view_inventory'];
+// 🌟 မူလပေးမည့် လုပ်ပိုင်ခွင့်များကို လိုအပ်သလို ချိန်ညှိထားပါသည်
+const DEFAULT_STAFF_PERMS = ['create_sale', 'view_sales', 'accept_payment', 'view_inventory', 'view_customers'];
 
 const simpleHash = str => {
   let h = 0x811c9dc5;
@@ -71,7 +77,6 @@ export default function AdminPage() {
     setIsSaving(true);
 
     try {
-      // 🌟 ၁။ Firebase Auth ဖြင့် Admin Password ကို တိုက်ရိုက် စစ်ဆေးခြင်း
       if (auth.currentUser?.email) {
         const credential = EmailAuthProvider.credential(auth.currentUser.email, adminPassword);
         await reauthenticateWithCredential(auth.currentUser, credential);
@@ -85,11 +90,10 @@ export default function AdminPage() {
     }
 
     try {
-      // 🌟 ၂။ Password မှန်ကန်ပါက User အသစ်ကို Database သို့ ထည့်သွင်းခြင်း
       await addDoc(collection(db, 'pos_users'), {
         tenantId: userData.tenantId, 
         username: form.username.trim(),
-        password: simpleHash(form.password), // ဝန်ထမ်းများအတွက်တော့ Hash ဖြင့်သာ ဆက်သိမ်းမည်
+        password: simpleHash(form.password), 
         role: form.role,
         permissions: form.role === 'staff' ? DEFAULT_STAFF_PERMS : [],
         createdAt: Date.now(),

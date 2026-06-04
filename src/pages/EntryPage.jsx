@@ -124,7 +124,6 @@ const ScannerModal = ({ onClose, onScan }) => {
 
 // ---------- Main EntryPage Component ----------
 export default function EntryPage({ products = [] }) {
-  // 🌟 Permission စစ်ဆေးရန် hasPermission ကို လှမ်းခေါ်ပါသည်
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
@@ -137,7 +136,6 @@ export default function EntryPage({ products = [] }) {
 
   const todayISO = new Date().toISOString().split('T')[0];
   
-  // 🌟 Permission ပေါ်မူတည်၍ Default Tab ကို သတ်မှတ်မည်
   const initialTab = hasPermission('create_sale') ? 'Sale' 
                    : hasPermission('create_purchase') ? 'Purchase' 
                    : hasPermission('create_expense') ? 'Expense' 
@@ -407,6 +405,7 @@ export default function EntryPage({ products = [] }) {
     submitLock.current = false; setLoading(false);
   };
 
+  // 🌟 (၁) STOCK LOCK ပြဿနာ ဖြေရှင်းထားသော SUBMIT TRANSACTION စနစ် 🌟
   const submitTransaction = async () => {
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
@@ -427,92 +426,115 @@ export default function EntryPage({ products = [] }) {
       return;
     }
 
-    if (entryTab === 'Sale') {
-      for (const item of cart) {
-        const prodData = products.find(p => p.id === item.productId);
-        const currentStockBase = Number(prodData?.stockBase) || Number(prodData?.stock) || 0;
-        if (item.baseQuantity > currentStockBase) return showToast(`${item.name} အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase})`, "error");
-      }
-    }
-
     submitLock.current = true;
     setLoading(true);
 
     try {
-      const batch = writeBatch(db);
+      // 🌟 Database အတွင်းရှိ လက်ရှိ Stock နှင့် Cart မှ အရေအတွက်ကို "တိုက်ရိုက် Lock ချပြီး" စစ်ဆေးမည့် Transaction
+      await runTransaction(db, async (transaction) => {
+        // (က) ပစ္စည်းအားလုံး၏ လက်ရှိ Stock များကို အရင်ဆွဲယူပါမည် (Transaction Read)
+        const productRefs = [];
+        const stockUpdates = [];
 
-      if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
-        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
-        const newPersonRef = doc(collection(db, collectionName));
-        personIdForRecord = newPersonRef.id;
-        batch.set(newPersonRef, {
-          tenantId: tenantId, name: personNameForRecord, phone: newPersonPhone.trim(), address: newPersonAddress.trim(),
-          totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-        });
-      } else if (personIdForRecord && remainingDebt > 0) {
-        const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
-        const personRef = doc(db, collectionName, personIdForRecord);
-        batch.update(personRef, { totalDebt: increment(remainingDebt) });
-      }
-
-      const counterRef = doc(db, 'pos_counters', tenantId || 'default');
-      const countField = `${entryTab.toLowerCase()}Count`;
-
-      let nextCount = 1;
-      try {
-        const counterTxResult = await runTransaction(db, async (transaction) => {
-          const counterSnap = await transaction.get(counterRef);
-          if (counterSnap.exists()) {
-            const current = counterSnap.data()[countField] || 0;
-            const newVal = current + 1;
-            transaction.update(counterRef, { [countField]: newVal });
-            return newVal;
-          } else {
-            transaction.set(counterRef, { [countField]: 1 });
-            return 1;
+        for (const item of cart) {
+          if (!item.productId) continue;
+          const prodRef = doc(db, 'pos_products', item.productId);
+          const prodSnap = await transaction.get(prodRef);
+          
+          if (!prodSnap.exists()) {
+            throw new Error(`ပစ္စည်းရှာမတွေ့ပါ: ${item.name}`);
           }
-        });
-        nextCount = counterTxResult;
-      } catch (counterErr) {
-        logger.warn('Counter transaction failed, using fallback', counterErr);
-        nextCount = Date.now();
-      }
 
-      const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
+          const currentStockBase = Number(prodSnap.data().stockBase) || Number(prodSnap.data().stock) || 0;
+          const requiredQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
 
-      const ref = doc(collection(db, 'pos_records'));
-      const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+          // Sale လုပ်လျှင် Stock လုံလောက်မှု ရှိ/မရှိ တင်းကျပ်စွာ စစ်ဆေးမည်
+          if (entryTab === 'Sale' && requiredQty > currentStockBase) {
+            throw new Error(`"${item.name}" အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase}) - အခြားသူတစ်ဦး ရောင်းချသွားခြင်း ဖြစ်နိုင်ပါသည်။`);
+          }
 
-      const record = {
-        id: ref.id, type: entryTab || 'Sale', tenantId: tenantId,
-        personName: personNameForRecord,
-        customerId: entryTab === 'Sale' ? personIdForRecord : null,
-        supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
-        cashier: cashierName, time: currentTime, voucherNo: voucherNo,
-        itemsDetail: cart.map(i => ({
-          productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
-          unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-          unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
-          baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
-        })),
-        amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
-        globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
-        paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
-        date: entryDate || todayISO, createdAt: serverTimestamp()
-      };
-      batch.set(ref, record);
+          productRefs.push(prodRef);
+          stockUpdates.push({
+            change: entryTab === 'Sale' ? -Math.abs(requiredQty) : Math.abs(requiredQty),
+            ref: prodRef
+          });
+        }
 
-      cart.forEach(item => {
-        if (!item.productId) return;
-        const itemBaseQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
-        const stockChange = entryTab === 'Sale' ? -Math.abs(itemBaseQty) : Math.abs(itemBaseQty);
-        const prodRef = doc(db, 'pos_products', item.productId);
-        batch.update(prodRef, { stockBase: increment(stockChange), stock: increment(stockChange) });
-      });
+        // (ခ) Customer / Supplier အချက်အလက်များ ပြင်ဆင်ခြင်း
+        if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
+          const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+          const newPersonRef = doc(collection(db, collectionName));
+          personIdForRecord = newPersonRef.id;
+          transaction.set(newPersonRef, {
+            tenantId: tenantId, name: personNameForRecord, phone: newPersonPhone.trim(), address: newPersonAddress.trim(),
+            totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+          });
+        } else if (personIdForRecord && remainingDebt > 0) {
+          const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+          const personRef = doc(db, collectionName, personIdForRecord);
+          // 💡 Transaction အတွင်း increment အစား တိုက်ရိုက်ပေါင်းထည့်ခြင်း သုံးနိုင်သည် သို့မဟုတ် update သုံးနိုင်သည်
+          const personSnap = await transaction.get(personRef);
+          if (personSnap.exists()) {
+             const currentDebt = Number(personSnap.data().totalDebt) || 0;
+             transaction.update(personRef, { totalDebt: currentDebt + remainingDebt });
+          }
+        }
 
-      await batch.commit();
+        // (ဂ) Voucher Counter တိုးခြင်း
+        const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+        const countField = `${entryTab.toLowerCase()}Count`;
+        const counterSnap = await transaction.get(counterRef);
+        
+        let nextCount = 1;
+        if (counterSnap.exists()) {
+          nextCount = (Number(counterSnap.data()[countField]) || 0) + 1;
+          transaction.update(counterRef, { [countField]: nextCount });
+        } else {
+          transaction.set(counterRef, { [countField]: 1 });
+        }
 
-      setReceiptModal({ show: true, record });
+        const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
+        const ref = doc(collection(db, 'pos_records'));
+        const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+        // (ဃ) Record သိမ်းဆည်းခြင်း
+        const recordData = {
+          id: ref.id, type: entryTab || 'Sale', tenantId: tenantId,
+          personName: personNameForRecord,
+          customerId: entryTab === 'Sale' ? personIdForRecord : null,
+          supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
+          cashier: cashierName, time: currentTime, voucherNo: voucherNo,
+          itemsDetail: cart.map(i => ({
+            productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
+            unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
+            unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
+            baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
+          })),
+          amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+          globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
+          paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
+          date: entryDate || todayISO, createdAt: serverTimestamp()
+        };
+        transaction.set(ref, recordData);
+
+        // (င) နောက်ဆုံးမှ Product Stock များကို Update လုပ်ခြင်း
+        for (const update of stockUpdates) {
+          const prodSnap = await transaction.get(update.ref);
+          if (prodSnap.exists()) {
+            const currentStock = Number(prodSnap.data().stockBase) || Number(prodSnap.data().stock) || 0;
+            transaction.update(update.ref, { 
+              stockBase: currentStock + update.change, 
+              stock: currentStock + update.change 
+            });
+          }
+        }
+
+        // Transaction ပြီးဆုံးပါက Receipt ပြရန် သိမ်းမည်
+        setReceiptModal({ show: true, record: recordData });
+
+      }); // 🌟 End of Transaction
+
+      // သန့်ရှင်းရေးလုပ်ငန်းစဉ်များ
       clearCart(); setPersonSearch(''); setSelectedPerson(null);
       setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
 
@@ -520,8 +542,9 @@ export default function EntryPage({ products = [] }) {
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     } catch (err) {
-      logger.error("Firebase Save Error: ", err);
-      showToast("Error saving transaction! Please check your internet connection and try again.", "error");
+      logger.error("Transaction Error: ", err);
+      // အထက်ပါ throw new Error() မှ စာသားများကို ဖမ်း၍ ပြသပေးမည်
+      showToast(err.message || "Error saving transaction! Please check your connection and try again.", "error");
     } finally {
       submitLock.current = false;
       setLoading(false);

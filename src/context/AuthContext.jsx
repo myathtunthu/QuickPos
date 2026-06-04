@@ -36,14 +36,12 @@ export function AuthProvider({ children }) {
 
         await firebaseUser.getIdToken(true);
 
-        const userRef = doc(db, 'pos_users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
+        const userSnap = await getDoc(doc(db, 'pos_users', firebaseUser.uid));
 
         if (!userSnap.exists()) {
-          logger.warn('Login blocked: user profile not found', firebaseUser.uid);
+          logger.warn('Login blocked: profile not found', firebaseUser.uid);
           await signOut(auth);
           clearAuthState();
-          setLoading(false);
           return;
         }
 
@@ -52,39 +50,17 @@ export function AuthProvider({ children }) {
           ...userSnap.data(),
         };
 
-        if (userData.active === false) {
-          logger.warn('Login blocked: inactive account', firebaseUser.email);
+        if (userData.active === false || !userData.role || !userData.tenantId) {
+          logger.warn('Login blocked: invalid profile', firebaseUser.email);
           await signOut(auth);
           clearAuthState();
-          setLoading(false);
-          return;
-        }
-
-        if (!userData.role) {
-          logger.warn('Login blocked: missing role', firebaseUser.email);
-          await signOut(auth);
-          clearAuthState();
-          setLoading(false);
-          return;
-        }
-
-        if (!userData.tenantId) {
-          logger.warn('Login blocked: missing tenantId', firebaseUser.email);
-          await signOut(auth);
-          clearAuthState();
-          setLoading(false);
           return;
         }
 
         setUser(firebaseUser);
         setProfile(userData);
-
-        logger.log(
-          'Profile loaded successfully',
-          userData.email || userData.username || firebaseUser.email
-        );
       } catch (error) {
-        logger.error('Auth state change error:', error);
+        logger.error('Auth error:', error);
         await signOut(auth).catch(() => {});
         clearAuthState();
       } finally {
@@ -96,71 +72,50 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    if (!email || !password) {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!cleanEmail || !password) {
       throw new Error('Email and password are required');
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
-
-    try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        cleanEmail,
-        password
-      );
-
-      logger.log('User logged in successfully', cleanEmail);
-      return userCredential;
-    } catch (error) {
-      logger.error('Login failed', error);
-      throw error;
-    }
+    return signInWithEmailAndPassword(auth, cleanEmail, password);
   };
 
   const logout = async () => {
-    try {
-      clearAuthState();
-
-      if (auth.currentUser) {
-        await signOut(auth);
-      }
-
-      window.location.replace('/login');
-    } catch (error) {
-      logger.error('Logout failed', error);
-      clearAuthState();
-      window.location.replace('/login');
-    }
+    clearAuthState();
+    await signOut(auth).catch(() => {});
+    window.location.replace('/login');
   };
 
   const hasPermission = (permission) => {
     if (!profile) return false;
     if (profile.role === 'admin' || profile.role === 'owner') return true;
-
-    const permissions = Array.isArray(profile.permissions)
-      ? profile.permissions
-      : [];
-
-    return permissions.includes(permission);
+    return Array.isArray(profile.permissions)
+      ? profile.permissions.includes(permission)
+      : false;
   };
 
   const isAdmin = () => {
     return profile?.role === 'admin' || profile?.role === 'owner';
   };
 
-  const value = {
-    user,
-    profile,
-    userData: profile,
-    loading,
-    login,
-    logout,
-    hasPermission,
-    isAdmin,
-    tenantId: profile?.tenantId || null,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        userData: profile,
+        loading,
+        login,
+        logout,
+        hasPermission,
+        isAdmin,
+        tenantId: profile?.tenantId || null,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => {

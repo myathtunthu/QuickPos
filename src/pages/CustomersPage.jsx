@@ -8,7 +8,6 @@ import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 
 export default function CustomersPage() {
-  // 🌟 Permission စစ်ဆေးရန် hasPermission ကို ယူပါသည်
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = profile?.role === 'admin';
@@ -123,7 +122,7 @@ export default function CustomersPage() {
 
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
-    if (!hasPermission('accept_payment')) return showToast("လုပ်ပိုင်ခွင့် မရှိပါ။", "error"); // 🌟 Guard
+    if (!hasPermission('manage_customers')) return showToast("လုပ်ပိုင်ခွင့် မရှိပါ။", "error");
 
     const nName = customerForm.name.trim();
     if (!nName) return showToast("Customer အမည် ထည့်ပါ", "error");
@@ -149,7 +148,7 @@ export default function CustomersPage() {
   };
 
   const handleDeleteCustomer = (id, name, debt) => {
-    if (!hasPermission('accept_payment')) return; // 🌟 Guard
+    if (!hasPermission('manage_customers')) return;
     if (debt > 0) return showToast(`${name} တွင် ပေးရန်ကျန်ငွေ ရှိနေသဖြင့် ဖျက်၍မရပါ။`, "error");
     setConfirmDialog({
       isOpen: true, title: "Customer ဖျက်သိမ်းခြင်း", message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
@@ -163,7 +162,7 @@ export default function CustomersPage() {
 
   const handlePayment = async (e) => {
     e.preventDefault();
-    if (!hasPermission('accept_payment')) return showToast("ငွေချေခွင့် မရှိပါ။", "error"); // 🌟 Guard
+    if (!hasPermission('accept_payment')) return showToast("ငွေချေခွင့် မရှိပါ။", "error");
 
     const payAmount = Number(paymentForm.amount);
     if (!payAmount || payAmount <= 0) return showToast("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။", "error");
@@ -185,6 +184,7 @@ export default function CustomersPage() {
   };
 
   const handleExportCSV = () => {
+    if (!isAdmin) return;
     if (customers.length === 0) return showToast("Export ထုတ်ရန် Customer မရှိပါ။", "warning");
     let csv = "Name,Phone,Address,Total Debt\n";
     customers.forEach(c => { csv += `"${c.name || ''}","${c.phone || ''}","${c.address || ''}","${c.totalDebt || 0}"\n`; });
@@ -195,6 +195,7 @@ export default function CustomersPage() {
   };
 
   const handleImportCSV = (e) => {
+    if (!isAdmin) return;
     const file = e.target.files[0];
     if (!file) return;
     setConfirmDialog({
@@ -237,6 +238,17 @@ export default function CustomersPage() {
     }).reverse();
   }, [allRecords, selectedCustomer]);
 
+  // 🌟 View Permission Guard - if no access to see customers at all
+  if (!hasPermission('view_customers')) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[80vh] text-slate-500">
+        <Users size={64} className="mb-4 opacity-20" />
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="text-sm mt-2">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-20">
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} />
@@ -254,7 +266,6 @@ export default function CustomersPage() {
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
-              {/* 🌟 Import/Export ကို Admin သီးသန့် ကန့်သတ်ထားသည် */}
               {isAdmin && (
                 <>
                   <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
@@ -262,8 +273,7 @@ export default function CustomersPage() {
                   <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
                 </>
               )}
-              {/* 🌟 ပေါင်းထည့်ခွင့်ကို Permission စစ်ထားသည် */}
-              {hasPermission('accept_payment') && (
+              {hasPermission('manage_customers') && (
                 <button onClick={() => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); }} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> Add</button>
               )}
             </div>
@@ -293,11 +303,12 @@ export default function CustomersPage() {
                       <td className="p-4 text-right">{Number(c.totalDebt) > 0 ? <span className="font-black text-amber-400 text-base">{Number(c.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">ရှင်းပြီး</span>}</td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
-                          {/* 🌟 Permission စစ်ဆေးထားသည် */}
                           <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16}/></button>
                           {hasPermission('accept_payment') && (
+                            <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16}/></button>
+                          )}
+                          {hasPermission('manage_customers') && (
                             <>
-                              <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16}/></button>
                               <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title="ပြင်မည်"><Edit3 size={16}/></button>
                               <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title="ဖျက်မည်"><Trash2 size={16}/></button>
                             </>
@@ -331,11 +342,12 @@ export default function CustomersPage() {
                       <div className="p-4 bg-black/40 border-t border-cyan-500/10 space-y-4">
                         {c.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">Address:</span> {c.address}</p>}
                         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/5">
-                          {/* 🌟 Permission စစ်ဆေးထားသည် */}
                           <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all"><ClipboardList size={20}/></button>
                           {hasPermission('accept_payment') && (
+                            <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`py-2.5 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={20}/></button>
+                          )}
+                          {hasPermission('manage_customers') && (
                             <>
-                              <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`py-2.5 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={20}/></button>
                               <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-indigo-600/20 text-indigo-400 rounded-xl active:bg-indigo-600/40 transition-all"><Edit3 size={20}/></button>
                               <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="py-2.5 flex justify-center items-center bg-rose-600/20 text-rose-400 rounded-xl active:bg-rose-600/40 transition-all"><Trash2 size={20}/></button>
                             </>
@@ -350,7 +362,6 @@ export default function CustomersPage() {
           </>
         )}
 
-        {/* Payment History Tab ... (Same as before, no actions here) */}
         {activeTab === 'history' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -358,7 +369,8 @@ export default function CustomersPage() {
                 <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">Customer Name</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th></tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {mergedHistory.map((h, i) => (
+                {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr> :
+                mergedHistory.map((h, i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-cyan-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
                 ))}
               </tbody>
@@ -367,7 +379,6 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {/* --- MODALS --- (Permission guarded mainly by button clicks above, but forms remain the same) */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handleSaveCustomer} className="bg-[#0d1120] border border-cyan-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl">
@@ -396,10 +407,9 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* Ledger Modal... (Same functionality) */}
       {isLedgerModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-           <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+          <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
             <div className="p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20 rounded-t-3xl">
               <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedCustomer.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-amber-400 text-sm">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p></div>
               <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
@@ -433,7 +443,6 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {/* Receipt Modal... (Same) */}
       {receiptModal.show && receiptModal.record && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans relative animate-in zoom-in-95">

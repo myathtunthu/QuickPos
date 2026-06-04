@@ -1,44 +1,42 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { MonitorPlay, Eye, EyeOff } from 'lucide-react';
-import { db } from '../firebase/config';
-import { collection, getDocs } from 'firebase/firestore';
-
-const simpleHash = str => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
-  }
-  return 'h_' + h.toString(16).padStart(8, '0');
-};
+import { MonitorPlay, Eye, EyeOff, CheckSquare, Square } from 'lucide-react';
 
 export default function LoginPage() {
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   
   const { login, user, profile } = useAuth();
   const navigate = useNavigate();
 
+  // 🌟 (၁) Login Page စပွင့်တာနဲ့ မှတ်ထားတဲ့ Username/Password ရှိရင် အလိုအလျောက် ဖြည့်ပေးမည်
   useEffect(() => {
-    const staffSession = localStorage.getItem('pos_staff_session');
-    let activeProfile = null;
-
-    if (staffSession) {
-      activeProfile = JSON.parse(staffSession);
-    } else if (user && profile) {
-      activeProfile = profile;
+    const savedCreds = localStorage.getItem('pos_saved_creds');
+    if (savedCreds) {
+      try {
+        const parsed = JSON.parse(savedCreds);
+        if (parsed.u && parsed.p) {
+          setUsernameOrEmail(parsed.u);
+          setPassword(atob(parsed.p)); // Base64 မှ ပြန်ပြောင်းယူသည်
+          setRememberMe(true);
+        }
+      } catch (e) {
+        console.error('Failed to parse saved credentials');
+      }
     }
+  }, []);
 
-    if (activeProfile) {
+  // 🌟 (၂) Login ဝင်ထားပြီးသားဆိုလျှင် သက်ဆိုင်ရာ Dashboard (သို့) အခြား Page သို့ ပို့ပေးမည်
+  useEffect(() => {
+    if (user && profile) {
       let target = '/dashboard';
-      // 🌟 Admin မဟုတ်ဘဲ Dashboard ကြည့်ခွင့်မရှိပါက သက်ဆိုင်ရာ Page သို့ လမ်းလွှဲပေးမည်
-      if (activeProfile.role !== 'admin' && !(activeProfile.permissions || []).includes('view_reports')) {
-         const p = activeProfile.permissions || [];
+      if (profile.role !== 'admin' && !(profile.permissions || []).includes('view_reports')) {
+         const p = profile.permissions || [];
          if (p.includes('create_sale')) target = '/entry';
          else if (p.includes('view_inventory')) target = '/inventory';
          else if (p.includes('accept_payment')) target = '/customers';
@@ -54,49 +52,30 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const input = usernameOrEmail.trim();
+      const input = usernameOrEmail.trim().toLowerCase();
+      
+      // 🌟 Smart Login: @ မပါခဲ့လျှင် @gmail.com ကို အလိုအလျောက် တပ်ပေးမည်
+      const authEmail = input.includes('@') ? input : `${input}@gmail.com`;
 
-      const usersSnap = await getDocs(collection(db, 'pos_users'));
-      let matchedUser = null;
-
-      usersSnap.forEach(doc => {
-        const data = doc.data();
-        if (data.username && data.username.toLowerCase() === input.toLowerCase()) {
-          matchedUser = { id: doc.id, ...data };
-        }
-      });
-
-      if (matchedUser) {
-        const isPasswordCorrect = matchedUser.password === simpleHash(password) || matchedUser.password === password;
-
-        if (!isPasswordCorrect) {
-          setErr('စကားဝှက် (Password) မှားယွင်းနေပါသည်။ သေချာပြန်စစ်ပေးပါ။');
-          setLoading(false);
-          return;
-        }
-
-        localStorage.setItem('pos_staff_session', JSON.stringify(matchedUser));
-        
-        let target = '/dashboard';
-        if (matchedUser.role !== 'admin' && !(matchedUser.permissions || []).includes('view_reports')) {
-           const p = matchedUser.permissions || [];
-           if (p.includes('create_sale')) target = '/entry';
-           else if (p.includes('view_inventory')) target = '/inventory';
-           else if (p.includes('accept_payment')) target = '/customers';
-           else target = '/entry';
-        }
-        window.location.href = target; 
-        return;
+      // 🌟 (၃) Remember Me ကို အမှန်ခြစ်ထားလျှင် Browser တွင် မှတ်သားထားပေးမည်
+      if (rememberMe) {
+        localStorage.setItem('pos_saved_creds', JSON.stringify({
+          u: usernameOrEmail.trim(), 
+          p: btoa(password) // လုံခြုံရေးအတွက် Base64 ဖြင့် ပြောင်း၍ သိမ်းမည်
+        }));
+      } else {
+        localStorage.removeItem('pos_saved_creds'); // အမှန်မခြစ်ထားလျှင် ဖျက်ပစ်မည်
       }
 
-      await login(input, password);
+      // 🌟 Firebase Auth ဖြင့်သာ တိုက်ရိုက် လုံခြုံစွာ Login ဝင်မည် (ကိုယ်တိုင် Logout မလုပ်မချင်း အကောင့်မထွက်ပါ)
+      await login(authEmail, password);
 
     } catch (error) {
       console.error("Login Error:", error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setErr('Admin Email သို့မဟုတ် Password မှားနေပါသည်!');
+        setErr('အကောင့်အမည် သို့မဟုတ် Password မှားနေပါသည်!');
       } else if (error.code === 'auth/invalid-email') {
-        setErr('Email ပုံစံမှားနေပါသည်!');
+        setErr('အကောင့်အမည် ပုံစံမှားနေပါသည်!');
       } else if (error.code === 'auth/too-many-requests') {
         setErr('အကောင့်ဝင်ရန် ကြိုးစားမှုများလွန်းနေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။');
       } else {
@@ -140,7 +119,7 @@ export default function LoginPage() {
             value={usernameOrEmail} 
             onChange={e => setUsernameOrEmail(e.target.value)} 
             placeholder="Email သို့မဟုတ် Username" 
-            className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl outline-none focus:border-cyan-400"
+            className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl outline-none focus:border-cyan-400 transition-colors"
           />
           <div className="relative">
             <input 
@@ -149,16 +128,26 @@ export default function LoginPage() {
               value={password} 
               onChange={e => setPassword(e.target.value)} 
               placeholder="Password" 
-              className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl pr-16 outline-none focus:border-cyan-400"
+              className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl pr-16 outline-none focus:border-cyan-400 transition-colors"
             />
             <button type="button" onClick={() => setShow(!show)} className="absolute right-6 top-5 text-slate-500 hover:text-cyan-400 transition-colors">
               {show ? <EyeOff size={28}/> : <Eye size={28}/>}
             </button>
           </div>
+
+          <div className="flex items-center gap-3 py-1 cursor-pointer" onClick={() => setRememberMe(!rememberMe)}>
+            <div className={`transition-colors ${rememberMe ? 'text-cyan-400' : 'text-slate-500'}`}>
+              {rememberMe ? <CheckSquare size={22} /> : <Square size={22} />}
+            </div>
+            <span className={`font-bold text-sm select-none transition-colors ${rememberMe ? 'text-cyan-100' : 'text-slate-500'}`}>
+              မှတ်သားထားမည် (Remember Me)
+            </span>
+          </div>
+
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-5 rounded-xl text-xl transition-all active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-5 rounded-xl text-xl transition-all active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-50 mt-2"
           >
             {loading ? 'ဝင်ရောက်နေသည်...' : 'Login ဝင်မည်'}
           </button>

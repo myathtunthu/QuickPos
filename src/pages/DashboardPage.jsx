@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext'; // 🌟 Language ခေါ်ယူခြင်း
 import { motion } from 'framer-motion';
-import { Navigate } from 'react-router-dom'; // 🌟 အသစ် ထည့်ထားသည်
+import { Navigate } from 'react-router-dom';
 import {
   Zap, DollarSign, CreditCard, MinusCircle,
   AlertTriangle, TrendingUp, Clock3, Calendar, Activity, Search, X
@@ -30,9 +31,9 @@ function getRecordDateISO(r) {
 
 export default function DashboardPage() {
   const { profile } = useAuth();
+  const { t } = useLanguage(); // 🌟 ဘာသာပြန်စနစ်
   const tenantId = profile?.tenantId;
 
-  // 🌟 Dashboard ကြည့်ခွင့်မရှိပါက လုပ်ပိုင်ခွင့်ရှိသော စာမျက်နှာသို့ အလိုအလျောက် ပို့ပေးမည်
   if (profile && profile.role !== 'admin' && !(profile.permissions || []).includes('view_reports')) {
     const perms = profile.permissions || [];
     if (perms.includes('create_sale')) return <Navigate to="/entry" replace />;
@@ -255,7 +256,7 @@ export default function DashboardPage() {
 
           <div className="relative flex-1 max-w-sm">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input type="text" placeholder="Search transactions..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#0f172a] border border-[#06b6d4]/30 rounded-xl px-9 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-[#06b6d4]" />
+            <input type="text" placeholder={t('searchTransactions')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#0f172a] border border-[#06b6d4]/30 rounded-xl px-9 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-[#06b6d4]" />
             {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X size={14} className="text-slate-400 hover:text-white" /></button>}
           </div>
 
@@ -271,7 +272,7 @@ export default function DashboardPage() {
                 <button
                   key={p} onClick={() => { setDashPeriod(p); setShowDatePicker(p === 'Custom'); }}
                   className={`min-w-[80px] px-4 py-2 text-xs font-bold rounded-lg transition-all ${dashPeriod === p ? 'bg-[#06b6d4] text-[#060816]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-                >{p}</button>
+                >{t(p.toLowerCase())}</button>
               ))}
             </div>
           </div>
@@ -283,15 +284,15 @@ export default function DashboardPage() {
             <div className="absolute top-0 right-0 p-4 opacity-10"><Activity size={100} /></div>
             <div className="relative z-10 flex justify-between items-start flex-wrap gap-4">
               <div>
-                <p className="text-xs text-[#06b6d4] font-bold uppercase tracking-widest mb-1">ငွေဝင်ငွေထွက် (Cash Flow Balance)</p>
+                <p className="text-xs text-[#06b6d4] font-bold uppercase tracking-widest mb-1">{t('cashFlowBalance')}</p>
                 <h2 className="text-4xl sm:text-5xl font-black text-white">{fmt(cashFlowBalance)} Ks</h2>
                 <div className="flex flex-wrap gap-4 mt-2 text-xs font-bold">
-                  <span className={netProfit >= 0 ? 'text-[#10b981]' : 'text-[#f43f5e]'}>Profit Margin: {profitMargin}%</span>
-                  <span className="text-slate-400">Total Orders: {orderCount}</span>
+                  <span className={netProfit >= 0 ? 'text-[#10b981]' : 'text-[#f43f5e]'}>{t('profitMargin')} {profitMargin}%</span>
+                  <span className="text-slate-400">{t('totalOrders')} {orderCount}</span>
                 </div>
               </div>
               <div className="bg-black/40 rounded-xl px-3 py-2 text-center border border-[#06b6d4]/20">
-                <p className="text-[10px] text-slate-400">Today's Growth</p>
+                <p className="text-[10px] text-slate-400">{t('todaysGrowth')}</p>
                 <p className={`text-sm font-bold ${Number(growthPercent) >= 0 ? 'text-[#10b981]' : 'text-[#f43f5e]'}`}>
                   {Number(growthPercent) >= 0 ? '+' : ''}{growthPercent}%
                 </p>
@@ -301,10 +302,10 @@ export default function DashboardPage() {
 
           <motion.div variants={itemVars} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "အရောင်းစုစုပေါင်း (Revenue)", val: totalSales, color: "text-[#06b6d4]", icon: DollarSign, bg: "from-[#06b6d4]/10" },
-              { label: "အသားတင်အမြတ် (Net Profit)", val: netProfit, color: netProfit >= 0 ? "text-[#10b981]" : "text-[#f43f5e]", icon: TrendingUp, bg: netProfit >= 0 ? "from-[#10b981]/10" : "from-[#f43f5e]/10" },
-              { label: "ရရန်ရှိ (Customer Credit)", val: totalCustomerDebt, color: "text-[#f43f5e]", icon: CreditCard, bg: "from-[#f43f5e]/10" },
-              { label: "ပေးရန်ရှိ (Supplier Credit)", val: totalSupplierDebt, color: "text-[#f59e0b]", icon: MinusCircle, bg: "from-[#f59e0b]/10" }
+              { label: t('revenue'), val: totalSales, color: "text-[#06b6d4]", icon: DollarSign, bg: "from-[#06b6d4]/10" },
+              { label: t('netProfit'), val: netProfit, color: netProfit >= 0 ? "text-[#10b981]" : "text-[#f43f5e]", icon: TrendingUp, bg: netProfit >= 0 ? "from-[#10b981]/10" : "from-[#f43f5e]/10" },
+              { label: t('customerCredit'), val: totalCustomerDebt, color: "text-[#f43f5e]", icon: CreditCard, bg: "from-[#f43f5e]/10" },
+              { label: t('supplierCredit'), val: totalSupplierDebt, color: "text-[#f59e0b]", icon: MinusCircle, bg: "from-[#f59e0b]/10" }
             ].map((stat, i) => (
               <motion.div key={i} whileHover={{ scale: 1.02 }} className={`bg-gradient-to-br ${stat.bg} to-transparent bg-[#0f172a] rounded-xl p-4 border border-[rgba(6,182,212,0.15)]`}>
                 <div className="flex justify-between items-start">
@@ -318,7 +319,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <motion.div variants={itemVars} className="lg:col-span-2 bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
-              <h2 className="text-sm font-black mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-[#06b6d4]"/> Sales & Profit Trend (7 Days)</h2>
+              <h2 className="text-sm font-black mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-[#06b6d4]"/> {t('salesProfitTrend')}</h2>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
@@ -330,40 +331,40 @@ export default function DashboardPage() {
                     <XAxis dataKey="day" stroke="#64748b" fontSize={10} axisLine={false} tickLine={false}/>
                     <YAxis stroke="#64748b" fontSize={10} axisLine={false} tickLine={false}/>
                     <Tooltip contentStyle={{background:'#060816',borderColor:'rgba(6,182,212,0.3)',borderRadius:'8px'}} itemStyle={{fontSize:'12px'}} labelStyle={{display:'none'}} formatter={(v) => [`${fmt(v)} Ks`, '']} />
-                    <Area type="monotone" dataKey="sales" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" name="Sales" />
-                    <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorProfit)" name="Net Profit" />
+                    <Area type="monotone" dataKey="sales" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorSales)" name={t('revenue')} />
+                    <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorProfit)" name={t('netProfit')} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </motion.div>
 
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)] space-y-4">
-              <h2 className="text-sm font-black mb-2 border-b border-white/5 pb-2 flex items-center gap-2"><Calendar size={16} className="text-[#06b6d4]"/> Daily Operations Summary</h2>
+              <h2 className="text-sm font-black mb-2 border-b border-white/5 pb-2 flex items-center gap-2"><Calendar size={16} className="text-[#06b6d4]"/> {t('dailySummary')}</h2>
               <div className="space-y-3">
-                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">Avg Order Value</span><span className="font-bold text-[#06b6d4]">{fmt(dailySummary.avgOrder)} Ks</span></div>
-                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">Peak Hour</span><span className="font-bold text-white flex items-center gap-1"><Clock3 size={10} className="text-[#06b6d4]"/>{dailySummary.bestHour}</span></div>
-                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">Top Category</span><span className="font-bold text-[#10b981]">{dailySummary.bestCategory}</span></div>
-                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">Customer Count</span><span className="font-bold text-white">{dailySummary.customers}</span></div>
+                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">{t('avgOrderValue')}</span><span className="font-bold text-[#06b6d4]">{fmt(dailySummary.avgOrder)} Ks</span></div>
+                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">{t('peakHour')}</span><span className="font-bold text-white flex items-center gap-1"><Clock3 size={10} className="text-[#06b6d4]"/>{dailySummary.bestHour}</span></div>
+                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">{t('topCategory')}</span><span className="font-bold text-[#10b981]">{dailySummary.bestCategory}</span></div>
+                <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5"><span className="text-xs text-slate-400">{t('customerCount')}</span><span className="font-bold text-white">{dailySummary.customers}</span></div>
               </div>
             </motion.div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
-              <h2 className="text-sm font-black mb-4 flex items-center gap-2">🏆 Top Selling Products</h2>
+              <h2 className="text-sm font-black mb-4 flex items-center gap-2">🏆 {t('topSellingProducts')}</h2>
               {topProducts.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-xl">No products sold yet</div>
+                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-xl">{t('noProductsSold')}</div>
               ) : (
                 <div className="space-y-3">
                   {topProducts.map((p, i) => (
                     <div key={i} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-[#06b6d4]/20 flex items-center justify-center text-xs font-bold text-[#06b6d4]">{i + 1}</div>
-                        <div><p className="text-sm font-bold text-white">{p.name}</p><p className="text-[10px] text-slate-400">Units Sold: {p.qty}</p></div>
+                        <div><p className="text-sm font-bold text-white">{p.name}</p><p className="text-[10px] text-slate-400">{t('unitsSold')} {p.qty}</p></div>
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-black text-[#06b6d4]">{fmt(p.revenue)} Ks</p>
-                        <p className="text-[10px] text-[#10b981]">Profit: +{fmt(p.profit)} Ks</p>
+                        <p className="text-[10px] text-[#10b981]">{t('profit')} +{fmt(p.profit)} Ks</p>
                       </div>
                     </div>
                   ))}
@@ -372,9 +373,9 @@ export default function DashboardPage() {
             </motion.div>
 
             <motion.div variants={itemVars} className="bg-[#0f172a] rounded-2xl p-5 border border-[rgba(6,182,212,0.15)]">
-              <h2 className="text-sm font-black mb-4 flex items-center gap-2">💳 Recent Transactions</h2>
+              <h2 className="text-sm font-black mb-4 flex items-center gap-2">💳 {t('recentTransactions')}</h2>
               {recentSales.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-xl">No transactions recorded</div>
+                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-xl">{t('noTransactions')}</div>
               ) : (
                 <div className="space-y-3">
                   {recentSales.map((sale, i) => {
@@ -382,8 +383,8 @@ export default function DashboardPage() {
                     return (
                       <div key={i} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
                         <div>
-                          <p className="text-sm font-bold text-white">{sale.personName || 'Walk-in Customer'}</p>
-                          <p className="text-[10px] text-slate-400">{sale.date} {sale.time} • {(sale.itemsDetail || sale.items || []).length} items</p>
+                          <p className="text-sm font-bold text-white">{sale.personName || t('walkInCustomer')}</p>
+                          <p className="text-[10px] text-slate-400">{sale.date} {sale.time} • {(sale.itemsDetail || sale.items || []).length} {t('items')}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-black text-white">{fmt(sale.amount)} Ks</p>

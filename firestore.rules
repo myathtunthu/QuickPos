@@ -1,35 +1,98 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
-    function isAuthenticated() {
+
+    function signedIn() {
       return request.auth != null;
     }
-    
-    function isTenantAdmin(tenantId) {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.tenantId == tenantId &&
-             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.role == 'admin';
-    }
-    
-    function isTenantStaff(tenantId) {
-      return isAuthenticated() && 
-             get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data.tenantId == tenantId;
+
+    function myUser() {
+      return get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data;
     }
 
-    // Users Collection
+    function myTenantId() {
+      return myUser().tenantId;
+    }
+
+    function myRole() {
+      return myUser().role;
+    }
+
+    function isActive() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/pos_users/$(request.auth.uid))
+        && myUser().active == true;
+    }
+
+    function isAdmin() {
+      return isActive()
+        && (myRole() == 'admin' || myRole() == 'owner');
+    }
+
+    function sameTenant(tenantId) {
+      return isActive() && myTenantId() == tenantId;
+    }
+
+    function hasPermission(permission) {
+      return isAdmin()
+        || (isActive() && permission in myUser().permissions);
+    }
+
     match /pos_users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isTenantAdmin(resource.data.tenantId));
-      allow write: if isTenantAdmin(request.resource.data.tenantId);
+      allow read: if isActive()
+        && (
+          request.auth.uid == userId
+          || (isAdmin() && resource.data.tenantId == myTenantId())
+        );
+
+      allow create: if isAdmin()
+        && request.resource.data.tenantId == myTenantId()
+        && request.resource.data.active == true
+        && !('password' in request.resource.data);
+
+      allow update: if isAdmin()
+        && resource.data.tenantId == myTenantId()
+        && request.resource.data.tenantId == resource.data.tenantId
+        && !('password' in request.resource.data);
+
+      allow delete: if false;
     }
 
-    // Products, Records, Customers, Suppliers (Tenant Isolated)
-    match /{collection}/{docId} {
-      allow read: if isTenantStaff(resource.data.tenantId);
-      allow create: if isTenantStaff(request.resource.data.tenantId);
-      allow update: if isTenantStaff(resource.data.tenantId) && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if isTenantAdmin(resource.data.tenantId);
+    match /pos_products/{docId} {
+      allow read: if sameTenant(resource.data.tenantId);
+      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_products');
+      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_products');
+      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+    }
+
+    match /pos_records/{docId} {
+      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_sales');
+      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('create_sale');
+      allow update: if sameTenant(resource.data.tenantId) && hasPermission('delete_records');
+      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+    }
+
+    match /pos_customers/{docId} {
+      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_customers');
+      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_customers');
+      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+    }
+
+    match /pos_suppliers/{docId} {
+      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_suppliers');
+      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_suppliers');
+      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+    }
+
+    match /pos_settings/{docId} {
+      allow read: if sameTenant(resource.data.tenantId);
+      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('settings');
+      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

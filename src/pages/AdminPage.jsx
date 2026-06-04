@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase/config';
-import { collection, onSnapshot, addDoc, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'; 
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { EmailAuthProvider, reauthenticateWithCredential, createUserWithEmailAndPassword } from 'firebase/auth'; 
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext'; // 🌟 Language ယူရန်
 import { Users, Plus, Trash2, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 
-// 🌟 Permission အသစ်များ ထပ်တိုးထားပါသည်
 const PERMISSION_OPTIONS = [
   { key: 'create_sale', label: 'အရောင်းလုပ်ခွင့်' },
   { key: 'view_sales', label: 'အရောင်းမှတ်တမ်းကြည့်ခွင့်' },
-  { key: 'view_customers', label: 'Customer စာရင်းကြည့်ခွင့်' }, // 🌟 အသစ်
-  { key: 'manage_customers', label: 'Customer စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'view_customers', label: 'Customer စာရင်းကြည့်ခွင့်' },
+  { key: 'manage_customers', label: 'Customer စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' },
   { key: 'accept_payment', label: 'Customer ကြွေးဆပ်လက်ခံခွင့်' },
-  { key: 'view_suppliers', label: 'Supplier စာရင်းကြည့်ခွင့်' }, // 🌟 အသစ်
-  { key: 'manage_suppliers', label: 'Supplier စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' }, // 🌟 အသစ်
+  { key: 'view_suppliers', label: 'Supplier စာရင်းကြည့်ခွင့်' },
+  { key: 'manage_suppliers', label: 'Supplier စာရင်းပြင်/ဖျက်/ထည့်ခွင့်' },
   { key: 'create_purchase', label: 'အဝယ်/Supplier ငွေချေခွင့်' },
   { key: 'view_inventory', label: 'ကုန်လက်ကျန်ကြည့်ခွင့်' },
   { key: 'manage_inventory', label: 'ကုန်လက်ကျန်ပြင်ခွင့်' },
@@ -27,20 +27,11 @@ const PERMISSION_OPTIONS = [
   { key: 'settings', label: 'ဆက်တင်ပြင်ခွင့်' },
 ];
 
-// 🌟 မူလပေးမည့် လုပ်ပိုင်ခွင့်များကို လိုအပ်သလို ချိန်ညှိထားပါသည်
 const DEFAULT_STAFF_PERMS = ['create_sale', 'view_sales', 'accept_payment', 'view_inventory', 'view_customers'];
-
-const simpleHash = str => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = (h * 0x01000193) >>> 0;
-  }
-  return 'h_' + h.toString(16).padStart(8, '0');
-};
 
 export default function AdminPage() {
   const { userData } = useAuth();
+  const { t } = useLanguage(); // 🌟 Language Function
   const [posUsers, setPosUsers] = useState([]);
   
   const [adding, setAdding] = useState(false);
@@ -68,32 +59,47 @@ export default function AdminPage() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!form.username.trim() || !form.password.trim()) return;
-    if (!adminPassword.trim()) return alert("Admin password ထည့်ရန် လိုအပ်ပါသည်။");
+    if (!adminPassword.trim()) return alert(t('adminPasswordRequired'));
 
-    if (posUsers.some(u => u.username.toLowerCase() === form.username.trim().toLowerCase())) {
-      return alert("ဒီနာမည်ဖြင့် User ရှိပြီးသားပါ။");
+    const newUsername = form.username.trim().toLowerCase();
+
+    if (posUsers.some(u => u.username.toLowerCase() === newUsername)) {
+      return alert("ဒီနာမည်ဖြင့် User ရှိပြီးသားပါ။ အမည်ပြောင်းပေးပါ။");
+    }
+
+    if (form.password.length < 6) {
+      return alert("Password သည် အနည်းဆုံး စာလုံး ၆ လုံး ရှိရပါမည်။");
     }
 
     setIsSaving(true);
 
     try {
+      // 🌟 ၁။ Admin Password အရင်တိုက်စစ်ပါမည်
       if (auth.currentUser?.email) {
         const credential = EmailAuthProvider.credential(auth.currentUser.email, adminPassword);
         await reauthenticateWithCredential(auth.currentUser, credential);
       } else {
         throw new Error("Admin email မတွေ့ပါ။");
       }
-    } catch (error) {
-      console.error("Auth error:", error);
-      setIsSaving(false);
-      return alert("Admin Password မှားနေပါသည်။ သင့်အကောင့် Login ဝင်ရာတွင်သုံးသော Password အမှန်ကို ထည့်ပါ။");
-    }
 
-    try {
-      await addDoc(collection(db, 'pos_users'), {
+      // 🌟 ၂။ Firebase Auth တွင် အကောင့်အသစ် ဖန်တီးမည် (Auto Login မဖြစ်အောင် သတိထားရမည်)
+      // Firebase ၏ သဘာဝအရ အကောင့်သစ်လုပ်လျှင် Auto ဝင်သွားတတ်သဖြင့်၊
+      // Admin ရဲ့ မူလလုပ်ဆောင်ချက်များကို မပျက်စီးစေရန် သီးသန့် Firebase App ခွဲ၍လုပ်ခြင်း (သို့) Backend မပါဘဲ လတ်တလော အောက်ပါအတိုင်း ဖြေရှင်းနိုင်ပါသည်။
+      
+      const emailForAuth = newUsername.includes('@') ? newUsername : `${newUsername}@gmail.com`;
+      
+      // 🔴 သတိပြုရန် - createUserWithEmailAndPassword သုံးပါက လက်ရှိ Admin Account လွတ်သွားနိုင်ပါသည်။ 
+      // ဤ POS လိုမျိုး Web-based (No backend) တွင် လုံခြုံရေးအရ အလွယ်ကူဆုံးနည်းမှာ -
+      // ယာယီ Admin အကောင့်မှ ထွက်၍ အကောင့်သစ်လုပ်ပြီး Admin ထဲ ပြန်ဝင်သည့်ပုံစံ (သို့မဟုတ်) သီးသန့် Cloud Function သုံးရပါမည်။
+      // အခုလောလောဆယ် Cloud Function မရှိသေးသဖြင့် Admin က User ဖွင့်ပေးရန် Browser အသစ်/Incognito မှသာ User ဖွင့်ရမည့် သဘောမျိုး ဖြစ်နေပါမည်။
+      // ထို့ကြောင့် - အကောင်းဆုံး ဖြေရှင်းချက်မှာ ဒေတာဘေ့စ်တွင်သာ သိမ်းပြီး Login ဝင်ချိန်တွင် ကိုယ်တိုင် Auto Create လုပ်ပေးသောစနစ် (Lazy Auth Create) ကို LoginPage တွင် ပြင်ဆင်ခြင်းဖြစ်ပါသည်။
+
+      // 💡 အခုအခြေအနေတွင် မူလအတိုင်း Database ထဲသို့သာ အရင်သိမ်းလိုက်ပါမည်။ (Password အစစ်ကိုပါ သိမ်းပေးထားမှ LoginPage ကနေ Auth ပြန်ဖန်တီးပေးလို့ရပါမည်)
+      const userDocRef = doc(collection(db, 'pos_users'));
+      await setDoc(userDocRef, {
         tenantId: userData.tenantId, 
         username: form.username.trim(),
-        password: simpleHash(form.password), 
+        password: form.password, // 🌟 Login Page ကနေ Auth လုပ်ဖို့ လိုအပ်သဖြင့် Plain သိမ်းထားပါမည်။
         role: form.role,
         permissions: form.role === 'staff' ? DEFAULT_STAFF_PERMS : [],
         createdAt: Date.now(),
@@ -102,9 +108,15 @@ export default function AdminPage() {
       setForm({ username: '', password: '', role: 'staff' }); 
       setAdminPassword(''); 
       setAdding(false);
+      alert("User အကောင့် ဖန်တီးပြီးပါပြီ။ ၎င်းအကောင့်ဖြင့် ဝင်ရောက်နိုင်ပါပြီ။");
+
     } catch (error) {
       console.error("Error adding user:", error);
-      alert("User ဖန်တီးရာတွင် အမှားအယွင်းဖြစ်နေပါသည်။");
+      if (error.code === 'auth/wrong-password') {
+        alert("Admin Password မှားနေပါသည်။");
+      } else {
+        alert("User ဖန်တီးရာတွင် အမှားအယွင်းဖြစ်နေပါသည်။");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -143,38 +155,39 @@ export default function AdminPage() {
       
       <div className="bg-[#0d1120] border-2 border-indigo-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex justify-between items-center animate-in fade-in">
         <h3 className="font-black text-white flex items-center gap-4 text-2xl">
-          <Users size={30} className="text-indigo-500"/> Staff Management
+          <Users size={30} className="text-indigo-500"/> {t('staffManagement')}
         </h3>
         <button onClick={() => setAdding(!adding)} className="bg-indigo-900/40 text-indigo-400 px-5 sm:px-6 py-3 sm:py-4 rounded-xl font-black text-lg flex items-center gap-2 hover:bg-indigo-900/60 transition-all active:scale-95">
-          <Plus size={24}/> Add
+          <Plus size={24}/> {t('add')}
         </button>
       </div>
 
       {adding && (
         <form onSubmit={handleAdd} className="bg-black/40 p-6 sm:p-8 rounded-3xl border-2 border-indigo-500/15 space-y-5 shadow-lg animate-in slide-in-from-top-4">
-          <input required value={form.username} onChange={e => setForm({...form, username: e.target.value})} placeholder="Username အသစ်" className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50" />
+          <input required value={form.username} onChange={e => setForm({...form, username: e.target.value})} placeholder={t('username')} className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50" />
           
           <div className="relative">
-            <input required type={showPwd ? 'text' : 'password'} value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Password အသစ်" className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl pr-16 outline-none focus:border-indigo-500/50" />
+            <input required type={showPwd ? 'text' : 'password'} value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder={t('password')} className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl pr-16 outline-none focus:border-indigo-500/50" />
             <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-5 top-4 sm:top-5 text-slate-500 hover:text-indigo-400 transition-colors">
               {showPwd ? <EyeOff size={26}/> : <Eye size={26}/>}
             </button>
           </div>
+          <p className="text-xs text-amber-500/80 -mt-3 ml-2">* Password သည် အနည်းဆုံး ၆ လုံး ရှိရပါမည်။</p>
           
           <div className="relative">
-            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="သင့် (Admin) ရဲ့ Login Password ထည့်ပါ" className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
+            <input required type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder={t('adminPasswordRequired')} className="w-full px-5 py-4 sm:py-5 bg-amber-950/20 border-2 border-amber-500/20 rounded-xl text-lg sm:text-xl text-amber-300 outline-none focus:border-amber-400/50" />
           </div>
           
           <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50">
-            <option value="staff">Staff (ဝန်ထမ်း)</option>
-            <option value="admin">Admin (မန်နေဂျာ)</option>
+            <option value="staff">{t('roleStaff')}</option>
+            <option value="admin">{t('roleAdmin')}</option>
           </select>
           
           <div className="flex gap-4 sm:gap-5 pt-2">
             <button type="submit" disabled={isSaving} className="flex-1 py-4 sm:py-5 bg-indigo-600 hover:bg-indigo-500 transition-colors text-white rounded-xl font-black text-lg sm:text-xl flex justify-center items-center disabled:opacity-50 active:scale-95">
-              {isSaving ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Create User'}
+              {isSaving ? <span className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></span> : t('save')}
             </button>
-            <button type="button" onClick={() => setAdding(false)} disabled={isSaving} className="px-6 sm:px-8 py-4 sm:py-5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-400 rounded-xl font-black text-lg sm:text-xl disabled:opacity-50">Cancel</button>
+            <button type="button" onClick={() => setAdding(false)} disabled={isSaving} className="px-6 sm:px-8 py-4 sm:py-5 bg-slate-800 hover:bg-slate-700 transition-colors text-slate-400 rounded-xl font-black text-lg sm:text-xl disabled:opacity-50">{t('cancel')}</button>
           </div>
         </form>
       )}
@@ -191,14 +204,14 @@ export default function AdminPage() {
                 <div>
                   <p className="font-black text-white text-xl sm:text-2xl">{u.username}</p>
                   <span className={`text-xs sm:text-sm font-black px-3 sm:px-4 py-1 sm:py-1.5 rounded uppercase mt-2 inline-block ${u.role === 'admin' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
-                    {u.role}
+                    {u.role === 'admin' ? t('roleAdmin') : t('roleStaff')}
                   </span>
                 </div>
               </div>
               
               <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-none border-white/5">
                 <button onClick={() => setEditingPerms(editingPerms === u.id ? null : u.id)} className={`flex-1 sm:flex-none text-sm sm:text-base font-bold px-4 sm:px-5 py-3 rounded-xl border-2 flex justify-center items-center gap-2 transition-colors ${editingPerms === u.id ? 'bg-indigo-600 text-white border-indigo-500' : 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20 hover:bg-indigo-500/20'}`}>
-                  <ShieldCheck size={20}/> {editingPerms === u.id ? 'Close' : 'Permissions'}
+                  <ShieldCheck size={20}/> {editingPerms === u.id ? t('close') : t('permissions')}
                 </button>
                 {u.username !== userData?.username && (
                   <button onClick={() => handleDeleteRequest(u)} className="text-rose-500 hover:text-white hover:bg-rose-500 bg-rose-500/10 border-2 border-rose-500/20 p-3 rounded-xl transition-all">
@@ -231,7 +244,7 @@ export default function AdminPage() {
 
       <ConfirmDialog 
         isOpen={!!confirmDelete}
-        title="User အား ဖျက်သိမ်းရန်"
+        title={t('warning')}
         message={`"${confirmDelete?.username}" ကို ဖျက်သိမ်းရန် သေချာပါသလား? ဤလုပ်ဆောင်ချက်ကို နောက်ပြန်ဆုတ်၍ မရပါ။`}
         isDangerous={true}
         onConfirm={executeDelete}

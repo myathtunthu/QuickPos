@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
@@ -12,9 +12,15 @@ export const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-export const app = initializeApp(firebaseConfig);
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+export const secondaryApp = getApps().some((a) => a.name === 'Secondary')
+  ? getApp('Secondary')
+  : initializeApp(firebaseConfig, 'Secondary');
+
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const secondaryAuth = getAuth(secondaryApp);
 
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === 'failed-precondition') {

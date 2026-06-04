@@ -149,14 +149,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        <Route
-          path="/mttadminacc"
-          element={
-            <AdminOnlyRoute>
-              <SuperAdminPage />
-            </AdminOnlyRoute>
-          }
-        />
+        <Route path="/mttadminacc" element={<SuperAdminPage />} />
 
         <Route
           path="/"

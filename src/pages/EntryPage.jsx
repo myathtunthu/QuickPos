@@ -1045,7 +1045,21 @@ export default function EntryPage({ products = [] }) {
     }
   };
 
-  const doPrint = () => window.print();
+  const printPageHeightMm = useMemo(() => {
+    const itemCount = receiptModal.record?.itemsDetail?.length || 1;
+    const hasDiscount = (receiptModal.record?.itemDiscount || 0) > 0 || (receiptModal.record?.globalDiscount || 0) > 0;
+    const hasLogo = Boolean(shopSettings.logoUrl);
+    const baseHeight = hasLogo ? 88 : 76;
+    const itemHeight = itemCount * 11;
+    const discountHeight = hasDiscount ? 8 : 0;
+    return Math.min(260, Math.max(115, baseHeight + itemHeight + discountHeight));
+  }, [receiptModal.record, shopSettings.logoUrl]);
+
+  const doPrint = () => {
+    requestAnimationFrame(() => {
+      window.print();
+    });
+  };
 
   const handleBarcodeScanned = (text) => {
     const cleanText = text.trim().toLowerCase();
@@ -1719,12 +1733,13 @@ export default function EntryPage({ products = [] }) {
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
+            size: 80mm ${printPageHeightMm}mm;
             margin: 0;
           }
           html, body {
             width: 80mm !important;
             min-width: 80mm !important;
+            max-width: 80mm !important;
             height: auto !important;
             min-height: 0 !important;
             margin: 0 !important;
@@ -1750,7 +1765,7 @@ export default function EntryPage({ products = [] }) {
           }
           #receipt-print-area {
             display: block !important;
-            position: fixed !important;
+            position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 80mm !important;

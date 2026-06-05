@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const { login, user, profile } = useAuth();
-  const { languageLabel, toggleLanguage } = useLanguage();
+  const { languageLabel, toggleLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -58,6 +58,26 @@ export default function LoginPage() {
     }
   }, [user, profile, navigate]);
 
+  const getLoginErrorMessage = (error) => {
+    if (
+      error.code === 'auth/invalid-credential' ||
+      error.code === 'auth/user-not-found' ||
+      error.code === 'auth/wrong-password'
+    ) {
+      return t('loginInvalid');
+    }
+
+    if (error.code === 'auth/invalid-email') {
+      return t('loginInvalidEmail');
+    }
+
+    if (error.code === 'auth/too-many-requests') {
+      return t('loginTooManyRequests');
+    }
+
+    return `${t('loginFailed')}: ${error.message || 'Unknown Error'}`;
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErr('');
@@ -76,20 +96,7 @@ export default function LoginPage() {
       await login(authEmail, password);
     } catch (error) {
       console.error('Login Error:', error);
-
-      if (
-        error.code === 'auth/invalid-credential' ||
-        error.code === 'auth/user-not-found' ||
-        error.code === 'auth/wrong-password'
-      ) {
-        setErr('အကောင့်အမည် သို့မဟုတ် Password မှားနေပါသည်။');
-      } else if (error.code === 'auth/invalid-email') {
-        setErr('အကောင့်အမည် ပုံစံမှားနေပါသည်။');
-      } else if (error.code === 'auth/too-many-requests') {
-        setErr('Login ကြိုးစားမှုများလွန်းနေပါသည်။ ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။');
-      } else {
-        setErr('Login မအောင်မြင်ပါ: ' + (error.message || 'Unknown Error'));
-      }
+      setErr(getLoginErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -100,7 +107,7 @@ export default function LoginPage() {
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Redirecting...</p>
+          <p className="text-slate-400">{t('redirecting')}</p>
         </div>
       </div>
     );
@@ -120,7 +127,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-cyan-300 font-black text-sm">
               <ShoppingCart size={18} />
-              Today Sales
+              {t('todaySales')}
             </div>
             <span className="text-emerald-400 text-xs font-black">+18%</span>
           </div>
@@ -133,7 +140,7 @@ export default function LoginPage() {
         <div className="absolute top-[18%] right-[9%] w-52 rounded-2xl bg-white/[0.04] border border-blue-400/20 p-4 shadow-2xl animate-[float_8s_ease-in-out_infinite_1s]">
           <div className="flex items-center gap-2 text-blue-300 font-black text-sm mb-3">
             <Package size={18} />
-            Low Stock
+            {t('lowStock')}
           </div>
           <div className="space-y-2">
             <div className="h-2 w-full bg-slate-700 rounded" />
@@ -145,7 +152,7 @@ export default function LoginPage() {
         <div className="absolute bottom-[14%] left-[10%] w-56 rounded-2xl bg-white/[0.04] border border-emerald-400/20 p-4 shadow-2xl animate-[float_9s_ease-in-out_infinite_0.5s]">
           <div className="flex items-center gap-2 text-emerald-300 font-black text-sm mb-3">
             <BarChart3 size={18} />
-            Profit Trend
+            {t('profitTrend')}
           </div>
           <div className="flex items-end gap-2 h-20">
             {[35, 55, 42, 75, 60, 88, 70].map((h, i) => (
@@ -161,20 +168,20 @@ export default function LoginPage() {
         <div className="absolute bottom-[18%] right-[12%] w-56 rounded-2xl bg-white/[0.04] border border-cyan-400/20 p-4 shadow-2xl animate-[float_7.5s_ease-in-out_infinite_1.5s]">
           <div className="flex items-center gap-2 text-cyan-300 font-black text-sm mb-3">
             <Receipt size={18} />
-            Latest Receipt
+            {t('latestReceipt')}
           </div>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between text-slate-300">
-              <span>Voucher</span>
+              <span>{t('voucher')}</span>
               <span>#00082</span>
             </div>
             <div className="flex justify-between text-slate-300">
-              <span>Total</span>
+              <span>{t('total')}</span>
               <span>86,500 Ks</span>
             </div>
             <div className="flex justify-between text-emerald-300 font-black">
-              <span>Status</span>
-              <span>PAID</span>
+              <span>{t('status')}</span>
+              <span>{t('paid')}</span>
             </div>
           </div>
         </div>
@@ -182,16 +189,16 @@ export default function LoginPage() {
         <div className="absolute top-[48%] left-[5%] hidden sm:flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-cyan-400/20 px-4 py-3 animate-[float_6s_ease-in-out_infinite_0.8s]">
           <ScanBarcode className="text-cyan-300" size={24} />
           <div>
-            <p className="text-white text-xs font-black">Barcode Scan</p>
-            <p className="text-slate-500 text-[10px]">Ready</p>
+            <p className="text-white text-xs font-black">{t('barcodeScan')}</p>
+            <p className="text-slate-500 text-[10px]">{t('ready')}</p>
           </div>
         </div>
 
         <div className="absolute top-[50%] right-[6%] hidden sm:flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-blue-400/20 px-4 py-3 animate-[float_6.5s_ease-in-out_infinite_1.2s]">
           <CreditCard className="text-blue-300" size={24} />
           <div>
-            <p className="text-white text-xs font-black">Payments</p>
-            <p className="text-slate-500 text-[10px]">Cash • KPay • Wave</p>
+            <p className="text-white text-xs font-black">{t('payments')}</p>
+            <p className="text-slate-500 text-[10px]">{t('paymentExamples')}</p>
           </div>
         </div>
       </div>
@@ -218,7 +225,7 @@ export default function LoginPage() {
           />
 
           <p className="text-sm text-cyan-400 font-black uppercase tracking-[0.3em]">
-            Smart Retail System
+            {t('smartRetailSystem')}
           </p>
         </div>
 
@@ -234,7 +241,7 @@ export default function LoginPage() {
             type="text"
             value={usernameOrEmail}
             onChange={(e) => setUsernameOrEmail(e.target.value)}
-            placeholder="Email သို့မဟုတ် Username"
+            placeholder={t('emailOrUsername')}
             className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl outline-none focus:border-cyan-400 transition-colors"
           />
 
@@ -244,7 +251,7 @@ export default function LoginPage() {
               type={show ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder={t('password')}
               className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl pr-16 outline-none focus:border-cyan-400 transition-colors"
             />
 
@@ -266,7 +273,7 @@ export default function LoginPage() {
             </div>
 
             <span className={`font-bold text-sm select-none transition-colors ${rememberMe ? 'text-cyan-100' : 'text-slate-500'}`}>
-              Username/Email ကိုသာ မှတ်ထားမည်
+              {t('rememberUsernameOnly')}
             </span>
           </div>
 
@@ -275,7 +282,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-5 rounded-xl text-xl transition-all active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-50 mt-2"
           >
-            {loading ? 'ဝင်ရောက်နေသည်...' : 'Login ဝင်မည်'}
+            {loading ? t('loggingIn') : t('loginButton')}
           </button>
         </form>
       </div>

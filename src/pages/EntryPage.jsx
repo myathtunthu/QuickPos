@@ -71,7 +71,7 @@ function safeTrim(value) {
 
 function translate(t, key, fallback) {
   if (typeof t !== 'function') return fallback;
-  const value = t(key);
+  const value = t(key, fallback);
   return value && value !== key ? value : fallback;
 }
 
@@ -319,14 +319,16 @@ function ReceiptContent({ record, shopSettings, compact = false }) {
 
   const items = Array.isArray(record.itemsDetail) ? record.itemsDetail : [];
   const discount = toNumber(record.itemDiscount) + toNumber(record.globalDiscount);
-  const hasLogo = Boolean(shopSettings?.logoUrl);
+  const logoSrc = shopSettings?.logoUrl || shopSettings?.logo || shopSettings?.shopLogo || '';
+  const currencySymbol = shopSettings?.currencySymbol || shopSettings?.currency || 'Ks';
+  const hasLogo = Boolean(logoSrc);
 
   return (
     <div className={`${compact ? 'text-[10px]' : 'text-[12px]'} leading-tight text-black`}>
       <div className="mb-2 text-center">
         {hasLogo && (
           <img
-            src={shopSettings.logoUrl}
+            src={logoSrc}
             alt={shopSettings.shopName || 'Shop Logo'}
             loading="lazy"
             className={`${compact ? 'h-9' : 'h-12'} mx-auto mb-1 w-auto object-contain`}
@@ -375,7 +377,7 @@ function ReceiptContent({ record, shopSettings, compact = false }) {
         {discount > 0 && <div className="flex justify-between"><span>Discount:</span><span>-{formatMoney(discount)}</span></div>}
       </div>
 
-      <div className="mb-2 flex justify-between border-t border-black pt-2 text-[14px] font-black"><span>TOTAL:</span><span>{formatMoney(record.amount)}</span></div>
+      <div className="mb-2 flex justify-between border-t border-black pt-2 text-[14px] font-black"><span>TOTAL:</span><span>{formatMoney(record.amount)} {currencySymbol}</span></div>
 
       <div className="mb-3 border-t border-black pt-2">
         <div className="flex justify-between"><span>Paid ({record.paymentMethod || 'Cash'}):</span><span>{formatMoney(record.paidAmount)}</span></div>
@@ -387,12 +389,12 @@ function ReceiptContent({ record, shopSettings, compact = false }) {
       </div>
 
       <div className="mb-1 text-center text-[13px] font-black">{toNumber(record.remainingDebt) > 0 ? '*** CREDIT ***' : '*** PAID ***'}</div>
-      <div className="text-center text-[10px]">{shopSettings.footerText || 'Thank you for your business!'}</div>
+      <div className="text-center text-[10px]">{shopSettings.footerText || shopSettings.receiptFooter || 'Thank you for your business!'}</div>
     </div>
   );
 }
 
-function ReceiptModal({ record, shopSettings, onClose, onPrint }) {
+function ReceiptModal({ record, shopSettings, onClose, onPrint, txt }) {
   if (!record) return null;
 
   return (
@@ -408,8 +410,8 @@ function ReceiptModal({ record, shopSettings, onClose, onPrint }) {
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-cyan-500/20 bg-[#0d1120] p-3">
-          <button type="button" onClick={onPrint} className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-3 font-black text-[#06111f] active:scale-95"><Printer size={18} /> Print</button>
-          <button type="button" onClick={onClose} className="rounded-2xl bg-emerald-500/15 py-3 font-black text-emerald-300 active:scale-95">New Transaction</button>
+          <button type="button" onClick={onPrint} className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-3 font-black text-[#06111f] active:scale-95"><Printer size={18} /> {txt?.print || 'Print'}</button>
+          <button type="button" onClick={onClose} className="rounded-2xl bg-emerald-500/15 py-3 font-black text-emerald-300 active:scale-95">{txt?.newTransaction || 'New Transaction'}</button>
         </div>
       </div>
     </div>
@@ -532,17 +534,17 @@ export default function EntryPage({ products = [] }) {
     scan: translate(t, 'scan', 'Scan'),
     cartSummary: translate(t, 'cartSummary', 'Cart Summary'),
     subtotal: translate(t, 'subtotal', 'Subtotal'),
-    invoiceDiscount: translate(t, 'invoiceDiscount', '{txt.invoiceDiscount}'),
-    appliedDiscount: translate(t, 'appliedDiscount', '{txt.appliedDiscount}'),
+    invoiceDiscount: translate(t, 'invoiceDiscount', 'Invoice Discount'),
+    appliedDiscount: translate(t, 'appliedDiscount', 'Applied Discount'),
     payment: translate(t, 'payment', 'Payment'),
     paid: translate(t, 'paid', 'Paid'),
     balance: translate(t, 'balance', 'Balance'),
     change: translate(t, 'change', 'Change'),
-    receiptPreview: translate(t, 'receiptPreview', '{txt.receiptPreview}'),
+    receiptPreview: translate(t, 'receiptPreview', 'Receipt Preview'),
     print: translate(t, 'print', 'Print'),
     newTransaction: translate(t, 'newTransaction', 'New Transaction'),
     hold: translate(t, 'hold', 'Hold'),
-    savedHoldBills: translate(t, 'savedHoldBills', '{txt.savedHoldBills}'),
+    savedHoldBills: translate(t, 'savedHoldBills', 'Saved Hold Bills'),
     hide: translate(t, 'hide', 'Hide'),
     show: translate(t, 'show', 'Show'),
     restore: translate(t, 'restore', 'Restore'),
@@ -568,7 +570,7 @@ export default function EntryPage({ products = [] }) {
   const [showPersonDropdown, setShowPersonDropdown] = useState(false);
   const [newPersonPhone, setNewPersonPhone] = useState('');
   const [newPersonAddress, setNewPersonAddress] = useState('');
-  const [shopSettings, setShopSettings] = useState({ shopName: profile?.shopName || profile?.businessName || 'NexPOS', phone: profile?.phone || '', address: profile?.address || '', logoUrl: profile?.logoUrl || '', footerText: 'Thank you for your business!' });
+  const [shopSettings, setShopSettings] = useState({ shopName: profile?.shopName || profile?.businessName || 'Shop', phone: profile?.phone || '', address: profile?.address || '', logoUrl: profile?.logoUrl || '', footerText: 'Thank you for your business!', currencySymbol: 'Ks' });
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
   const debouncedSearch = useDebounce(prodSearch, 200);
@@ -641,11 +643,12 @@ export default function EntryPage({ products = [] }) {
         if (settingsSnap.exists()) {
           const settings = settingsSnap.data();
           setShopSettings({
-            shopName: settings.shopName || settings.businessName || profile?.shopName || 'NexPOS',
-            phone: settings.phone || settings.shopPhone || '',
-            address: settings.address || settings.shopAddress || '',
-            logoUrl: settings.logoUrl || settings.logo || settings.shopLogo || '',
-            footerText: settings.footerText || settings.invoiceFooterText || 'Thank you for your business!',
+            shopName: settings.shopName || settings.businessName || profile?.shopName || 'Shop',
+            phone: settings.phone || settings.shopPhone || profile?.phone || '',
+            address: settings.address || settings.shopAddress || profile?.address || '',
+            logoUrl: settings.logoUrl || settings.logo || settings.shopLogo || profile?.logoUrl || '',
+            footerText: settings.footerText || settings.receiptFooter || settings.invoiceFooterText || 'Thank you for your business!',
+            currencySymbol: settings.currencySymbol || settings.currency || 'Ks',
           });
         }
 
@@ -728,9 +731,14 @@ export default function EntryPage({ products = [] }) {
   const handleBarcodeScanned = useCallback((text) => {
     const match = barcodeMap.get(String(text || '').trim().toLowerCase());
     if (!match) return showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ`, 'error');
+    lastScrollPositionRef.current = window.scrollY || window.pageYOffset || 0;
     const response = addToCart(match.product, match.unit, 'retail', 1);
-    if (!response?.success) showToast(response?.message || 'ပစ္စည်းထည့်၍ မရပါ', 'error');
-  }, [addToCart, barcodeMap]);
+    if (response?.success) {
+      keepCurrentScrollPosition();
+    } else {
+      showToast(response?.message || 'ပစ္စည်းထည့်၍ မရပါ', 'error');
+    }
+  }, [addToCart, barcodeMap, keepCurrentScrollPosition]);
 
   const handleTabChange = (tab) => {
     if (entryTab === tab) return;
@@ -887,9 +895,9 @@ export default function EntryPage({ products = [] }) {
           const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
           const newPersonRef = doc(collection(db, collectionName));
           personIdForRecord = newPersonRef.id;
-          transaction.set(newPersonRef, { tenantId, name: personNameForRecord, phone: safeTrim(newPersonPhone), address: safeTrim(newPersonAddress), totalDebt: remainingDebt, totalPurchase: entryTab === 'Sale' ? total : 0, totalPaid: entryTab === 'Sale' ? paid : 0, active: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+          transaction.set(newPersonRef, { tenantId, name: personNameForRecord, phone: safeTrim(newPersonPhone), address: safeTrim(newPersonAddress), totalDebt: remainingDebt, totalSales: entryTab === 'Sale' ? total : 0, totalPurchase: entryTab === 'Purchase' ? total : 0, totalPaid: paid, active: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
         } else if (personRef && personSnap?.exists() && remainingDebt > 0) {
-          transaction.update(personRef, { totalDebt: toNumber(personSnap.data().totalDebt) + remainingDebt, updatedAt: serverTimestamp() });
+          transaction.update(personRef, { totalDebt: toNumber(personSnap.data().totalDebt) + remainingDebt, totalPaid: toNumber(personSnap.data().totalPaid) + paid, ...(entryTab === 'Sale' ? { totalSales: toNumber(personSnap.data().totalSales) + total } : { totalPurchase: toNumber(personSnap.data().totalPurchase) + total }), updatedAt: serverTimestamp() });
         }
 
         transaction.set(counterRef, { tenantId, [countField]: increment(1), updatedAt: serverTimestamp() }, { merge: true });
@@ -926,7 +934,7 @@ export default function EntryPage({ products = [] }) {
     finally { submitLock.current = false; setLoading(false); }
   };
 
-  const handlePrint = () => window.setTimeout(() => window.print(), 80);
+  const handlePrint = () => window.setTimeout(() => window.print(), 120);
   const personLabel = entryTab === 'Sale' ? txt.customer : txt.supplier;
 
   return (
@@ -934,7 +942,7 @@ export default function EntryPage({ products = [] }) {
       <ConfirmDialog isOpen={confirmDialog.isOpen} title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })} />
       {promptModal.isOpen && <PromptModal value={promptModal.name} onChange={(name) => setPromptModal({ ...promptModal, name })} onCancel={() => setPromptModal({ isOpen: false, name: '' })} onSubmit={executeHoldInvoice} />}
       {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
-      {receiptModal.show && receiptModal.record && <ReceiptModal record={receiptModal.record} shopSettings={shopSettings} onClose={() => setReceiptModal({ show: false, record: null })} onPrint={handlePrint} />}
+      {receiptModal.show && receiptModal.record && <ReceiptModal record={receiptModal.record} shopSettings={shopSettings} onClose={() => setReceiptModal({ show: false, record: null })} onPrint={handlePrint} txt={txt} />}
 
       <div className="min-h-screen bg-[#060816] text-white print:hidden">
         <div className="mx-auto max-w-[1600px] space-y-4 p-3 pb-32 sm:p-4 lg:p-6">
@@ -987,10 +995,10 @@ export default function EntryPage({ products = [] }) {
       <style>{`
         @media print {
           @page { size: 80mm auto; margin: 0; }
-          html, body { width: 80mm !important; min-width: 80mm !important; margin: 0 !important; padding: 0 !important; background: #ffffff !important; overflow: visible !important; }
+          html, body { width: 80mm !important; min-width: 80mm !important; margin: 0 auto !important; padding: 0 !important; background: #ffffff !important; overflow: visible !important; }
           body * { visibility: hidden !important; }
           #receipt-print-area, #receipt-print-area * { visibility: visible !important; }
-          #receipt-print-area { display: block !important; position: fixed !important; left: 0 !important; top: 0 !important; width: 80mm !important; max-width: 80mm !important; margin: 0 !important; padding: 4mm !important; background: #ffffff !important; box-shadow: none !important; }
+          #receipt-print-area { display: block !important; position: absolute !important; left: 0 !important; right: 0 !important; top: 0 !important; width: 80mm !important; max-width: 80mm !important; margin: 0 auto !important; padding: 4mm !important; background: #ffffff !important; box-shadow: none !important; }
           #receipt-print-area table { width: 100% !important; }
         }
         @media screen { #receipt-print-area { display: none; } }

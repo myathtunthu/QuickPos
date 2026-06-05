@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
 import {
@@ -324,6 +325,15 @@ const ReceiptPreview = ({ record, shopSettings, title = 'Receipt Preview', compa
 
 export default function EntryPage({ products = [] }) {
   const { profile, hasPermission } = useAuth();
+  const { t } = useLanguage();
+  const tx = useCallback((key, fallback) => {
+    try {
+      const value = t?.(key);
+      return value && value !== key ? value : fallback;
+    } catch (error) {
+      return fallback;
+    }
+  }, [t]);
   const tenantId = profile?.tenantId;
   const cashierName = cleanDisplayName(profile);
 
@@ -592,6 +602,8 @@ export default function EntryPage({ products = [] }) {
 
   const handleSelectProduct = useCallback(
     (product) => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+
       const defaultUnit =
         product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
         product.packageUnits?.[0] || {
@@ -602,8 +614,14 @@ export default function EntryPage({ products = [] }) {
 
       const response = addToCart(product, defaultUnit, 'retail', 1);
 
-      if (response.success) setProdSearch('');
-      else showToast(response.message, 'error');
+      if (response.success) {
+        setProdSearch('');
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollY);
+        });
+      } else {
+        showToast(response.message, 'error');
+      }
     },
     [addToCart]
   );
@@ -1127,7 +1145,7 @@ export default function EntryPage({ products = [] }) {
                     <span className="text-cyan-400">Entry</span>
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">
-                    Shop receipt uses Settings logo/name/phone/address • Cashier: <span className="text-cyan-300">{cashierName}</span>
+                    {tx('entryReceiptSettingsNote', 'Shop receipt uses Settings logo/name/phone/address')} • {tx('cashier', 'Cashier')}: <span className="text-cyan-300">{cashierName}</span>
                   </p>
                 </div>
               </div>
@@ -1233,19 +1251,19 @@ export default function EntryPage({ products = [] }) {
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Products</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tx('products', 'Products')}</p>
                   <p className="text-2xl font-black text-cyan-400 mt-1">{summary.productCount}</p>
                 </div>
                 <div className="rounded-3xl border border-violet-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Cart Qty</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tx('cartQty', 'Cart Qty')}</p>
                   <p className="text-2xl font-black text-violet-400 mt-1">{summary.cartCount}</p>
                 </div>
                 <div className="rounded-3xl border border-amber-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Low Stock</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tx('lowStock', 'Low Stock')}</p>
                   <p className="text-2xl font-black text-amber-400 mt-1">{summary.lowStockCount}</p>
                 </div>
                 <div className="rounded-3xl border border-emerald-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tx('total', 'Total')}</p>
                   <p className="text-xl font-black text-emerald-400 mt-1">{formatMoney(summary.total)}</p>
                 </div>
               </div>
@@ -1392,7 +1410,7 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Boxes size={17} className="text-cyan-400" />
-                        <h2 className="font-black text-sm text-slate-200">Product Board</h2>
+                        <h2 className="font-black text-sm text-slate-200">{tx('productBoard', 'Product Board')}</h2>
                       </div>
                       <button
                         type="button"
@@ -1428,7 +1446,7 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex justify-between items-center mb-3">
                       <div className="flex items-center gap-2">
                         <ReceiptText size={18} className="text-cyan-400" />
-                        <h2 className="text-sm font-black text-slate-200">Current Order</h2>
+                        <h2 className="text-sm font-black text-slate-200">{tx('currentOrder', 'Current Order')}</h2>
                       </div>
 
                       {entryTab === 'Sale' && (
@@ -1519,7 +1537,7 @@ export default function EntryPage({ products = [] }) {
                     <div className="bg-[#0d1120]/95 border border-emerald-500/20 rounded-3xl p-4 shadow-xl">
                       <div className="flex items-center gap-2 mb-3">
                         <CreditCard size={18} className="text-emerald-400" />
-                        <h2 className="text-sm font-black text-slate-200">Payment</h2>
+                        <h2 className="text-sm font-black text-slate-200">{tx('payment', 'Payment')}</h2>
                       </div>
 
                       <PaymentSection
@@ -1676,21 +1694,21 @@ export default function EntryPage({ products = [] }) {
                   )}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-2">
+                <div className="sticky bottom-0 bg-white pt-3 mt-4 flex flex-col gap-2 border-t border-gray-100">
                   <button
                     type="button"
                     onClick={doPrint}
                     className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30"
                   >
                     <Printer size={18} />
-                    Print Receipt
+                    {tx('printReceipt', 'Print Receipt')}
                   </button>
                   <button
                     type="button"
                     onClick={() => setReceiptModal({ show: false, record: null })}
                     className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors"
                   >
-                    New Transaction
+                    {tx('newTransaction', 'New Transaction')}
                   </button>
                 </div>
               </div>
@@ -1706,8 +1724,6 @@ export default function EntryPage({ products = [] }) {
             margin: 0;
           }
           html, body {
-            width: 80mm !important;
-            min-width: 80mm !important;
             height: auto !important;
             min-height: 0 !important;
             margin: 0 !important;
@@ -1734,18 +1750,20 @@ export default function EntryPage({ products = [] }) {
           #receipt-print-area {
             display: block !important;
             position: absolute !important;
-            left: 0 !important;
+            left: 50% !important;
             top: 0 !important;
+            transform: translateX(-50%) !important;
             width: 80mm !important;
             max-width: 80mm !important;
             min-height: 0 !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 3mm 4mm !important;
             box-sizing: border-box !important;
             background: white !important;
             page-break-before: avoid !important;
             page-break-after: avoid !important;
             break-after: avoid-page !important;
+            font-size: 12px !important;
           }
           #receipt-print-area table {
             page-break-inside: avoid !important;

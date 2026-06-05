@@ -17,8 +17,11 @@ import { useLanguage } from '../../context/LanguageContext';
 export default function Sidebar({ onCloseMobile }) {
   const location = useLocation();
   const navigate = useNavigate();
+
   const { userData, logout, hasPermission } = useAuth();
   const { t } = useLanguage();
+
+  const isAdmin = userData?.role === 'admin' || userData?.role === 'owner';
 
   const handleLogout = async () => {
     try {
@@ -28,8 +31,6 @@ export default function Sidebar({ onCloseMobile }) {
       console.error('Logout Error', error);
     }
   };
-
-  const isAdmin = userData?.role === 'admin' || userData?.role === 'owner';
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('dashboard'), perm: 'view_reports' },
@@ -44,7 +45,18 @@ export default function Sidebar({ onCloseMobile }) {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <aside className="flex flex-col h-full bg-gray-950 border-r border-cyan-500/10">
+      <div className="p-5 border-b border-gray-800">
+        <img
+          src="/logo.png"
+          alt="NexPOS"
+          className="h-16 w-auto max-w-[180px] mx-auto object-contain"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      </div>
+
       <nav className="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <ul className="space-y-2 px-3">
           {navItems.map((item) => {
@@ -100,6 +112,6 @@ export default function Sidebar({ onCloseMobile }) {
           <span>{t('logout')}</span>
         </button>
       </div>
-    </div>
+    </aside>
   );
 }

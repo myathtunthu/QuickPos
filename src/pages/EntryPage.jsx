@@ -126,12 +126,13 @@ const ScannerModal = ({ onClose, onScan }) => {
 export default function EntryPage({ products = [] }) {
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
-  const cashierName = profile?.username || profile?.name || profile?.email?.split('@')[0] || 'Admin';
+  const cashierName = cleanDisplayName(profile);
 
   const [shopSettings, setShopSettings] = useState({
-    shopName: profile?.shopName || 'QuickPOS',
+    shopName: profile?.shopName || 'NexPOS',
     phone: '',
-    address: ''
+    address: '',
+    logoUrl: '/logo.png'
   });
 
   const todayISO = new Date().toISOString().split('T')[0];
@@ -204,9 +205,10 @@ export default function EntryPage({ products = [] }) {
         if (settingsSnap.exists()) {
           const sData = settingsSnap.data();
           setShopSettings({
-            shopName: sData.shopName || profile?.shopName || 'QuickPOS',
+            shopName: sData.shopName || profile?.shopName || 'NexPOS',
             phone: sData.phone || '',
-            address: sData.address || ''
+            address: sData.address || '',
+            logoUrl: sData.logoUrl || sData.logo || '/logo.png'
           });
         }
         const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
@@ -378,7 +380,7 @@ export default function EntryPage({ products = [] }) {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
       const nextCount = (counterSnap.exists() ? (counterSnap.data().expenseCount || 0) : 0) + 1;
-      const voucherNo = `Expense ${String(nextCount).padStart(5, '0')}`;
+      const voucherNo = buildVoucherNo('Expense', nextCount, entryDate || todayISO);
 
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
@@ -411,7 +413,9 @@ export default function EntryPage({ products = [] }) {
     if (cart.length === 0 || !tenantId) return;
 
     const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
-    if (invalidItem) return showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`, "error");
+    if (invalidItem) {
+      return showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`, "error");
+    }
 
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -419,7 +423,10 @@ export default function EntryPage({ products = [] }) {
     const changeAmount = Math.max(0, paid - total);
 
     let personIdForRecord = selectedPerson?.id || null;
-    let personNameForRecord = selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
+    let personNameForRecord =
+      selectedPerson?.name ||
+      personSearch.trim() ||
+      (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
     if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
       showToast(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`, "error");
@@ -430,120 +437,198 @@ export default function EntryPage({ products = [] }) {
     setLoading(true);
 
     try {
-      // 🌟 Database အတွင်းရှိ လက်ရှိ Stock နှင့် Cart မှ အရေအတွက်ကို "တိုက်ရိုက် Lock ချပြီး" စစ်ဆေးမည့် Transaction
-      await runTransaction(db, async (transaction) => {
-        // (က) ပစ္စည်းအားလုံး၏ လက်ရှိ Stock များကို အရင်ဆွဲယူပါမည် (Transaction Read)
-        const productRefs = [];
-        const stockUpdates = [];
+      let receiptRecord = null;
 
+      await runTransaction(db, async (transaction) => {
+        const stockChecks = [];
+
+        // Firestore transaction rule: reads အားလုံးကို writes မလုပ်ခင် အရင်ပြီးအောင်လုပ်မယ်
         for (const item of cart) {
           if (!item.productId) continue;
+
           const prodRef = doc(db, 'pos_products', item.productId);
           const prodSnap = await transaction.get(prodRef);
-          
+
           if (!prodSnap.exists()) {
             throw new Error(`ပစ္စည်းရှာမတွေ့ပါ: ${item.name}`);
           }
 
-          const currentStockBase = Number(prodSnap.data().stockBase) || Number(prodSnap.data().stock) || 0;
+          const productData = prodSnap.data();
+          const currentStockBase = Number(productData.stockBase ?? productData.stock ?? 0);
           const requiredQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
 
-          // Sale လုပ်လျှင် Stock လုံလောက်မှု ရှိ/မရှိ တင်းကျပ်စွာ စစ်ဆေးမည်
           if (entryTab === 'Sale' && requiredQty > currentStockBase) {
-            throw new Error(`"${item.name}" အတွက် Stock မလုံလောက်ပါ။ (လက်ကျန်: ${currentStockBase}) - အခြားသူတစ်ဦး ရောင်းချသွားခြင်း ဖြစ်နိုင်ပါသည်။`);
+            throw new Error(`"${item.name}" အတွက် Stock မလုံလောက်ပါ။ လက်ကျန်: ${currentStockBase}`);
           }
 
-          productRefs.push(prodRef);
-          stockUpdates.push({
+          stockChecks.push({
+            ref: prodRef,
+            currentStockBase,
             change: entryTab === 'Sale' ? -Math.abs(requiredQty) : Math.abs(requiredQty),
-            ref: prodRef
           });
         }
 
-        // (ခ) Customer / Supplier အချက်အလက်များ ပြင်ဆင်ခြင်း
+        let personSnap = null;
+        let personRef = null;
+
+        if (personIdForRecord && remainingDebt > 0) {
+          const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
+          personRef = doc(db, collectionName, personIdForRecord);
+          personSnap = await transaction.get(personRef);
+        }
+
+        const counterRef = doc(db, 'pos_counters', tenantId || 'default');
+        const counterSnap = await transaction.get(counterRef);
+        const countField = `${entryTab.toLowerCase()}Count`;
+
+        let nextCount = 1;
+        if (counterSnap.exists()) {
+          nextCount = (Number(counterSnap.data()[countField]) || 0) + 1;
+        }
+
+        // Customer / Supplier အသစ်ဆို transaction ထဲမှာ create
         if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
           const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
           const newPersonRef = doc(collection(db, collectionName));
           personIdForRecord = newPersonRef.id;
+
           transaction.set(newPersonRef, {
-            tenantId: tenantId, name: personNameForRecord, phone: newPersonPhone.trim(), address: newPersonAddress.trim(),
-            totalDebt: remainingDebt, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+            tenantId,
+            name: personNameForRecord,
+            phone: newPersonPhone.trim(),
+            address: newPersonAddress.trim(),
+            totalDebt: remainingDebt,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           });
-        } else if (personIdForRecord && remainingDebt > 0) {
-          const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
-          const personRef = doc(db, collectionName, personIdForRecord);
-          // 💡 Transaction အတွင်း increment အစား တိုက်ရိုက်ပေါင်းထည့်ခြင်း သုံးနိုင်သည် သို့မဟုတ် update သုံးနိုင်သည်
-          const personSnap = await transaction.get(personRef);
-          if (personSnap.exists()) {
-             const currentDebt = Number(personSnap.data().totalDebt) || 0;
-             transaction.update(personRef, { totalDebt: currentDebt + remainingDebt });
-          }
+        } else if (personRef && personSnap?.exists() && remainingDebt > 0) {
+          const currentDebt = Number(personSnap.data().totalDebt) || 0;
+          transaction.update(personRef, {
+            totalDebt: currentDebt + remainingDebt,
+            updatedAt: serverTimestamp(),
+          });
         }
 
-        // (ဂ) Voucher Counter တိုးခြင်း
-        const counterRef = doc(db, 'pos_counters', tenantId || 'default');
-        const countField = `${entryTab.toLowerCase()}Count`;
-        const counterSnap = await transaction.get(counterRef);
-        
-        let nextCount = 1;
         if (counterSnap.exists()) {
-          nextCount = (Number(counterSnap.data()[countField]) || 0) + 1;
-          transaction.update(counterRef, { [countField]: nextCount });
+          transaction.update(counterRef, {
+            [countField]: nextCount,
+            updatedAt: serverTimestamp(),
+          });
         } else {
-          transaction.set(counterRef, { [countField]: 1 });
+          transaction.set(counterRef, {
+            tenantId,
+            [countField]: 1,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
         }
 
-        const voucherNo = `${entryTab} ${String(nextCount).padStart(5, '0')}`;
-        const ref = doc(collection(db, 'pos_records'));
-        const currentTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const voucherNo = buildVoucherNo(entryTab, nextCount, entryDate || todayISO);
+        const recordRef = doc(collection(db, 'pos_records'));
+        const currentTime = new Date().toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
 
-        // (ဃ) Record သိမ်းဆည်းခြင်း
+        const itemsDetail = cart.map((i) => {
+          const costPrice = getItemCostPrice(i, products);
+          const quantity = Number(i.quantity) || 1;
+          const unitPrice = Number(i.unitPrice) || 0;
+          const itemDiscountAmt = Number(i.itemDiscountAmt) || 0;
+          const itemTotal = (unitPrice * quantity) - itemDiscountAmt;
+          const itemProfit = itemTotal - (costPrice * quantity);
+
+          return {
+            productId: i.productId || '',
+            name: i.name || 'Unknown Item',
+            quantity,
+            unitPrice,
+            costPrice,
+            itemDiscountAmt,
+            unitName: i.unitName || 'ခု',
+            multiplier: Number(i.multiplier) || 1,
+            priceType: i.priceType || 'retail',
+            baseQuantity: Number(i.baseQuantity) || quantity,
+            itemTotal,
+            itemProfit,
+          };
+        });
+
+        const totalCost = itemsDetail.reduce((sum, item) => {
+          return sum + (Number(item.costPrice) || 0) * (Number(item.quantity) || 0);
+        }, 0);
+
+        const grossProfit = entryTab === 'Sale' ? total - totalCost : 0;
+
         const recordData = {
-          id: ref.id, type: entryTab || 'Sale', tenantId: tenantId,
+          id: recordRef.id,
+          type: entryTab || 'Sale',
+          tenantId,
           personName: personNameForRecord,
           customerId: entryTab === 'Sale' ? personIdForRecord : null,
           supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
-          cashier: cashierName, time: currentTime, voucherNo: voucherNo,
-          itemsDetail: cart.map(i => ({
-            productId: i.productId || '', name: i.name || 'Unknown Item', quantity: Number(i.quantity) || 1,
-            unitPrice: Number(i.unitPrice) || 0, itemDiscountAmt: Number(i.itemDiscountAmt) || 0,
-            unitName: i.unitName || 'ခု', multiplier: Number(i.multiplier) || 1, priceType: i.priceType || 'retail',
-            baseQuantity: Number(i.baseQuantity) || Number(i.quantity) || 1
-          })),
-          amount: total, subtotal: Number(cartTotals.subtotal) || 0, itemDiscount: Number(cartTotals.itemDiscounts) || 0,
-          globalDiscount: Number(cartTotals.globalDisc) || 0, paymentMethod: paymentMethod || 'Cash',
-          paidAmount: paid, remainingDebt: remainingDebt, changeAmount: changeAmount,
-          date: entryDate || todayISO, createdAt: serverTimestamp()
-        };
-        transaction.set(ref, recordData);
 
-        // (င) နောက်ဆုံးမှ Product Stock များကို Update လုပ်ခြင်း
-        for (const update of stockUpdates) {
-          const prodSnap = await transaction.get(update.ref);
-          if (prodSnap.exists()) {
-            const currentStock = Number(prodSnap.data().stockBase) || Number(prodSnap.data().stock) || 0;
-            transaction.update(update.ref, { 
-              stockBase: currentStock + update.change, 
-              stock: currentStock + update.change 
-            });
-          }
+          cashier: cashierName,
+          cashierEmail: profile?.email || '',
+          time: currentTime,
+          voucherNo,
+
+          itemsDetail,
+          item: itemsDetail.length > 1 ? 'Multiple' : (itemsDetail[0]?.name || 'Multiple'),
+
+          amount: total,
+          subtotal: Number(cartTotals.subtotal) || 0,
+          itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+          globalDiscount: Number(cartTotals.globalDisc) || 0,
+
+          paymentMethod: paymentMethod || 'Cash',
+          paidAmount: paid,
+          remainingDebt,
+          changeAmount,
+
+          totalCost,
+          grossProfit,
+          profit: grossProfit,
+
+          date: entryDate || todayISO,
+          createdAt: serverTimestamp(),
+          createdAtLocal: Date.now(),
+        };
+
+        transaction.set(recordRef, recordData);
+
+        for (const update of stockChecks) {
+          const nextStock = update.currentStockBase + update.change;
+          transaction.update(update.ref, {
+            stockBase: nextStock,
+            stock: nextStock,
+            updatedAt: serverTimestamp(),
+          });
         }
 
-        // Transaction ပြီးဆုံးပါက Receipt ပြရန် သိမ်းမည်
-        setReceiptModal({ show: true, record: recordData });
+        receiptRecord = recordData;
+      });
 
-      }); // 🌟 End of Transaction
+      setReceiptModal({ show: true, record: receiptRecord });
 
-      // သန့်ရှင်းရေးလုပ်ငန်းစဉ်များ
-      clearCart(); setPersonSearch(''); setSelectedPerson(null);
-      setNewPersonPhone(''); setNewPersonAddress(''); setPaidAmount(''); setPaymentMethod('Cash');
+      clearCart();
+      setPersonSearch('');
+      setSelectedPerson(null);
+      setNewPersonPhone('');
+      setNewPersonAddress('');
+      setPaidAmount('');
+      setPaymentMethod('Cash');
 
       const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
       setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
+      const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
+      setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      showToast(`${entryTab} သိမ်းဆည်းပြီးပါပြီ။`, 'success');
     } catch (err) {
       logger.error("Transaction Error: ", err);
-      // အထက်ပါ throw new Error() မှ စာသားများကို ဖမ်း၍ ပြသပေးမည်
       showToast(err.message || "Error saving transaction! Please check your connection and try again.", "error");
     } finally {
       submitLock.current = false;
@@ -772,6 +857,14 @@ export default function EntryPage({ products = [] }) {
           <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
             <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
               <div className="text-center mb-4">
+                {shopSettings.logoUrl && (
+                  <img
+                    src={shopSettings.logoUrl}
+                    alt={shopSettings.shopName}
+                    className="h-16 w-auto mx-auto mb-2 object-contain"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
                 <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopSettings.shopName}</h2>
                 {shopSettings.address && <p className="text-xs text-gray-500 mt-1">{shopSettings.address}</p>}
                 {shopSettings.phone && <p className="text-xs text-gray-500">Tel: {shopSettings.phone}</p>}
@@ -890,6 +983,14 @@ export default function EntryPage({ products = [] }) {
       {receiptModal.show && receiptModal.record && (
          <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
              <div className="text-center mb-3">
+                 {shopSettings.logoUrl && (
+                   <img
+                     src={shopSettings.logoUrl}
+                     alt={shopSettings.shopName}
+                     className="h-12 w-auto mx-auto mb-1 object-contain"
+                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                   />
+                 )}
                  <h2 className="text-[18px] font-bold uppercase m-0">{shopSettings.shopName}</h2>
                  {shopSettings.address && <p className="m-0 mt-1">{shopSettings.address}</p>}
                  {shopSettings.phone && <p className="m-0">Tel: {shopSettings.phone}</p>}

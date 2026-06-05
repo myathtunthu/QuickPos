@@ -376,6 +376,15 @@ export default function EntryPage({ products = [] }) {
   });
   const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
   const submitLock = useRef(false);
+  const lastScrollPositionRef = useRef(0);
+
+  const keepCurrentScrollPosition = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const y = lastScrollPositionRef.current || window.scrollY || window.pageYOffset || 0;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+    });
+  }, []);
 
   const {
     cart,
@@ -592,6 +601,10 @@ export default function EntryPage({ products = [] }) {
 
   const handleSelectProduct = useCallback(
     (product) => {
+      if (typeof window !== 'undefined') {
+        lastScrollPositionRef.current = window.scrollY || window.pageYOffset || 0;
+      }
+
       const defaultUnit =
         product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
         product.packageUnits?.[0] || {
@@ -602,10 +615,15 @@ export default function EntryPage({ products = [] }) {
 
       const response = addToCart(product, defaultUnit, 'retail', 1);
 
-      if (response.success) setProdSearch('');
-      else showToast(response.message, 'error');
+      if (response.success) {
+        setProdSearch('');
+        keepCurrentScrollPosition();
+        setTimeout(keepCurrentScrollPosition, 80);
+      } else {
+        showToast(response.message, 'error');
+      }
     },
-    [addToCart]
+    [addToCart, keepCurrentScrollPosition]
   );
 
   const handleTabChange = (tab) => {
@@ -1028,7 +1046,19 @@ export default function EntryPage({ products = [] }) {
     }
   };
 
-  const doPrint = () => window.print();
+  const printReceipt = (mode = 'thermal') => {
+    if (typeof document !== 'undefined') {
+      document.body.dataset.posPrintMode = mode;
+    }
+
+    window.print();
+
+    setTimeout(() => {
+      if (typeof document !== 'undefined') {
+        delete document.body.dataset.posPrintMode;
+      }
+    }, 600);
+  };
 
   const handleBarcodeScanned = (text) => {
     const cleanText = text.trim().toLowerCase();
@@ -1040,12 +1070,19 @@ export default function EntryPage({ products = [] }) {
     }
 
     const { product, unit } = match;
+    if (typeof window !== 'undefined') {
+      lastScrollPositionRef.current = window.scrollY || window.pageYOffset || 0;
+    }
+
     const res = addToCart(product, unit, 'retail', 1);
 
     if (!res.success) {
       showToast(res.message, 'error');
       return;
     }
+
+    keepCurrentScrollPosition();
+    setTimeout(keepCurrentScrollPosition, 80);
 
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1553,7 +1590,8 @@ export default function EntryPage({ products = [] }) {
 
           {receiptModal.show && receiptModal.record && (
             <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-              <div className="w-full max-w-sm bg-white text-black rounded-xl p-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
+              <div className="w-full max-w-sm bg-white text-black rounded-xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden font-sans">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-3">
                 <div className="text-center mb-4">
                   {shopSettings.logoUrl && (
                     <img
@@ -1676,14 +1714,24 @@ export default function EntryPage({ products = [] }) {
                   )}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-2">
+                </div>
+
+                <div className="sticky bottom-0 bg-white border-t border-gray-200 p-3 flex flex-col gap-2 shadow-[0_-10px_25px_rgba(0,0,0,0.08)]">
                   <button
                     type="button"
-                    onClick={doPrint}
+                    onClick={() => printReceipt('thermal')}
                     className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30"
                   >
                     <Printer size={18} />
-                    Print Receipt
+                    Thermal Print 80mm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => printReceipt('a4')}
+                    className="w-full py-3 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform"
+                  >
+                    <Printer size={18} />
+                    Save PDF / Letter
                   </button>
                   <button
                     type="button"
@@ -1702,59 +1750,114 @@ export default function EntryPage({ products = [] }) {
       <style>{`
         @media print {
           @page {
-            size: 80mm auto;
+            size: auto;
             margin: 0;
           }
-          html, body {
-            width: 80mm !important;
-            min-width: 80mm !important;
-            height: auto !important;
-            min-height: 0 !important;
+
+          html,
+          body,
+          #root {
             margin: 0 !important;
             padding: 0 !important;
-            overflow: visible !important;
-            background: white !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          .print\:hidden {
-            display: none !important;
-          }
-          #root, #root * {
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          #receipt-print-area, #receipt-print-area * {
+
+          body > *:not(#root),
+          #root > *:not(#receipt-print-area) {
+            display: none !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+            box-shadow: none !important;
+          }
+
+          #receipt-print-area,
+          #receipt-print-area * {
             visibility: visible !important;
           }
+
           #receipt-print-area {
             display: block !important;
-            position: absolute !important;
+            position: fixed !important;
             left: 0 !important;
             top: 0 !important;
-            width: 80mm !important;
-            max-width: 80mm !important;
+            right: auto !important;
+            bottom: auto !important;
+            height: auto !important;
             min-height: 0 !important;
-            margin: 0 !important;
-            padding: 3mm 4mm !important;
+            max-height: none !important;
             box-sizing: border-box !important;
-            background: white !important;
+            background: #fff !important;
+            color: #000 !important;
+            overflow: visible !important;
             page-break-before: avoid !important;
             page-break-after: avoid !important;
-            break-after: avoid-page !important;
-          }
-          #receipt-print-area table {
             page-break-inside: avoid !important;
+            break-before: avoid-page !important;
+            break-after: avoid-page !important;
+            break-inside: avoid-page !important;
+          }
+
+          body[data-pos-print-mode='thermal'] html,
+          body[data-pos-print-mode='thermal'],
+          body[data-pos-print-mode='thermal'] #root {
+            width: 80mm !important;
+            min-width: 80mm !important;
+            max-width: 80mm !important;
+          }
+
+          body[data-pos-print-mode='thermal'] #receipt-print-area {
+            width: 80mm !important;
+            max-width: 80mm !important;
+            min-width: 80mm !important;
+            margin: 0 !important;
+            padding: 3mm 4mm !important;
+            font-size: 11px !important;
+            line-height: 1.25 !important;
+          }
+
+          body[data-pos-print-mode='a4'] #receipt-print-area {
+            width: 185mm !important;
+            max-width: 185mm !important;
+            min-width: 0 !important;
+            margin: 10mm auto 0 auto !important;
+            padding: 8mm 10mm !important;
+            font-size: 14px !important;
+            line-height: 1.35 !important;
+          }
+
+          body[data-pos-print-mode='a4'] #receipt-print-area img {
+            max-height: 22mm !important;
+          }
+
+          body[data-pos-print-mode='a4'] #receipt-print-area h2 {
+            font-size: 22px !important;
+          }
+
+          #receipt-print-area table,
+          #receipt-print-area tr,
+          #receipt-print-area td,
+          #receipt-print-area th,
+          #receipt-print-area div,
+          #receipt-print-area p {
+            page-break-inside: avoid !important;
+            break-inside: avoid-page !important;
+          }
+
+          .print\:hidden {
+            display: none !important;
           }
         }
       `}</style>
 
       {receiptModal.show && receiptModal.record && (
-        <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[11px] leading-tight">
+        <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[11px] leading-tight w-[80mm] max-w-[80mm]">
           <div className="text-center mb-3">
             {shopSettings.logoUrl && (
               <img

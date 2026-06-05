@@ -19,7 +19,9 @@ const ProductGrid = React.memo(({ products, onSelect }) => {
         
         return (
           <button 
+            type="button"
             key={prod.id} 
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onSelect(prod)} 
             className="bg-[#0d1120] border-2 border-white/5 rounded-xl p-2 text-center transition-all hover:border-cyan-500/50 active:scale-95 flex flex-col items-center justify-between min-h-[85px]"
           >

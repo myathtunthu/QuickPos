@@ -50,6 +50,7 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
     return (
       <div 
         style={style} 
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onSelect(prod)}
         onMouseEnter={() => setSelectedIndex(index)}
         className={`flex justify-between items-center px-3 py-2 cursor-pointer border-b border-white/5 transition-colors ${

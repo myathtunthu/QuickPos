@@ -707,6 +707,20 @@ export default function EntryPage({ products = [] }) {
     }
   };
 
+  const cartItemCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const payableTotal = Number(cartTotals.total) || 0;
+  const paidValue = paidAmount === '' ? payableTotal : Number(paidAmount) || 0;
+  const liveDebt = Math.max(0, payableTotal - paidValue);
+  const liveChange = Math.max(0, paidValue - payableTotal);
+  const activePersonLabel = selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in Customer' : 'Supplier not selected');
+  const lowStockInCart = cart.filter((item) => {
+    const product = products.find((p) => p.id === item.productId);
+    const currentStock = Number(product?.stockBase ?? product?.stock ?? 0);
+    const required = Number(item.baseQuantity ?? item.quantity ?? 0);
+    return entryTab === 'Sale' && product && required >= currentStock;
+  });
+
+
   return (
     <>
       <ConfirmDialog
@@ -738,17 +752,65 @@ export default function EntryPage({ products = [] }) {
 
       {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
 
-      <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2"><ShoppingCart size={22}/> POS ENTRY</h1>
-          <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-xl px-3 py-1.5 shadow-inner">
-            <Calendar size={14} className="text-cyan-400"/>
-            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
+      <div className="relative p-3 sm:p-4 xl:p-5 pb-28 text-white max-w-7xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 opacity-70">
+          <div className="absolute -top-28 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-[90px]" />
+          <div className="absolute top-1/3 -right-24 h-80 w-80 rounded-full bg-blue-500/10 blur-[100px]" />
+          <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-violet-500/10 blur-[110px]" />
+        </div>
+
+        <div className="relative z-10 rounded-3xl border border-cyan-500/15 bg-[#0d1120]/90 p-4 shadow-2xl shadow-cyan-950/20">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl border border-cyan-500/25 bg-cyan-500/10 p-3 text-cyan-300 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+                <ShoppingCart size={26}/>
+              </div>
+              <div>
+                <h1 className="text-2xl font-black tracking-wider text-white"><span className="text-cyan-400">NexPOS</span> Entry</h1>
+                <p className="mt-1 text-xs font-bold text-slate-400">Fast sale • barcode • credit • hold invoice • receipt</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+              <div className="rounded-2xl border border-cyan-500/15 bg-black/30 px-4 py-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cashier</p>
+                <p className="truncate text-sm font-black text-cyan-300">{cashierName}</p>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-2xl border border-cyan-500/20 bg-black/40 px-3 py-2 shadow-inner">
+                <Calendar size={14} className="text-cyan-400"/>
+                <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
+              </div>
+            </div>
           </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-2xl border border-white/5 bg-black/25 p-3">
+              <p className="text-[10px] font-black uppercase text-slate-500">Cart Items</p>
+              <p className="mt-1 text-xl font-black text-white">{cartItemCount}</p>
+            </div>
+            <div className="rounded-2xl border border-cyan-500/10 bg-cyan-500/5 p-3">
+              <p className="text-[10px] font-black uppercase text-slate-500">Total</p>
+              <p className="mt-1 text-xl font-black text-cyan-300">{payableTotal.toLocaleString()} Ks</p>
+            </div>
+            <div className="rounded-2xl border border-amber-500/10 bg-amber-500/5 p-3">
+              <p className="text-[10px] font-black uppercase text-slate-500">Credit / Change</p>
+              <p className={`mt-1 text-xl font-black ${liveDebt > 0 ? 'text-amber-300' : 'text-emerald-300'}`}>{liveDebt > 0 ? liveDebt.toLocaleString() : liveChange.toLocaleString()} Ks</p>
+            </div>
+            <div className="rounded-2xl border border-violet-500/10 bg-violet-500/5 p-3">
+              <p className="text-[10px] font-black uppercase text-slate-500">Customer</p>
+              <p className="mt-1 truncate text-sm font-black text-violet-200">{activePersonLabel}</p>
+            </div>
+          </div>
+
+          {lowStockInCart.length > 0 && (
+            <div className="mt-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs font-bold text-rose-300">
+              Stock သတိပေးချက်: {lowStockInCart.map((item) => item.name).join(', ')} လက်ကျန်နည်းနေပါသည်။
+            </div>
+          )}
         </div>
 
         {/* 🌟 Tab များကို Permission စစ်ဆေးပြီး ဖျောက်/ပေါ် လုပ်ထားပါသည် */}
-        <div className="grid grid-flow-col auto-cols-fr gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
+        <div className="relative z-10 grid grid-flow-col auto-cols-fr gap-2 rounded-2xl border border-white/5 bg-[#0d1120]/90 p-1.5 shadow-xl shadow-black/20">
           {hasPermission('create_sale') && (
             <button onClick={() => handleTabChange('Sale')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Sale' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Sale</button>
           )}
@@ -761,7 +823,7 @@ export default function EntryPage({ products = [] }) {
         </div>
 
         {entryTab === 'Sale' && hasPermission('create_sale') && (
-          <div className="flex justify-end">
+          <div className="relative z-10 flex justify-end">
             <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
               <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
             </button>
@@ -769,7 +831,7 @@ export default function EntryPage({ products = [] }) {
         )}
 
         {showDrafts && entryTab === 'Sale' && (
-          <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+          <div className="relative z-10 bg-[#0d1120]/95 border border-indigo-500/20 rounded-2xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar shadow-xl">
             <h3 className="text-xs font-bold text-indigo-400 mb-2">Saved Hold Invoices</h3>
             {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
             {drafts.map(d => (
@@ -788,14 +850,23 @@ export default function EntryPage({ products = [] }) {
         )}
 
         {entryTab === 'Expense' ? (
-          <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
+          <div className="relative z-10 bg-[#0d1120]/95 border border-amber-500/20 rounded-3xl p-5 space-y-4 shadow-xl shadow-black/20 max-w-xl mx-auto">
             <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
             <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
             <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
             <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="relative z-10 grid gap-4 xl:grid-cols-[minmax(0,1fr)_430px] xl:items-start">
+            <div className="space-y-4 min-w-0">
+              <div className="rounded-3xl border border-cyan-500/15 bg-[#0d1120]/90 p-3 shadow-xl shadow-black/20">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-black text-white">Customer / Supplier</h2>
+                    <p className="text-[10px] font-bold text-slate-500">Search existing or type a new name</p>
+                  </div>
+                  <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-[10px] font-black text-cyan-300">{entryTab}</span>
+                </div>
             <div className="relative z-20 space-y-2">
               <div className="relative">
                 <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
@@ -834,9 +905,20 @@ export default function EntryPage({ products = [] }) {
               )}
             </div>
 
-            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+              </div>
+              </div>
 
-            <div className="relative z-10">
+              <div className="rounded-3xl border border-cyan-500/15 bg-[#0d1120]/90 p-3 shadow-xl shadow-black/20">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-black text-white">Product Board</h2>
+                    <p className="text-[10px] font-bold text-slate-500">Click product cards or scan barcode to add into cart</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-300">{filteredProducts.length} Items</span>
+                </div>
+                <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
+
+            <div className="relative z-10 mt-3">
               {debouncedSearch.length > 0 ? (
                 <ProductDropdown products={filteredProducts} onSelect={handleSelectProduct} isOpen={true} />
               ) : (
@@ -844,9 +926,13 @@ export default function EntryPage({ products = [] }) {
               )}
             </div>
 
-            <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
+              </div>
+            </div>
+
+            <div className="space-y-4 xl:sticky xl:top-4">
+            <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-3 sm:p-4 shadow-2xl shadow-cyan-950/20">
               <div className="flex justify-between items-center mb-2 pl-1 pr-1">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
+                <div><h2 className="text-sm font-black text-white uppercase tracking-wider">Current Order</h2><p className="text-[10px] font-bold text-slate-500">Live cart and payment summary</p></div>
                 {entryTab === 'Sale' && (
                   <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
                     className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
@@ -888,13 +974,16 @@ export default function EntryPage({ products = [] }) {
             </div>
 
             {cart.length > 0 && (
-              <PaymentSection
-                paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
-                paidAmount={paidAmount} setPaidAmount={setPaidAmount}
-                submitTransaction={submitTransaction} loading={loading}
-                entryTab={entryTab}
-              />
+              <div className="rounded-3xl border border-emerald-500/15 bg-[#0d1120]/95 p-3 shadow-xl shadow-black/20">
+                <PaymentSection
+                  paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
+                  paidAmount={paidAmount} setPaidAmount={setPaidAmount}
+                  submitTransaction={submitTransaction} loading={loading}
+                  entryTab={entryTab}
+                />
+              </div>
             )}
+            </div>
           </div>
         )}
 

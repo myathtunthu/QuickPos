@@ -3,13 +3,17 @@ import { translations } from '../utils/translations';
 
 const LanguageContext = createContext(null);
 
+const SUPPORTED_LANGUAGES = ['mm', 'en', 'zh'];
+
 export function LanguageProvider({ children }) {
   const [language, setLanguage] = useState(() => {
-    return localStorage.getItem('nexpos_language') || 'mm';
+    const saved = localStorage.getItem('nexpos_language');
+    return SUPPORTED_LANGUAGES.includes(saved) ? saved : 'mm';
   });
 
   useEffect(() => {
     localStorage.setItem('nexpos_language', language);
+    document.documentElement.lang = language;
   }, [language]);
 
   const t = (key) => {
@@ -17,22 +21,28 @@ export function LanguageProvider({ children }) {
   };
 
   const toggleLanguage = () => {
-    setLanguage((prev) => (prev === 'mm' ? 'en' : 'mm'));
+    setLanguage((prev) => {
+      if (prev === 'mm') return 'en';
+      if (prev === 'en') return 'zh';
+      return 'mm';
+    });
   };
 
-  const setMyanmar = () => setLanguage('mm');
-  const setEnglish = () => setLanguage('en');
+  const languageLabel = useMemo(() => {
+    if (language === 'mm') return 'MM';
+    if (language === 'en') return 'EN';
+    return '中文';
+  }, [language]);
 
   const value = useMemo(
     () => ({
       language,
       setLanguage,
       toggleLanguage,
-      setMyanmar,
-      setEnglish,
+      languageLabel,
       t,
     }),
-    [language]
+    [language, languageLabel]
   );
 
   return (

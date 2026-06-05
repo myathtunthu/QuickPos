@@ -1,98 +1,28 @@
-import { Printer, X } from 'lucide-react';
+import React from 'react';
+import { Printer, ReceiptText, X } from 'lucide-react';
+import ReceiptContent from './ReceiptContent';
 
-export default function ReceiptModal({ record, shop, onClose, onPrint, fmt }) {
+export default function ReceiptModal({ record, shopSettings, onClose, onPrint, txt }) {
+  if (!record) return null;
+
   return (
-    <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-white text-black rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="text-center border-b border-dashed pb-4">
-          {shop.logoUrl && (
-            <img
-              src={shop.logoUrl}
-              alt="logo"
-              className="w-12 h-12 mx-auto mb-2 rounded-full"
-            />
-          )}
-          <h2 className="text-xl font-black">{shop.name}</h2>
-          <p className="text-xs text-gray-500">📞 {shop.phone}</p>
-          <p className="text-xs text-gray-500">📍 {shop.address}</p>
-          <p className="text-xs text-gray-500 mt-1">Cashier: {shop.cashier}</p>
-          <p className="text-xs text-gray-500">{record.date}</p>
-          <p className="text-xs text-gray-500">
-            Invoice: {record.invoiceNo || record.id?.slice(-8)}
-          </p>
+    <div className="fixed inset-0 z-[9997] flex items-center justify-center bg-black/90 p-3 backdrop-blur-sm print:hidden">
+      <div className="flex max-h-[94vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-cyan-500/30 bg-[#0d1120] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-cyan-500/20 px-4 py-3">
+          <div className="flex items-center gap-2 text-cyan-300"><ReceiptText size={18} /><span className="font-black">{txt.receiptPreview}</span></div>
+          <button type="button" onClick={onClose} aria-label="Close receipt" className="rounded-xl bg-white/5 p-2 text-slate-300 hover:bg-white/10"><X size={18} /></button>
         </div>
 
-        {/* Items */}
-        <div className="py-3 text-sm space-y-1">
-          {(record.itemsDetail || []).map((item, i) => (
-            <div key={i} className="flex justify-between">
-              <span>
-                {item.name} × {item.quantity} ({item.unitName})
-                {item.priceType !== 'retail' && (
-                  <span className="text-[10px] ml-1">({item.priceType})</span>
-                )}
-                {item.itemDiscountAmt > 0 && (
-                  <span className="text-rose-500 text-[10px]">
-                    {' '}
-                    -{fmt(item.itemDiscountAmt)}
-                  </span>
-                )}
-              </span>
-              <span>
-                {fmt(item.unitPrice * item.quantity - (item.itemDiscountAmt || 0))}
-              </span>
-            </div>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-4">
+          <div className="mx-auto w-[80mm] max-w-full rounded bg-white p-4 shadow-xl"><ReceiptContent record={record} shopSettings={shopSettings} /></div>
         </div>
 
-        {/* Global Discount */}
-        {record.globalDiscount > 0 && (
-          <p className="text-right text-sm text-gray-500">
-            Global Disc: -{fmt(record.globalDiscount)} Ks
-          </p>
-        )}
-
-        {/* Total */}
-        <div className="border-t pt-3 flex justify-between text-xl font-black">
-          <span>TOTAL</span>
-          <span>{fmt(record.amount)} Ks</span>
-        </div>
-
-        {/* Payment info */}
-        <div className="text-xs mt-2 space-y-0.5">
-          <p>Method: {record.paymentMethod}</p>
-          <p>Paid: {fmt(record.paidAmount || 0)} Ks</p>
-          <p>Balance: {fmt(record.remainingDebt || 0)} Ks</p>
-          <p className="text-rose-600 font-bold">
-            Debt:{' '}
-            {record.remainingDebt > 0 ? fmt(record.remainingDebt) + ' Ks' : 'None'}
-          </p>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center text-[10px] text-gray-400 mt-2 border-t border-dashed pt-2">
-          ဝယ်ယူအားပေးမှုကို ကျေးဇူးတင်ပါသည်
-          <br />
-          Thank you for your purchase!
-        </div>
-
-        {/* Buttons */}
-        <div className="flex gap-2 mt-4">
-          <button
-            onClick={() => onPrint(record)}
-            className="flex-1 py-3 rounded-2xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2"
-          >
-            <Printer size={18} /> Print
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 rounded-2xl bg-gray-200 text-black font-black"
-          >
-            Close
-          </button>
+        <div className="grid grid-cols-2 gap-2 border-t border-cyan-500/20 bg-[#0d1120] p-3">
+          <button type="button" onClick={onPrint} className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-3 font-black text-[#06111f] active:scale-95"><Printer size={18} /> {txt?.print || 'Print'}</button>
+          <button type="button" onClick={onClose} className="rounded-2xl bg-emerald-500/15 py-3 font-black text-emerald-300 active:scale-95">{txt?.newTransaction || 'New Transaction'}</button>
         </div>
       </div>
     </div>
   );
 }
+

@@ -14,7 +14,6 @@ import {
   ScanBarcode,
 } from 'lucide-react';
 import { usernameToEmail } from '../firebase/adminAuth';
-import { useLanguage } from '../context/LanguageContext';
 
 export default function LoginPage() {
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
@@ -25,7 +24,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const { login, user, profile } = useAuth();
-  const { languageLabel, toggleLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -64,18 +62,18 @@ export default function LoginPage() {
       error.code === 'auth/user-not-found' ||
       error.code === 'auth/wrong-password'
     ) {
-      return t('loginInvalid');
+      return 'Username or password is incorrect.';
     }
 
     if (error.code === 'auth/invalid-email') {
-      return t('loginInvalidEmail');
+      return 'Invalid username or email format.';
     }
 
     if (error.code === 'auth/too-many-requests') {
-      return t('loginTooManyRequests');
+      return 'Too many login attempts. Please wait and try again.';
     }
 
-    return `${t('loginFailed')}: ${error.message || 'Unknown Error'}`;
+    return `Login failed: ${error.message || 'Unknown Error'}`;
   };
 
   const handleLogin = async (e) => {
@@ -107,7 +105,7 @@ export default function LoginPage() {
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">{t('redirecting')}</p>
+          <p className="text-slate-400">Redirecting...</p>
         </div>
       </div>
     );
@@ -116,7 +114,6 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen bg-[#080c14] flex items-center justify-center p-4 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(6,182,212,0.22),transparent_35%),radial-gradient(circle_at_bottom_right,rgba(37,99,235,0.2),transparent_40%)]" />
-
       <div className="absolute inset-0 opacity-[0.08] bg-[linear-gradient(to_right,#22d3ee_1px,transparent_1px),linear-gradient(to_bottom,#22d3ee_1px,transparent_1px)] bg-[size:42px_42px]" />
 
       <div className="absolute -top-24 -left-24 w-72 h-72 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" />
@@ -127,7 +124,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-cyan-300 font-black text-sm">
               <ShoppingCart size={18} />
-              {t('todaySales')}
+              Today Sales
             </div>
             <span className="text-emerald-400 text-xs font-black">+18%</span>
           </div>
@@ -140,7 +137,7 @@ export default function LoginPage() {
         <div className="absolute top-[18%] right-[9%] w-52 rounded-2xl bg-white/[0.04] border border-blue-400/20 p-4 shadow-2xl animate-[float_8s_ease-in-out_infinite_1s]">
           <div className="flex items-center gap-2 text-blue-300 font-black text-sm mb-3">
             <Package size={18} />
-            {t('lowStock')}
+            Low Stock
           </div>
           <div className="space-y-2">
             <div className="h-2 w-full bg-slate-700 rounded" />
@@ -152,7 +149,7 @@ export default function LoginPage() {
         <div className="absolute bottom-[14%] left-[10%] w-56 rounded-2xl bg-white/[0.04] border border-emerald-400/20 p-4 shadow-2xl animate-[float_9s_ease-in-out_infinite_0.5s]">
           <div className="flex items-center gap-2 text-emerald-300 font-black text-sm mb-3">
             <BarChart3 size={18} />
-            {t('profitTrend')}
+            Profit Trend
           </div>
           <div className="flex items-end gap-2 h-20">
             {[35, 55, 42, 75, 60, 88, 70].map((h, i) => (
@@ -168,20 +165,20 @@ export default function LoginPage() {
         <div className="absolute bottom-[18%] right-[12%] w-56 rounded-2xl bg-white/[0.04] border border-cyan-400/20 p-4 shadow-2xl animate-[float_7.5s_ease-in-out_infinite_1.5s]">
           <div className="flex items-center gap-2 text-cyan-300 font-black text-sm mb-3">
             <Receipt size={18} />
-            {t('latestReceipt')}
+            Latest Receipt
           </div>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between text-slate-300">
-              <span>{t('voucher')}</span>
+              <span>Voucher</span>
               <span>#00082</span>
             </div>
             <div className="flex justify-between text-slate-300">
-              <span>{t('total')}</span>
+              <span>Total</span>
               <span>86,500 Ks</span>
             </div>
             <div className="flex justify-between text-emerald-300 font-black">
-              <span>{t('status')}</span>
-              <span>{t('paid')}</span>
+              <span>Status</span>
+              <span>PAID</span>
             </div>
           </div>
         </div>
@@ -189,31 +186,21 @@ export default function LoginPage() {
         <div className="absolute top-[48%] left-[5%] hidden sm:flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-cyan-400/20 px-4 py-3 animate-[float_6s_ease-in-out_infinite_0.8s]">
           <ScanBarcode className="text-cyan-300" size={24} />
           <div>
-            <p className="text-white text-xs font-black">{t('barcodeScan')}</p>
-            <p className="text-slate-500 text-[10px]">{t('ready')}</p>
+            <p className="text-white text-xs font-black">Barcode Scan</p>
+            <p className="text-slate-500 text-[10px]">Ready</p>
           </div>
         </div>
 
         <div className="absolute top-[50%] right-[6%] hidden sm:flex items-center gap-3 rounded-2xl bg-white/[0.04] border border-blue-400/20 px-4 py-3 animate-[float_6.5s_ease-in-out_infinite_1.2s]">
           <CreditCard className="text-blue-300" size={24} />
           <div>
-            <p className="text-white text-xs font-black">{t('payments')}</p>
-            <p className="text-slate-500 text-[10px]">{t('paymentExamples')}</p>
+            <p className="text-white text-xs font-black">Payments</p>
+            <p className="text-slate-500 text-[10px]">Cash • KPay • Wave</p>
           </div>
         </div>
       </div>
 
       <div className="relative z-10 bg-gray-900/80 backdrop-blur-xl p-8 sm:p-10 rounded-3xl border-2 border-cyan-500/25 shadow-[0_0_60px_rgba(6,182,212,0.22)] w-full max-w-lg animate-fade-in">
-        <div className="flex justify-end mb-2">
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-sm font-black"
-          >
-            {languageLabel}
-          </button>
-        </div>
-
         <div className="text-center mb-9">
           <img
             src="/logo.png"
@@ -225,7 +212,7 @@ export default function LoginPage() {
           />
 
           <p className="text-sm text-cyan-400 font-black uppercase tracking-[0.3em]">
-            {t('smartRetailSystem')}
+            Smart Retail System
           </p>
         </div>
 
@@ -241,7 +228,7 @@ export default function LoginPage() {
             type="text"
             value={usernameOrEmail}
             onChange={(e) => setUsernameOrEmail(e.target.value)}
-            placeholder={t('emailOrUsername')}
+            placeholder="Username or Email"
             className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl outline-none focus:border-cyan-400 transition-colors"
           />
 
@@ -251,7 +238,7 @@ export default function LoginPage() {
               type={show ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={t('password')}
+              placeholder="Password"
               className="w-full px-6 py-5 bg-black/50 border-2 border-cyan-500/20 rounded-xl text-slate-200 font-bold text-xl pr-16 outline-none focus:border-cyan-400 transition-colors"
             />
 
@@ -273,7 +260,7 @@ export default function LoginPage() {
             </div>
 
             <span className={`font-bold text-sm select-none transition-colors ${rememberMe ? 'text-cyan-100' : 'text-slate-500'}`}>
-              {t('rememberUsernameOnly')}
+              Remember username/email only
             </span>
           </div>
 
@@ -282,19 +269,15 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black py-5 rounded-xl text-xl transition-all active:scale-95 shadow-lg shadow-cyan-500/20 disabled:opacity-50 mt-2"
           >
-            {loading ? t('loggingIn') : t('loginButton')}
+            {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
       </div>
 
       <style>{`
         @keyframes float {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-16px);
-          }
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-16px); }
         }
       `}</style>
     </div>

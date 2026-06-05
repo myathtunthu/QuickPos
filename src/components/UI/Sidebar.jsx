@@ -10,7 +10,6 @@ import {
   FileText,
   Truck,
   PauseCircle,
-  Globe,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -19,7 +18,7 @@ export default function Sidebar({ onCloseMobile }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { userData, logout, hasPermission } = useAuth();
-  const { language, toggleLanguage, t } = useLanguage();
+  const { t } = useLanguage();
 
   const handleLogout = async () => {
     try {
@@ -46,17 +45,6 @@ export default function Sidebar({ onCloseMobile }) {
 
   return (
     <div className="flex flex-col h-full bg-gray-950">
-      <div className="px-4 py-5 border-b border-gray-800 flex justify-center items-center">
-        <img
-          src="/logo.png"
-          alt="NexPOS"
-          className="h-20 w-auto max-w-[190px] object-contain"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-          }}
-        />
-      </div>
-
       <nav className="flex-1 overflow-y-auto py-4 custom-scrollbar">
         <ul className="space-y-2 px-3">
           {navItems.map((item) => {
@@ -72,7 +60,7 @@ export default function Sidebar({ onCloseMobile }) {
                   onClick={onCloseMobile}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
                     isActive
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-[inset_0_0_10px_rgba(6,182,212,0.1)]'
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
                       : 'text-slate-400 hover:bg-gray-800 hover:text-white'
                   }`}
                 >
@@ -86,15 +74,6 @@ export default function Sidebar({ onCloseMobile }) {
       </nav>
 
       <div className="p-4 border-t border-gray-800 bg-gray-900/50 space-y-3">
-        <button
-          type="button"
-          onClick={toggleLanguage}
-          className="w-full flex items-center justify-center space-x-2 py-2 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500/20 transition-colors font-bold border border-indigo-500/20 active:scale-95"
-        >
-          <Globe size={16} />
-          <span>{language === 'mm' ? 'English' : 'မြန်မာ'}</span>
-        </button>
-
         <div className="flex items-center space-x-3 px-2 pt-1">
           <div className="w-10 h-10 rounded-full bg-cyan-900 flex items-center justify-center border border-cyan-500/30 shrink-0">
             <span className="text-sm font-black text-cyan-400">

@@ -41,32 +41,23 @@ export default function Layout() {
       )}
 
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        <header className="flex md:hidden items-center justify-between px-3 py-2 bg-[#0d1120] border-b border-cyan-500/10 flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
+        <header className="flex md:hidden items-center justify-between px-4 py-3 bg-[#0d1120] border-b border-cyan-500/10 flex-shrink-0">
+          <div className="flex items-center min-w-0">
             <img
               src="/logo.png"
-              alt="NexPOS Logo"
-              className="w-9 h-9 object-contain rounded-lg"
+              alt="NexPOS"
+              className="h-12 w-auto max-w-[190px] object-contain"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
               }}
             />
-
-            <div className="leading-tight min-w-0">
-              <h1 className="text-base font-black text-cyan-400 tracking-wider truncate">
-                NexPOS
-              </h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Retail System
-              </p>
-            </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={toggleLanguage}
-              className="px-2.5 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-xs font-black"
+              className="px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-sm font-black"
             >
               {language === 'mm' ? 'MM' : 'EN'}
             </button>
@@ -76,7 +67,7 @@ export default function Layout() {
               onClick={() => setIsMobileOpen(true)}
               className="text-slate-400 hover:text-white p-2"
             >
-              <Menu size={22} />
+              <Menu size={26} />
             </button>
           </div>
         </header>

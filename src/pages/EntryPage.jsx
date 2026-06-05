@@ -1,19 +1,46 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
-  collection, doc, writeBatch, serverTimestamp, increment,
-  getDoc, getDocs, query, where, orderBy, limit, setDoc, deleteDoc,
-  runTransaction
+  collection,
+  doc,
+  writeBatch,
+  serverTimestamp,
+  increment,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+  setDoc,
+  deleteDoc,
+  runTransaction,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../hooks/useCart';
 import useDebounce from '../hooks/useDebounce';
 import {
-  Calendar, User, ShoppingCart, Printer, PauseCircle, RotateCcw, X
+  Calendar,
+  User,
+  ShoppingCart,
+  Printer,
+  PauseCircle,
+  RotateCcw,
+  X,
+  Search,
+  ScanLine,
+  Package,
+  CreditCard,
+  ReceiptText,
+  DollarSign,
+  Wallet,
+  Sparkles,
+  Trash2,
+  Boxes,
+  Plus,
 } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
-// Custom UI & Utilities
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 import logger from '../utils/logger';
@@ -24,59 +51,115 @@ import ProductDropdown from '../components/entry/ProductDropdown';
 import CartSection from '../components/entry/CartSection';
 import PaymentSection from '../components/entry/PaymentSection';
 
-// ---------- Scanner Modal (Fixed Version) ----------
+const cleanDisplayName = (profile) => {
+  if (!profile) return 'Admin';
+
+  const raw =
+    profile.displayName ||
+    profile.fullName ||
+    profile.name ||
+    profile.username ||
+    profile.email ||
+    'Admin';
+
+  const clean = String(raw).trim();
+  if (!clean) return 'Admin';
+
+  return clean.includes('@') ? clean.split('@')[0] : clean;
+};
+
+const buildVoucherNo = (type = 'Sale', count = 1, dateISO = '') => {
+  const safeType = String(type || 'Sale').toLowerCase();
+  let prefix = 'INV';
+
+  if (safeType === 'purchase') prefix = 'PUR';
+  if (safeType === 'expense') prefix = 'EXP';
+
+  const safeDate = String(dateISO || new Date().toISOString().split('T')[0]).replaceAll('-', '');
+  const serial = String(Number(count) || 1).padStart(4, '0');
+
+  return `${prefix}-${safeDate}-${serial}`;
+};
+
+const getItemCostPrice = (cartItem, products = []) => {
+  const product = products.find((p) => p.id === cartItem?.productId);
+
+  return (
+    Number(
+      cartItem?.costPrice ??
+        cartItem?.cost ??
+        product?.costPrice ??
+        product?.packageUnits?.[0]?.costPrice ??
+        product?.packages?.[0]?.costPrice ??
+        0
+    ) || 0
+  );
+};
+
+const formatMoney = (value) => `${Number(value || 0).toLocaleString()} Ks`;
+
+const getProductStock = (product) => Number(product?.stockBase ?? product?.stock ?? 0) || 0;
+
 const ScannerModal = ({ onClose, onScan }) => {
   const videoRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const readerRef = useRef(null);
   const streamRef = useRef(null);
-
   const onScanRef = useRef(onScan);
   const onCloseRef = useRef(onClose);
+  const lastScannedRef = useRef({ code: '', time: 0 });
 
   useEffect(() => {
     onScanRef.current = onScan;
     onCloseRef.current = onClose;
   }, [onScan, onClose]);
 
-  const lastScannedRef = useRef({ code: '', time: 0 });
-
   useEffect(() => {
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.CODE_128, BarcodeFormat.CODE_39,
-      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-      BarcodeFormat.ITF, BarcodeFormat.QR_CODE
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.CODE_39,
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.UPC_E,
+      BarcodeFormat.ITF,
+      BarcodeFormat.QR_CODE,
     ]);
 
     const codeReader = new BrowserMultiFormatReader(hints);
     readerRef.current = codeReader;
 
     const constraints = {
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
     };
 
-    navigator.mediaDevices.getUserMedia(constraints)
+    navigator.mediaDevices
+      .getUserMedia(constraints)
       .then((stream) => {
         streamRef.current = stream;
+
         if (videoRef.current) videoRef.current.srcObject = stream;
 
         codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
-          if (result) {
-            const now = Date.now();
-            if (result.text === lastScannedRef.current.code && (now - lastScannedRef.current.time < 1500)) return;
+          if (!result) return;
 
-            lastScannedRef.current = { code: result.text, time: now };
-
-            setIsProcessing(true);
-            if (onScanRef.current) onScanRef.current(result.text);
-
-            setTimeout(() => {
-              setIsProcessing(false);
-            }, 1000);
+          const now = Date.now();
+          if (result.text === lastScannedRef.current.code && now - lastScannedRef.current.time < 1500) {
+            return;
           }
+
+          lastScannedRef.current = { code: result.text, time: now };
+          setIsProcessing(true);
+
+          if (onScanRef.current) onScanRef.current(result.text);
+
+          setTimeout(() => setIsProcessing(false), 900);
         });
       })
       .catch((err) => {
@@ -86,43 +169,61 @@ const ScannerModal = ({ onClose, onScan }) => {
 
     return () => {
       if (readerRef.current) readerRef.current.reset();
-      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+      if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
   return (
     <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
-      <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden relative shadow-2xl">
-        <div className="p-4 bg-gray-100 flex justify-between items-center text-black border-b">
-          <h3 className="font-black text-gray-800">Barcode Scanner</h3>
-          <button type="button" onClick={() => onCloseRef.current()} className="text-red-500 hover:text-red-700 font-black text-2xl leading-none">&times;</button>
+      <div className="w-full max-w-sm bg-[#0d1120] border border-cyan-500/30 rounded-3xl overflow-hidden relative shadow-2xl shadow-cyan-950/40">
+        <div className="p-4 bg-cyan-500/10 flex justify-between items-center text-white border-b border-cyan-500/20">
+          <h3 className="font-black flex items-center gap-2">
+            <ScanLine size={18} className="text-cyan-400" />
+            Barcode Scanner
+          </h3>
+          <button
+            type="button"
+            onClick={() => onCloseRef.current()}
+            className="text-rose-400 hover:text-rose-300 font-black text-2xl leading-none"
+          >
+            &times;
+          </button>
         </div>
 
-        <div className="relative">
+        <div className="relative bg-black">
           {cameraError ? (
-            <div className="p-6 text-center text-red-500 font-bold">Camera access denied or not available.</div>
+            <div className="p-8 text-center text-rose-400 font-bold">
+              Camera access denied or not available.
+            </div>
           ) : (
             <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
           )}
 
+          <div className="absolute inset-x-8 top-1/2 h-0.5 bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.9)]" />
+
           {isProcessing && (
-            <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-10 transition-opacity">
-              <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p className="text-cyan-800 font-black text-base">ပစ္စည်းစာရင်းသွင်းနေပါသည်</p>
-              <p className="text-sm font-bold text-gray-500 mt-1">ခဏစောင့်ပါ...</p>
+            <div className="absolute inset-0 bg-[#0d1120]/90 flex flex-col items-center justify-center z-10">
+              <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-cyan-300 font-black text-base">ပစ္စည်းစာရင်းသွင်းနေပါသည်</p>
+              <p className="text-sm font-bold text-slate-400 mt-1">ခဏစောင့်ပါ...</p>
             </div>
           )}
         </div>
 
-        <div className={`p-4 text-center text-xs font-black transition-colors ${isProcessing ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700 animate-pulse'}`}>
-          {isProcessing ? 'စနစ်ထဲသို့ ထည့်သွင်းနေပါသည်...' : 'စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများ ဆက်တိုက်ဖတ်နိုင်ပါသည်'}
+        <div
+          className={`p-4 text-center text-xs font-black transition-colors ${
+            isProcessing ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'
+          }`}
+        >
+          {isProcessing
+            ? 'စနစ်ထဲသို့ ထည့်သွင်းနေပါသည်...'
+            : 'စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများ ဆက်တိုက်ဖတ်နိုင်ပါသည်'}
         </div>
       </div>
     </div>
   );
 };
 
-// ---------- Main EntryPage Component ----------
 export default function EntryPage({ products = [] }) {
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
@@ -132,67 +233,103 @@ export default function EntryPage({ products = [] }) {
     shopName: profile?.shopName || 'NexPOS',
     phone: '',
     address: '',
-    logoUrl: '/logo.png'
+    logoUrl: '/logo.png',
   });
 
   const todayISO = new Date().toISOString().split('T')[0];
-  
-  const initialTab = hasPermission('create_sale') ? 'Sale' 
-                   : hasPermission('create_purchase') ? 'Purchase' 
-                   : hasPermission('create_expense') ? 'Expense' 
-                   : 'Sale';
-                   
+
+  const initialTab = hasPermission('create_sale')
+    ? 'Sale'
+    : hasPermission('create_purchase')
+    ? 'Purchase'
+    : hasPermission('create_expense')
+    ? 'Expense'
+    : 'Sale';
+
   const [entryDate, setEntryDate] = useState(todayISO);
   const [entryTab, setEntryTab] = useState(initialTab);
-
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [personSearch, setPersonSearch] = useState('');
   const [showPersonDropdown, setShowPersonDropdown] = useState(false);
-
   const [newPersonPhone, setNewPersonPhone] = useState('');
   const [newPersonAddress, setNewPersonAddress] = useState('');
-
   const [selCategory, setSelCategory] = useState('All');
   const [prodSearch, setProdSearch] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const debouncedSearch = useDebounce(prodSearch, 300);
-
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [paidAmount, setPaidAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
-
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmt, setExpenseAmt] = useState('');
-
   const [drafts, setDrafts] = useState([]);
   const [showDrafts, setShowDrafts] = useState(false);
-
-  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+  });
   const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
-
   const submitLock = useRef(false);
 
   const {
-    cart, setCart, addToCart, removeCartItem, updateCartItemQty,
-    updateCartItemUnit, updateCartItemPriceType, updateCartItemDiscount,
-    updateCartItemPrice, clearCart, cartTotals, globalDiscountAmt,
-    setGlobalDiscountAmt, globalDiscountType, setGlobalDiscountType
+    cart,
+    setCart,
+    addToCart,
+    removeCartItem,
+    updateCartItemQty,
+    updateCartItemUnit,
+    updateCartItemPriceType,
+    updateCartItemDiscount,
+    updateCartItemPrice,
+    clearCart,
+    cartTotals,
+    globalDiscountAmt,
+    setGlobalDiscountAmt,
+    globalDiscountType,
+    setGlobalDiscountType,
   } = useCart(products, entryTab);
+
+  const fetchDrafts = useCallback(async () => {
+    if (!tenantId) return;
+
+    try {
+      const q = query(
+        collection(db, 'pos_drafts'),
+        where('tenantId', '==', tenantId),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      );
+      const snap = await getDocs(q);
+      setDrafts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      logger.error('Error fetching drafts:', err);
+    }
+  }, [tenantId]);
 
   const barcodeMap = useMemo(() => {
     const map = new Map();
-    if (!products || !Array.isArray(products)) return map;
-    products.forEach(p => {
-      if (p.barcode) map.set(p.barcode.trim().toLowerCase(), { product: p, unit: p.packageUnits?.[0] });
-      p.packageUnits?.forEach(u => {
-        if (u.barcode) map.set(u.barcode.trim().toLowerCase(), { product: p, unit: u });
-        if (u.barcodes?.retail) map.set(u.barcodes.retail.trim().toLowerCase(), { product: p, unit: u });
-        if (u.barcodes?.wholesale) map.set(u.barcodes.wholesale.trim().toLowerCase(), { product: p, unit: u });
+
+    if (!Array.isArray(products)) return map;
+
+    products.forEach((p) => {
+      if (p.barcode) map.set(String(p.barcode).trim().toLowerCase(), { product: p, unit: p.packageUnits?.[0] });
+
+      p.packageUnits?.forEach((u) => {
+        if (u.barcode) map.set(String(u.barcode).trim().toLowerCase(), { product: p, unit: u });
+        if (u.barcodes?.retail) {
+          map.set(String(u.barcodes.retail).trim().toLowerCase(), { product: p, unit: u });
+        }
+        if (u.barcodes?.wholesale) {
+          map.set(String(u.barcodes.wholesale).trim().toLowerCase(), { product: p, unit: u });
+        }
       });
     });
+
     return map;
   }, [products]);
 
@@ -202,19 +339,26 @@ export default function EntryPage({ products = [] }) {
     const fetchAllData = async () => {
       try {
         const settingsSnap = await getDoc(doc(db, 'pos_settings', tenantId));
+
         if (settingsSnap.exists()) {
           const sData = settingsSnap.data();
           setShopSettings({
             shopName: sData.shopName || profile?.shopName || 'NexPOS',
             phone: sData.phone || '',
             address: sData.address || '',
-            logoUrl: sData.logoUrl || sData.logo || '/logo.png'
+            logoUrl: sData.logoUrl || sData.logo || '/logo.png',
           });
         }
-        const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
-        setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
-        setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+        const custSnap = await getDocs(
+          query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId))
+        );
+        setCustomers(custSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+        const suppSnap = await getDocs(
+          query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId))
+        );
+        setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         logger.error('Error fetching initial data:', err);
         showToast('ဒေတာများရယူရာတွင် အမှားအယွင်းရှိနေပါသည်', 'error');
@@ -223,151 +367,232 @@ export default function EntryPage({ products = [] }) {
 
     fetchAllData();
     fetchDrafts();
-  }, [tenantId, profile]);
-
-  const fetchDrafts = async () => {
-    if (!tenantId) return;
-    try {
-      const q = query(collection(db, 'pos_drafts'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(20));
-      const snap = await getDocs(q);
-      setDrafts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (err) {
-      logger.error('Error fetching drafts:', err);
-    }
-  };
+  }, [tenantId, profile, fetchDrafts]);
 
   useEffect(() => {
-    setPersonSearch(''); setSelectedPerson(null);
-    setNewPersonPhone(''); setNewPersonAddress('');
+    setPersonSearch('');
+    setSelectedPerson(null);
+    setNewPersonPhone('');
+    setNewPersonAddress('');
   }, [entryTab]);
 
   const personList = entryTab === 'Sale' ? customers : suppliers;
-  const filteredPersons = personList.filter(p =>
-    p.name.toLowerCase().includes(personSearch.toLowerCase()) || p.phone?.includes(personSearch)
-  );
 
-  const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+  const filteredPersons = useMemo(() => {
+    const search = personSearch.toLowerCase();
+
+    return personList.filter((p) => {
+      const name = String(p.name || '').toLowerCase();
+      const phone = String(p.phone || '');
+      return name.includes(search) || phone.includes(personSearch);
+    });
+  }, [personList, personSearch]);
+
+  const categories = useMemo(
+    () => ['All', ...new Set(products.map((p) => p.category).filter(Boolean))],
+    [products]
+  );
 
   const filteredProducts = useMemo(() => {
     let result = products;
-    if (selCategory !== 'All') result = result.filter(p => p.category === selCategory);
+
+    if (selCategory !== 'All') result = result.filter((p) => p.category === selCategory);
+
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.toLowerCase();
-      result = result.filter(p => {
-        const hasBarcode = p.packageUnits?.some(u =>
-          u.barcodes?.retail?.toLowerCase().includes(q) || u.barcodes?.wholesale?.toLowerCase().includes(q) || u.barcode?.toLowerCase().includes(q)
+      result = result.filter((p) => {
+        const hasBarcode = p.packageUnits?.some(
+          (u) =>
+            u.barcodes?.retail?.toLowerCase().includes(q) ||
+            u.barcodes?.wholesale?.toLowerCase().includes(q) ||
+            u.barcode?.toLowerCase().includes(q)
         );
-        return (p.name || '').toLowerCase().includes(q) || hasBarcode;
+
+        return String(p.name || '').toLowerCase().includes(q) || hasBarcode;
       });
     }
+
     return result;
   }, [products, debouncedSearch, selCategory]);
 
-  const handleSelectProduct = useCallback((product) => {
-    const defaultUnit = product.packageUnits?.find(u => Number(u.multiplier) === 1) || product.packageUnits?.[0] || { name: 'ခု', multiplier: 1, prices: { retail: 0 } };
-    const response = addToCart(product, defaultUnit, 'retail', 1);
-    if (response.success) setProdSearch('');
-    else showToast(response.message, 'error');
-  }, [addToCart]);
+  const summary = useMemo(() => {
+    const productCount = products.length;
+    const lowStockCount = products.filter((p) => getProductStock(p) <= Number(p.minStock || 5)).length;
+    const cartCount = cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    const total = Number(cartTotals.total || 0);
+    const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
+    const balance = Math.max(0, total - paid);
+
+    return { productCount, lowStockCount, cartCount, total, paid, balance };
+  }, [products, cart, cartTotals.total, paidAmount]);
+
+  const handleSelectProduct = useCallback(
+    (product) => {
+      const defaultUnit =
+        product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
+        product.packageUnits?.[0] || {
+          name: 'ခု',
+          multiplier: 1,
+          prices: { retail: 0 },
+        };
+
+      const response = addToCart(product, defaultUnit, 'retail', 1);
+
+      if (response.success) setProdSearch('');
+      else showToast(response.message, 'error');
+    },
+    [addToCart]
+  );
 
   const handleTabChange = (tab) => {
     if (cart.length > 0) {
       setConfirmDialog({
         isOpen: true,
-        title: "Tab ပြောင်းလဲခြင်း",
-        message: "Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?",
+        title: 'Tab ပြောင်းလဲခြင်း',
+        message: 'Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?',
         onConfirm: () => {
           setEntryTab(tab);
           clearCart();
           setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
-        }
+        },
       });
       return;
     }
-    setEntryTab(tab); clearCart();
+
+    setEntryTab(tab);
+    clearCart();
   };
 
   const handleHoldInvoiceClick = () => {
     if (cart.length === 0) return;
-    if (cart.some(x => x.quantity === '' || Number(x.quantity) <= 0)) {
-      showToast("အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ (အလွတ် သို့မဟုတ် သုည ဖြစ်နေ၍ မရပါ)။", "error");
+
+    if (cart.some((x) => x.quantity === '' || Number(x.quantity) <= 0)) {
+      showToast(
+        'အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ။',
+        'error'
+      );
       return;
     }
-    setPromptModal({ isOpen: true, name: personSearch || "" });
+
+    setPromptModal({ isOpen: true, name: personSearch || '' });
   };
 
   const executeHoldInvoice = async (name) => {
     if (!name.trim()) return;
+
     setLoading(true);
+
     try {
       const draftRef = doc(collection(db, 'pos_drafts'));
-      const sanitizedCart = cart.map(item => ({
-        id: item.id, productId: item.productId || null, productSnapshot: products.find(p => p.id === item.productId) || null,
-        unitName: item.unitName || '', multiplier: Number(item.multiplier) || 1, priceType: item.priceType || 'retail',
-        unitPrice: Number(item.unitPrice) || 0, quantity: Number(item.quantity) || 1, baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
-        itemDiscountAmt: Number(item.itemDiscountAmt) || 0, notes: item.notes || ''
+      const sanitizedCart = cart.map((item) => ({
+        id: item.id,
+        productId: item.productId || null,
+        productSnapshot: products.find((p) => p.id === item.productId) || null,
+        unitName: item.unitName || '',
+        multiplier: Number(item.multiplier) || 1,
+        priceType: item.priceType || 'retail',
+        unitPrice: Number(item.unitPrice) || 0,
+        quantity: Number(item.quantity) || 1,
+        baseQuantity: Number(item.baseQuantity) || Number(item.quantity) || 1,
+        itemDiscountAmt: Number(item.itemDiscountAmt) || 0,
+        notes: item.notes || '',
       }));
 
       await setDoc(draftRef, {
-        tenantId: tenantId || '', draftName: name || 'No Name', type: entryTab || 'Sale', cart: sanitizedCart,
-        cartTotals: { subtotal: Number(cartTotals.subtotal) || 0, itemDiscounts: Number(cartTotals.itemDiscounts) || 0, globalDisc: Number(cartTotals.globalDisc) || 0, total: Number(cartTotals.total) || 0 },
-        personSearch: personSearch || '', selectedPerson: selectedPerson || null, newPersonPhone: newPersonPhone || '', newPersonAddress: newPersonAddress || '',
-        globalDiscountAmt: globalDiscountAmt || '', globalDiscountType: globalDiscountType || '%', paymentMethod: paymentMethod || 'Cash', paidAmount: paidAmount || '', createdAt: serverTimestamp()
+        tenantId: tenantId || '',
+        draftName: name || 'No Name',
+        type: entryTab || 'Sale',
+        cart: sanitizedCart,
+        cartTotals: {
+          subtotal: Number(cartTotals.subtotal) || 0,
+          itemDiscounts: Number(cartTotals.itemDiscounts) || 0,
+          globalDisc: Number(cartTotals.globalDisc) || 0,
+          total: Number(cartTotals.total) || 0,
+        },
+        personSearch: personSearch || '',
+        selectedPerson: selectedPerson || null,
+        newPersonPhone: newPersonPhone || '',
+        newPersonAddress: newPersonAddress || '',
+        globalDiscountAmt: globalDiscountAmt || '',
+        globalDiscountType: globalDiscountType || '%',
+        paymentMethod: paymentMethod || 'Cash',
+        paidAmount: paidAmount || '',
+        createdAt: serverTimestamp(),
       });
-      showToast("ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။", "success");
-      clearCart(); setPersonSearch(''); setSelectedPerson(null);
-      setNewPersonPhone(''); setNewPersonAddress(''); fetchDrafts();
+
+      showToast('ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။', 'success');
+      clearCart();
+      setPersonSearch('');
+      setSelectedPerson(null);
+      setNewPersonPhone('');
+      setNewPersonAddress('');
+      fetchDrafts();
     } catch (err) {
       logger.error('Error saving draft:', err);
-      showToast("Error saving draft: " + err.message, "error");
+      showToast(`Error saving draft: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+      setPromptModal({ isOpen: false, name: '' });
     }
-    setLoading(false);
-    setPromptModal({ isOpen: false, name: '' });
+  };
+
+  const executeRestoreDraft = async (draft) => {
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+    clearCart();
+    setEntryTab(draft.type || 'Sale');
+    setPersonSearch(draft.personSearch || '');
+    setSelectedPerson(draft.selectedPerson || null);
+    setNewPersonPhone(draft.newPersonPhone || '');
+    setNewPersonAddress(draft.newPersonAddress || '');
+    setGlobalDiscountAmt(draft.globalDiscountAmt || '');
+    setGlobalDiscountType(draft.globalDiscountType || '%');
+    setPaymentMethod(draft.paymentMethod || 'Cash');
+    setPaidAmount(draft.paidAmount || '');
+
+    if (Array.isArray(draft.cart)) {
+      setCart(draft.cart.map((item) => ({ ...item, id: item.id || Date.now() + Math.random() })));
+    }
+
+    try {
+      await deleteDoc(doc(db, 'pos_drafts', draft.id));
+      fetchDrafts();
+      setShowDrafts(false);
+      showToast('ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။', 'success');
+    } catch (err) {
+      logger.error('Error restoring draft:', err);
+    }
   };
 
   const restoreDraft = (draft) => {
     if (cart.length > 0) {
       setConfirmDialog({
         isOpen: true,
-        title: "Draft ပြန်လည်ရယူခြင်း",
-        message: "လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?",
-        onConfirm: () => executeRestoreDraft(draft)
+        title: 'Draft ပြန်လည်ရယူခြင်း',
+        message: 'လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?',
+        onConfirm: () => executeRestoreDraft(draft),
       });
       return;
     }
-    executeRestoreDraft(draft);
-  };
 
-  const executeRestoreDraft = async (draft) => {
-    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
-    clearCart(); setEntryTab(draft.type || 'Sale'); setPersonSearch(draft.personSearch || ''); setSelectedPerson(draft.selectedPerson || null);
-    setNewPersonPhone(draft.newPersonPhone || ''); setNewPersonAddress(draft.newPersonAddress || ''); setGlobalDiscountAmt(draft.globalDiscountAmt || '');
-    setGlobalDiscountType(draft.globalDiscountType || '%'); setPaymentMethod(draft.paymentMethod || 'Cash'); setPaidAmount(draft.paidAmount || '');
-    if (draft.cart && Array.isArray(draft.cart)) setCart(draft.cart.map(item => ({ ...item, id: item.id || Date.now() + Math.random() })));
-    try {
-      await deleteDoc(doc(db, 'pos_drafts', draft.id));
-      fetchDrafts(); setShowDrafts(false);
-      showToast("ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။", "success");
-    } catch (err) {
-      logger.error('Error restoring draft:', err);
-    }
+    executeRestoreDraft(draft);
   };
 
   const deleteDraft = (id) => {
     setConfirmDialog({
       isOpen: true,
-      title: "Draft ဖျက်သိမ်းခြင်း",
-      message: "ဤ Draft အား ဖျက်မှာ သေချာပါသလား?",
+      title: 'Draft ဖျက်သိမ်းခြင်း',
+      message: 'ဤ Draft အား ဖျက်မှာ သေချာပါသလား?',
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
+
         try {
           await deleteDoc(doc(db, 'pos_drafts', id));
           fetchDrafts();
-          showToast("Draft ဖျက်သိမ်းပြီးပါပြီ", "success");
+          showToast('Draft ဖျက်သိမ်းပြီးပါပြီ', 'success');
         } catch (err) {
           logger.error('Error deleting draft:', err);
         }
-      }
+      },
     });
   };
 
@@ -375,46 +600,61 @@ export default function EntryPage({ products = [] }) {
     if (submitLock.current) return;
     if (!expenseTitle || !expenseAmt || !tenantId) return;
 
-    submitLock.current = true; setLoading(true);
+    submitLock.current = true;
+    setLoading(true);
+
     try {
       const counterRef = doc(db, 'pos_counters', tenantId || 'default');
       const counterSnap = await getDoc(counterRef);
-      const nextCount = (counterSnap.exists() ? (counterSnap.data().expenseCount || 0) : 0) + 1;
+      const nextCount = (counterSnap.exists() ? counterSnap.data().expenseCount || 0 : 0) + 1;
       const voucherNo = buildVoucherNo('Expense', nextCount, entryDate || todayISO);
-
       const batch = writeBatch(db);
       const ref = doc(collection(db, 'pos_records'));
 
       batch.set(ref, {
-        type: 'Expense', tenantId: tenantId, item: expenseTitle, amount: Number(expenseAmt) || 0, date: entryDate,
-        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        cashier: cashierName, voucherNo: voucherNo, createdAt: serverTimestamp()
+        type: 'Expense',
+        tenantId,
+        item: expenseTitle,
+        amount: Number(expenseAmt) || 0,
+        date: entryDate,
+        time: new Date().toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        cashier: cashierName,
+        voucherNo,
+        createdAt: serverTimestamp(),
       });
 
       if (counterSnap.exists()) {
-        batch.set(counterRef, { expenseCount: increment(1), tenantId: tenantId }, { merge: true });
+        batch.set(counterRef, { expenseCount: increment(1), tenantId }, { merge: true });
       } else {
-        batch.set(counterRef, { expenseCount: 1, tenantId: tenantId });
+        batch.set(counterRef, { expenseCount: 1, tenantId });
       }
 
       await batch.commit();
-      setExpenseTitle(''); setExpenseAmt('');
-      showToast("Expense သိမ်းဆည်းပြီးပါပြီ!", "success");
+      setExpenseTitle('');
+      setExpenseAmt('');
+      showToast('Expense သိမ်းဆည်းပြီးပါပြီ!', 'success');
     } catch (err) {
       logger.error('Error saving expense:', err);
-      showToast("Error saving expense", "error");
+      showToast('Error saving expense', 'error');
+    } finally {
+      submitLock.current = false;
+      setLoading(false);
     }
-    submitLock.current = false; setLoading(false);
   };
 
-  // 🌟 (၁) STOCK LOCK ပြဿနာ ဖြေရှင်းထားသော SUBMIT TRANSACTION စနစ် 🌟
   const submitTransaction = async () => {
     if (submitLock.current) return;
     if (cart.length === 0 || !tenantId) return;
 
-    const invalidItem = cart.find(item => item.quantity === '' || Number(item.quantity) <= 0);
+    const invalidItem = cart.find((item) => item.quantity === '' || Number(item.quantity) <= 0);
+
     if (invalidItem) {
-      return showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် အလွတ် သို့မဟုတ် မှားယွင်းနေပါသည်။`, "error");
+      showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။`, 'error');
+      return;
     }
 
     const total = Number(cartTotals.total) || 0;
@@ -429,7 +669,10 @@ export default function EntryPage({ products = [] }) {
       (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
     if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
-      showToast(`အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`, "error");
+      showToast(
+        `အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`,
+        'error'
+      );
       return;
     }
 
@@ -442,16 +685,13 @@ export default function EntryPage({ products = [] }) {
       await runTransaction(db, async (transaction) => {
         const stockChecks = [];
 
-        // Firestore transaction rule: reads အားလုံးကို writes မလုပ်ခင် အရင်ပြီးအောင်လုပ်မယ်
         for (const item of cart) {
           if (!item.productId) continue;
 
           const prodRef = doc(db, 'pos_products', item.productId);
           const prodSnap = await transaction.get(prodRef);
 
-          if (!prodSnap.exists()) {
-            throw new Error(`ပစ္စည်းရှာမတွေ့ပါ: ${item.name}`);
-          }
+          if (!prodSnap.exists()) throw new Error(`ပစ္စည်းရှာမတွေ့ပါ: ${item.name}`);
 
           const productData = prodSnap.data();
           const currentStockBase = Number(productData.stockBase ?? productData.stock ?? 0);
@@ -480,13 +720,8 @@ export default function EntryPage({ products = [] }) {
         const counterRef = doc(db, 'pos_counters', tenantId || 'default');
         const counterSnap = await transaction.get(counterRef);
         const countField = `${entryTab.toLowerCase()}Count`;
+        const nextCount = counterSnap.exists() ? (Number(counterSnap.data()[countField]) || 0) + 1 : 1;
 
-        let nextCount = 1;
-        if (counterSnap.exists()) {
-          nextCount = (Number(counterSnap.data()[countField]) || 0) + 1;
-        }
-
-        // Customer / Supplier အသစ်ဆို transaction ထဲမှာ create
         if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
           const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
           const newPersonRef = doc(collection(db, collectionName));
@@ -536,8 +771,8 @@ export default function EntryPage({ products = [] }) {
           const quantity = Number(i.quantity) || 1;
           const unitPrice = Number(i.unitPrice) || 0;
           const itemDiscountAmt = Number(i.itemDiscountAmt) || 0;
-          const itemTotal = (unitPrice * quantity) - itemDiscountAmt;
-          const itemProfit = itemTotal - (costPrice * quantity);
+          const itemTotal = unitPrice * quantity - itemDiscountAmt;
+          const itemProfit = itemTotal - costPrice * quantity;
 
           return {
             productId: i.productId || '',
@@ -555,10 +790,10 @@ export default function EntryPage({ products = [] }) {
           };
         });
 
-        const totalCost = itemsDetail.reduce((sum, item) => {
-          return sum + (Number(item.costPrice) || 0) * (Number(item.quantity) || 0);
-        }, 0);
-
+        const totalCost = itemsDetail.reduce(
+          (sum, item) => sum + (Number(item.costPrice) || 0) * (Number(item.quantity) || 0),
+          0
+        );
         const grossProfit = entryTab === 'Sale' ? total - totalCost : 0;
 
         const recordData = {
@@ -568,29 +803,23 @@ export default function EntryPage({ products = [] }) {
           personName: personNameForRecord,
           customerId: entryTab === 'Sale' ? personIdForRecord : null,
           supplierId: entryTab === 'Purchase' ? personIdForRecord : null,
-
           cashier: cashierName,
           cashierEmail: profile?.email || '',
           time: currentTime,
           voucherNo,
-
           itemsDetail,
-          item: itemsDetail.length > 1 ? 'Multiple' : (itemsDetail[0]?.name || 'Multiple'),
-
+          item: itemsDetail.length > 1 ? 'Multiple' : itemsDetail[0]?.name || 'Multiple',
           amount: total,
           subtotal: Number(cartTotals.subtotal) || 0,
           itemDiscount: Number(cartTotals.itemDiscounts) || 0,
           globalDiscount: Number(cartTotals.globalDisc) || 0,
-
           paymentMethod: paymentMethod || 'Cash',
           paidAmount: paid,
           remainingDebt,
           changeAmount,
-
           totalCost,
           grossProfit,
           profit: grossProfit,
-
           date: entryDate || todayISO,
           createdAt: serverTimestamp(),
           createdAtLocal: Date.now(),
@@ -611,7 +840,6 @@ export default function EntryPage({ products = [] }) {
       });
 
       setReceiptModal({ show: true, record: receiptRecord });
-
       clearCart();
       setPersonSearch('');
       setSelectedPerson(null);
@@ -621,43 +849,54 @@ export default function EntryPage({ products = [] }) {
       setPaymentMethod('Cash');
 
       const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
-      setCustomers(custSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCustomers(custSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
       const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
-      setSuppliers(suppSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
       showToast(`${entryTab} သိမ်းဆည်းပြီးပါပြီ။`, 'success');
     } catch (err) {
-      logger.error("Transaction Error: ", err);
-      showToast(err.message || "Error saving transaction! Please check your connection and try again.", "error");
+      logger.error('Transaction Error: ', err);
+      showToast(err.message || 'Error saving transaction! Please check your connection and try again.', 'error');
     } finally {
       submitLock.current = false;
       setLoading(false);
     }
   };
 
-  const doPrint = () => { window.print(); };
+  const doPrint = () => window.print();
 
   const handleBarcodeScanned = (text) => {
     const cleanText = text.trim().toLowerCase();
     const match = barcodeMap.get(cleanText);
 
-    if (match) {
-      const { product, unit } = match;
-      const res = addToCart(product, unit, 'retail', 1);
-      if (!res.success) showToast(res.message, 'error');
-      else {
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator(); const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
-          gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-          osc.start(); osc.stop(ctx.currentTime + 0.3);
-        } catch (e) {}
-      }
-    } else {
-      showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`, "error");
+    if (!match) {
+      showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`, 'error');
+      return;
+    }
+
+    const { product, unit } = match;
+    const res = addToCart(product, unit, 'retail', 1);
+
+    if (!res.success) {
+      showToast(res.message, 'error');
+      return;
+    }
+
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      logger.warn('Audio beep failed', e);
     }
   };
 
@@ -673,18 +912,30 @@ export default function EntryPage({ products = [] }) {
 
       {promptModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:hidden">
-          <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+          <div className="bg-[#0d1120] border-2 border-cyan-500/20 rounded-3xl p-6 w-full max-w-sm shadow-2xl shadow-cyan-950/40">
             <h3 className="text-xl font-black text-cyan-400 mb-4">ခဏဆိုင်းထားမည့် ဘေလ်အမည်</h3>
             <input
               autoFocus
               value={promptModal.name}
-              onChange={e => setPromptModal({ ...promptModal, name: e.target.value })}
+              onChange={(e) => setPromptModal({ ...promptModal, name: e.target.value })}
               className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-cyan-500 mb-6"
               placeholder="ဥပမာ - စားပွဲ ၃"
             />
             <div className="flex gap-3">
-              <button onClick={() => executeHoldInvoice(promptModal.name)} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold">သိမ်းမည်</button>
-              <button onClick={() => setPromptModal({ isOpen: false, name: '' })} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold">ပယ်ဖျက်မည်</button>
+              <button
+                type="button"
+                onClick={() => executeHoldInvoice(promptModal.name)}
+                className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
+              >
+                သိမ်းမည်
+              </button>
+              <button
+                type="button"
+                onClick={() => setPromptModal({ isOpen: false, name: '' })}
+                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-bold"
+              >
+                ပယ်ဖျက်မည်
+              </button>
             </div>
           </div>
         </div>
@@ -692,260 +943,592 @@ export default function EntryPage({ products = [] }) {
 
       {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
 
-      <div className="p-3 sm:p-4 pb-28 text-white max-w-5xl mx-auto space-y-4 bg-[#080c14] min-h-screen print:hidden">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-black text-cyan-400 flex items-center gap-2"><ShoppingCart size={22}/> POS ENTRY</h1>
-          <div className="flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-xl px-3 py-1.5 shadow-inner">
-            <Calendar size={14} className="text-cyan-400"/>
-            <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-[110px]" style={{colorScheme:'dark'}}/>
-          </div>
+      <div className="relative min-h-screen bg-[#060816] text-white overflow-x-hidden print:hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-cyan-500/10 blur-[120px]" />
+          <div className="absolute top-1/3 -right-24 w-96 h-96 rounded-full bg-blue-500/10 blur-[120px]" />
+          <div className="absolute -bottom-32 left-1/4 w-[500px] h-[500px] rounded-full bg-violet-500/10 blur-[140px]" />
         </div>
 
-        {/* 🌟 Tab များကို Permission စစ်ဆေးပြီး ဖျောက်/ပေါ် လုပ်ထားပါသည် */}
-        <div className="grid grid-flow-col auto-cols-fr gap-2 bg-[#0d1120] p-1.5 rounded-xl border border-white/5">
-          {hasPermission('create_sale') && (
-            <button onClick={() => handleTabChange('Sale')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Sale' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Sale</button>
-          )}
-          {hasPermission('create_purchase') && (
-            <button onClick={() => handleTabChange('Purchase')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Purchase' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Purchase</button>
-          )}
-          {hasPermission('create_expense') && (
-            <button onClick={() => handleTabChange('Expense')} className={`py-2 rounded-lg font-black text-xs transition-all ${entryTab === 'Expense' ? 'bg-cyan-600 shadow-md shadow-cyan-900/40 text-white' : 'text-slate-500 hover:text-white'}`}>Expense</button>
-          )}
-        </div>
-
-        {entryTab === 'Sale' && hasPermission('create_sale') && (
-          <div className="flex justify-end">
-            <button onClick={async () => { await fetchDrafts(); setShowDrafts(!showDrafts); }} className="text-xs bg-indigo-900/40 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-800/40 flex items-center gap-1 border border-indigo-500/20">
-              <RotateCcw size={14}/> {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
-            </button>
-          </div>
-        )}
-
-        {showDrafts && entryTab === 'Sale' && (
-          <div className="bg-[#0d1120] border border-indigo-500/20 rounded-xl p-3 space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-            <h3 className="text-xs font-bold text-indigo-400 mb-2">Saved Hold Invoices</h3>
-            {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
-            {drafts.map(d => (
-              <div key={d.id} className="flex justify-between items-center bg-black/30 p-2 rounded-lg border border-white/5">
+        <div className="relative z-10 p-3 sm:p-5 pb-28 max-w-[1600px] mx-auto space-y-4">
+          <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 sm:p-5 shadow-2xl shadow-black/30">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-3 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <ShoppingCart size={26} />
+                </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{d.draftName}</p>
-                  <p className="text-[10px] text-slate-400">{d.type} | {d.cart?.length || 0} items | {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}</p>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => restoreDraft(d)} className="px-3 py-1 bg-cyan-600 rounded text-xs font-bold text-white">Restore</button>
-                  <button onClick={() => deleteDraft(d.id)} className="px-2 py-1 bg-red-600 rounded text-xs text-white"><X size={14}/></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {entryTab === 'Expense' ? (
-          <div className="bg-[#0d1120] border border-amber-500/20 rounded-xl p-4 space-y-3">
-            <h2 className="text-amber-400 font-bold text-sm mb-2">Record Expense</h2>
-            <input value={expenseTitle} onChange={e => setExpenseTitle(e.target.value)} placeholder="Expense Title (e.g. မီတာခ)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <input type="number" value={expenseAmt} onChange={e => setExpenseAmt(e.target.value)} placeholder="Amount (Ks)" className="w-full bg-black/40 border border-amber-500/30 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-amber-400" />
-            <button onClick={submitExpense} disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform">{loading ? 'Saving...' : 'Save Expense'}</button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="relative z-20 space-y-2">
-              <div className="relative">
-                <User className={`absolute left-3 top-3.5 ${selectedPerson ? 'text-green-400' : 'text-cyan-500'}`} size={16}/>
-                <input
-                  value={personSearch}
-                  onChange={e => { setPersonSearch(e.target.value); setSelectedPerson(null); setShowPersonDropdown(true); }}
-                  onFocus={() => setShowPersonDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
-                  placeholder={entryTab === 'Sale' ? "Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ" : "Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ"}
-                  className={`w-full bg-black/40 border rounded-xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${selectedPerson ? 'border-green-500/50' : 'border-cyan-500/20 focus:border-cyan-400'}`}
-                />
-                {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-slate-900 border border-cyan-500/30 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scrollbar z-50">
-                    {filteredPersons.map(p => (
-                      <div key={p.id} onMouseDown={() => { setSelectedPerson(p); setPersonSearch(p.name); setShowPersonDropdown(false); setNewPersonPhone(''); setNewPersonAddress(''); }}
-                        className="px-4 py-2.5 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
-                      >
-                        <p className="text-sm font-bold text-white">{p.name}</p>
-                        {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {!selectedPerson && personSearch.trim().length > 0 && (
-                <div className="p-3 bg-green-900/10 rounded-xl border border-green-500/20 shadow-inner">
-                  <p className="text-[11px] font-bold text-green-400 mb-2">
-                    <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                  <h1 className="text-2xl sm:text-3xl font-black">
+                    <span className="text-white">NexPOS</span>{' '}
+                    <span className="text-cyan-400">Entry</span>
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">
+                    Cashier: <span className="text-cyan-300">{cashierName}</span>
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input value={newPersonPhone} onChange={e => setNewPersonPhone(e.target.value)} placeholder="ဖုန်းနံပါတ် (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
-                    <input value={newPersonAddress} onChange={e => setNewPersonAddress(e.target.value)} placeholder="လိပ်စာ (မထည့်လည်းရသည်)" className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-green-400 transition-colors" />
-                  </div>
                 </div>
-              )}
-            </div>
+              </div>
 
-            <ProductSearch categories={categories} selCategory={selCategory} setSelCategory={setSelCategory} prodSearch={prodSearch} setProdSearch={setProdSearch} setShowScanner={setShowScanner} />
-
-            <div className="relative z-10">
-              {debouncedSearch.length > 0 ? (
-                <ProductDropdown products={filteredProducts} onSelect={handleSelectProduct} isOpen={true} />
-              ) : (
-                <ProductGrid products={filteredProducts} onSelect={handleSelectProduct} />
-              )}
-            </div>
-
-            <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-2 sm:p-3 mt-4">
-              <div className="flex justify-between items-center mb-2 pl-1 pr-1">
-                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Order</h2>
-                {entryTab === 'Sale' && (
-                  <button onClick={handleHoldInvoiceClick} disabled={cart.length === 0}
-                    className={`text-[10px] px-3 py-1.5 rounded font-bold transition-colors flex items-center gap-1 ${cart.length === 0 ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40'}`}
+              <div className="grid grid-cols-2 sm:flex gap-2">
+                {hasPermission('create_sale') && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('Sale')}
+                    className={`px-4 py-2 rounded-2xl font-black text-xs transition-all ${
+                      entryTab === 'Sale'
+                        ? 'bg-cyan-500 text-[#060816] shadow-lg shadow-cyan-500/20'
+                        : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
+                    }`}
                   >
-                    <PauseCircle size={12}/> Pause / Hold
+                    Sale
                   </button>
                 )}
+                {hasPermission('create_purchase') && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('Purchase')}
+                    className={`px-4 py-2 rounded-2xl font-black text-xs transition-all ${
+                      entryTab === 'Purchase'
+                        ? 'bg-cyan-500 text-[#060816] shadow-lg shadow-cyan-500/20'
+                        : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Purchase
+                  </button>
+                )}
+                {hasPermission('create_expense') && (
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange('Expense')}
+                    className={`px-4 py-2 rounded-2xl font-black text-xs transition-all ${
+                      entryTab === 'Expense'
+                        ? 'bg-amber-500 text-[#060816] shadow-lg shadow-amber-500/20'
+                        : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Expense
+                  </button>
+                )}
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-2">
+                  <Calendar size={14} className="text-cyan-400" />
+                  <input
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-cyan-300 outline-none w-full sm:w-[120px]"
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </div>
               </div>
+            </div>
+          </div>
 
-              <CartSection cart={cart} products={products} onUpdateQty={updateCartItemQty} onUpdateUnit={updateCartItemUnit} onUpdatePriceType={updateCartItemPriceType} onUpdateDiscount={updateCartItemDiscount} onUpdatePrice={updateCartItemPrice} onRemove={removeCartItem} />
-
-              {cart.length > 0 && (
-                <div className="mt-3 bg-black/50 border border-cyan-500/10 rounded-lg p-3 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-300"><span>Subtotal</span><span>{Number(cartTotals.subtotal).toLocaleString()} Ks</span></div>
-                  {cartTotals.itemDiscounts > 0 && (
-                    <div className="flex justify-between text-amber-400"><span>Item Discounts</span><span>-{Number(cartTotals.itemDiscounts).toLocaleString()} Ks</span></div>
-                  )}
-                  {entryTab === 'Sale' && (
-                    <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
-                      <span className="flex items-center gap-1">
-                        Invoice Discount
-                        <select value={globalDiscountType} onChange={e => setGlobalDiscountType(e.target.value)} className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20">
-                          <option value="%">%</option>
-                          <option value="flat">Ks</option>
-                        </select>
-                      </span>
-                      <input type="number" value={globalDiscountAmt} onChange={e => setGlobalDiscountAmt(e.target.value)} placeholder="0" className="w-16 bg-black/50 border border-amber-500/30 rounded px-1.5 py-1 text-right outline-none focus:border-amber-400 text-amber-400" />
-                    </div>
-                  )}
-                  {cartTotals.globalDisc > 0 && (
-                    <div className="flex justify-between text-amber-400"><span>Applied Discount</span><span>-{Number(cartTotals.globalDisc).toLocaleString()} Ks</span></div>
-                  )}
-
-                  <div className="flex justify-between text-lg font-black text-cyan-300 border-t border-cyan-500/20 pt-2 mt-2">
-                    <span>TOTAL</span><span>{Number(cartTotals.total).toLocaleString()} Ks</span>
+          {entryTab === 'Expense' ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-2 bg-[#0d1120]/95 border border-amber-500/20 rounded-3xl p-5 space-y-4 shadow-xl">
+                <h2 className="text-amber-400 font-black text-xl flex items-center gap-2">
+                  <Wallet size={22} />
+                  Record Expense
+                </h2>
+                <input
+                  value={expenseTitle}
+                  onChange={(e) => setExpenseTitle(e.target.value)}
+                  placeholder="Expense Title (e.g. မီတာခ)"
+                  className="w-full bg-black/40 border border-amber-500/30 rounded-2xl px-4 py-4 text-sm text-white outline-none focus:border-amber-400"
+                />
+                <input
+                  type="number"
+                  value={expenseAmt}
+                  onChange={(e) => setExpenseAmt(e.target.value)}
+                  placeholder="Amount (Ks)"
+                  className="w-full bg-black/40 border border-amber-500/30 rounded-2xl px-4 py-4 text-sm text-white outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={submitExpense}
+                  disabled={loading}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 font-black text-sm active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : 'Save Expense'}
+                </button>
+              </div>
+              <div className="bg-[#0d1120]/95 border border-white/5 rounded-3xl p-5">
+                <h3 className="font-black text-slate-300 mb-3">Today Info</h3>
+                <div className="space-y-3">
+                  <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
+                    <p className="text-xs text-slate-500 font-bold">Voucher Prefix</p>
+                    <p className="text-amber-400 font-black">EXP</p>
+                  </div>
+                  <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
+                    <p className="text-xs text-slate-500 font-bold">Cashier</p>
+                    <p className="text-white font-black">{cashierName}</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Products</p>
+                  <p className="text-2xl font-black text-cyan-400 mt-1">{summary.productCount}</p>
+                </div>
+                <div className="rounded-3xl border border-violet-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Cart Qty</p>
+                  <p className="text-2xl font-black text-violet-400 mt-1">{summary.cartCount}</p>
+                </div>
+                <div className="rounded-3xl border border-amber-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Low Stock</p>
+                  <p className="text-2xl font-black text-amber-400 mt-1">{summary.lowStockCount}</p>
+                </div>
+                <div className="rounded-3xl border border-emerald-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total</p>
+                  <p className="text-xl font-black text-emerald-400 mt-1">{formatMoney(summary.total)}</p>
+                </div>
+              </div>
+
+              {entryTab === 'Sale' && hasPermission('create_sale') && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await fetchDrafts();
+                      setShowDrafts(!showDrafts);
+                    }}
+                    className="text-xs bg-indigo-500/10 text-indigo-300 px-4 py-2 rounded-2xl hover:bg-indigo-500/20 flex items-center gap-2 border border-indigo-500/20 font-black"
+                  >
+                    <RotateCcw size={14} />
+                    {showDrafts ? 'Close Drafts' : `Saved Drafts (${drafts.length})`}
+                  </button>
+                </div>
               )}
-            </div>
 
-            {cart.length > 0 && (
-              <PaymentSection
-                paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod}
-                paidAmount={paidAmount} setPaidAmount={setPaidAmount}
-                submitTransaction={submitTransaction} loading={loading}
-                entryTab={entryTab}
-              />
-            )}
-          </div>
-        )}
-
-        {/* View Receipt Modal */}
-        {receiptModal.show && receiptModal.record && (
-          <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-            <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
-              <div className="text-center mb-4">
-                {shopSettings.logoUrl && (
-                  <img
-                    src={shopSettings.logoUrl}
-                    alt={shopSettings.shopName}
-                    className="h-16 w-auto mx-auto mb-2 object-contain"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                )}
-                <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{shopSettings.shopName}</h2>
-                {shopSettings.address && <p className="text-xs text-gray-500 mt-1">{shopSettings.address}</p>}
-                {shopSettings.phone && <p className="text-xs text-gray-500">Tel: {shopSettings.phone}</p>}
-              </div>
-              <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
-                <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
-                <div className="flex justify-between"><span>Date & Time:</span> <span className="text-gray-900">{receiptModal.record.date} | {receiptModal.record.time}</span></div>
-                <div className="flex justify-between"><span>Cashier:</span> <span className="text-gray-900">{receiptModal.record.cashier}</span></div>
-                <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
-              </div>
-              <div className="mb-4">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-300 text-gray-500">
-                      <th className="text-left py-2 font-bold uppercase tracking-wider">Description</th>
-                      <th className="text-right py-2 font-bold uppercase tracking-wider">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receiptModal.record.itemsDetail.map((item,i) => (
-                      <tr key={i} className="border-b border-gray-100 last:border-0">
-                        <td className="py-2.5">
-                          <div className="font-bold text-gray-800">{item.name}</div>
-                          <div className="text-gray-500 text-[10px] mt-0.5">
-                            {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
-                            {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
-                          </div>
-                        </td>
-                        <td className="py-2.5 text-right font-bold text-gray-800 align-top">
-                          {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="border-t border-dashed border-gray-300 pt-3 text-[11px] font-semibold text-gray-600 space-y-1.5">
-                 <div className="flex justify-between"><span>Subtotal:</span><span className="text-gray-900">{Number(receiptModal.record.subtotal).toLocaleString()} Ks</span></div>
-                 {(receiptModal.record.itemDiscount > 0 || receiptModal.record.globalDiscount > 0) && (
-                    <div className="flex justify-between text-red-500">
-                      <span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()} Ks</span>
+              {showDrafts && entryTab === 'Sale' && (
+                <div className="bg-[#0d1120]/95 border border-indigo-500/20 rounded-3xl p-4 space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                  <h3 className="text-sm font-black text-indigo-400 mb-2">Saved Hold Invoices</h3>
+                  {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
+                  {drafts.map((d) => (
+                    <div
+                      key={d.id}
+                      className="flex justify-between items-center bg-black/30 p-3 rounded-2xl border border-white/5"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-white">{d.draftName}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {d.type} | {d.cart?.length || 0} items |{' '}
+                          {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => restoreDraft(d)}
+                          className="px-3 py-2 bg-cyan-600 rounded-xl text-xs font-bold text-white"
+                        >
+                          Restore
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteDraft(d.id)}
+                          className="px-3 py-2 bg-rose-600 rounded-xl text-xs text-white"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
-                 )}
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4 items-start">
+                <div className="space-y-4 min-w-0">
+                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                      <User size={16} className="text-cyan-400" />
+                      <h2 className="font-black text-sm text-slate-200">
+                        {entryTab === 'Sale' ? 'Customer' : 'Supplier'}
+                      </h2>
+                    </div>
+
+                    <div className="relative z-20 space-y-2">
+                      <div className="relative">
+                        <User
+                          className={`absolute left-3 top-3.5 ${
+                            selectedPerson ? 'text-green-400' : 'text-cyan-500'
+                          }`}
+                          size={16}
+                        />
+                        <input
+                          value={personSearch}
+                          onChange={(e) => {
+                            setPersonSearch(e.target.value);
+                            setSelectedPerson(null);
+                            setShowPersonDropdown(true);
+                          }}
+                          onFocus={() => setShowPersonDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
+                          placeholder={
+                            entryTab === 'Sale'
+                              ? 'Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ'
+                              : 'Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ'
+                          }
+                          className={`w-full bg-black/40 border rounded-2xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${
+                            selectedPerson
+                              ? 'border-green-500/50'
+                              : 'border-cyan-500/20 focus:border-cyan-400'
+                          }`}
+                        />
+
+                        {showPersonDropdown && personSearch.length > 0 && filteredPersons.length > 0 && (
+                          <div className="absolute top-full left-0 mt-1 w-full bg-slate-950 border border-cyan-500/30 rounded-2xl shadow-xl max-h-56 overflow-y-auto custom-scrollbar z-50">
+                            {filteredPersons.map((p) => (
+                              <div
+                                key={p.id}
+                                onMouseDown={() => {
+                                  setSelectedPerson(p);
+                                  setPersonSearch(p.name);
+                                  setShowPersonDropdown(false);
+                                  setNewPersonPhone('');
+                                  setNewPersonAddress('');
+                                }}
+                                className="px-4 py-3 hover:bg-cyan-600/30 cursor-pointer border-b border-white/5 last:border-0"
+                              >
+                                <p className="text-sm font-bold text-white">{p.name}</p>
+                                {p.phone && <p className="text-[10px] text-cyan-400">{p.phone}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {!selectedPerson && personSearch.trim().length > 0 && (
+                        <div className="p-3 bg-green-500/10 rounded-2xl border border-green-500/20 shadow-inner">
+                          <p className="text-[11px] font-bold text-green-400 mb-2">
+                            <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              value={newPersonPhone}
+                              onChange={(e) => setNewPersonPhone(e.target.value)}
+                              placeholder="ဖုန်းနံပါတ်"
+                              className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-400"
+                            />
+                            <input
+                              value={newPersonAddress}
+                              onChange={(e) => setNewPersonAddress(e.target.value)}
+                              placeholder="လိပ်စာ"
+                              className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Boxes size={17} className="text-cyan-400" />
+                        <h2 className="font-black text-sm text-slate-200">Product Board</h2>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowScanner(true)}
+                        className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-xs font-black"
+                      >
+                        <ScanLine size={14} />
+                        Scan
+                      </button>
+                    </div>
+
+                    <ProductSearch
+                      categories={categories}
+                      selCategory={selCategory}
+                      setSelCategory={setSelCategory}
+                      prodSearch={prodSearch}
+                      setProdSearch={setProdSearch}
+                      setShowScanner={setShowScanner}
+                    />
+
+                    <div className="relative z-10 mt-4">
+                      {debouncedSearch.length > 0 ? (
+                        <ProductDropdown products={filteredProducts} onSelect={handleSelectProduct} isOpen />
+                      ) : (
+                        <ProductGrid products={filteredProducts} onSelect={handleSelectProduct} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 xl:sticky xl:top-4">
+                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-2xl shadow-cyan-950/20">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-2">
+                        <ReceiptText size={18} className="text-cyan-400" />
+                        <h2 className="text-sm font-black text-slate-200">Current Order</h2>
+                      </div>
+
+                      {entryTab === 'Sale' && (
+                        <button
+                          type="button"
+                          onClick={handleHoldInvoiceClick}
+                          disabled={cart.length === 0}
+                          className={`text-[10px] px-3 py-2 rounded-xl font-bold transition-colors flex items-center gap-1 ${
+                            cart.length === 0
+                              ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                              : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
+                          }`}
+                        >
+                          <PauseCircle size={12} />
+                          Hold
+                        </button>
+                      )}
+                    </div>
+
+                    <CartSection
+                      cart={cart}
+                      products={products}
+                      onUpdateQty={updateCartItemQty}
+                      onUpdateUnit={updateCartItemUnit}
+                      onUpdatePriceType={updateCartItemPriceType}
+                      onUpdateDiscount={updateCartItemDiscount}
+                      onUpdatePrice={updateCartItemPrice}
+                      onRemove={removeCartItem}
+                    />
+
+                    {cart.length > 0 ? (
+                      <div className="mt-4 bg-black/50 border border-cyan-500/10 rounded-2xl p-4 space-y-2 text-xs">
+                        <div className="flex justify-between text-slate-300">
+                          <span>Subtotal</span>
+                          <span>{formatMoney(cartTotals.subtotal)}</span>
+                        </div>
+
+                        {cartTotals.itemDiscounts > 0 && (
+                          <div className="flex justify-between text-amber-400">
+                            <span>Item Discounts</span>
+                            <span>-{formatMoney(cartTotals.itemDiscounts)}</span>
+                          </div>
+                        )}
+
+                        {entryTab === 'Sale' && (
+                          <div className="flex justify-between items-center text-amber-400 border-t border-white/5 pt-2">
+                            <span className="flex items-center gap-1">
+                              Invoice Discount
+                              <select
+                                value={globalDiscountType}
+                                onChange={(e) => setGlobalDiscountType(e.target.value)}
+                                className="bg-black/50 text-white rounded px-1 py-0.5 outline-none border border-amber-500/20"
+                              >
+                                <option value="%">%</option>
+                                <option value="flat">Ks</option>
+                              </select>
+                            </span>
+                            <input
+                              type="number"
+                              value={globalDiscountAmt}
+                              onChange={(e) => setGlobalDiscountAmt(e.target.value)}
+                              placeholder="0"
+                              className="w-20 bg-black/50 border border-amber-500/30 rounded px-2 py-1 text-right outline-none focus:border-amber-400 text-amber-400"
+                            />
+                          </div>
+                        )}
+
+                        {cartTotals.globalDisc > 0 && (
+                          <div className="flex justify-between text-amber-400">
+                            <span>Applied Discount</span>
+                            <span>-{formatMoney(cartTotals.globalDisc)}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between text-xl font-black text-cyan-300 border-t border-cyan-500/20 pt-3 mt-3">
+                          <span>TOTAL</span>
+                          <span>{formatMoney(cartTotals.total)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-2xl">
+                        Select product to start sale.
+                      </div>
+                    )}
+                  </div>
+
+                  {cart.length > 0 && (
+                    <div className="bg-[#0d1120]/95 border border-emerald-500/20 rounded-3xl p-4 shadow-xl">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CreditCard size={18} className="text-emerald-400" />
+                        <h2 className="text-sm font-black text-slate-200">Payment</h2>
+                      </div>
+
+                      <PaymentSection
+                        paymentMethod={paymentMethod}
+                        setPaymentMethod={setPaymentMethod}
+                        paidAmount={paidAmount}
+                        setPaidAmount={setPaidAmount}
+                        submitTransaction={submitTransaction}
+                        loading={loading}
+                        entryTab={entryTab}
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-[#0d1120]/95 border border-emerald-500/20 rounded-3xl p-4">
+                      <p className="text-[10px] text-slate-500 font-black uppercase">Paid</p>
+                      <p className="text-lg font-black text-emerald-400">{formatMoney(summary.paid)}</p>
+                    </div>
+                    <div className="bg-[#0d1120]/95 border border-rose-500/20 rounded-3xl p-4">
+                      <p className="text-[10px] text-slate-500 font-black uppercase">Balance</p>
+                      <p className="text-lg font-black text-rose-400">{formatMoney(summary.balance)}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="border-t border-gray-300 pt-3 mt-3 flex justify-between text-lg font-black text-gray-900">
-                <span>GRAND TOTAL</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
-                 <div className="flex justify-between">
-                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
-                   <span className="text-gray-900">{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span>
-                 </div>
-                 {receiptModal.record.remainingDebt > 0 ? (
-                   <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
-                     <span>Credit Balance (အကြွေး):</span>
-                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span>
-                   </div>
-                 ) : (
-                   <div className="flex justify-between text-green-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
-                     <span>Change (ပြန်အမ်းငွေ):</span>
-                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()} Ks</span>
-                   </div>
-                 )}
-              </div>
-              <div className="text-center mt-6 flex flex-col items-center gap-2">
-                <span className={`font-black tracking-widest border-2 px-4 py-1 rounded-sm text-sm ${receiptModal.record.remainingDebt > 0 ? 'text-red-500 border-red-500' : 'text-green-500 border-green-500'}`}>
-                  {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
-                </span>
-                <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
-              </div>
-              <div className="mt-6 flex flex-col gap-2">
-                <button onClick={doPrint} className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30">
-                  <Printer size={18}/> Print Receipt
-                </button>
-                <button onClick={() => setReceiptModal({show:false, record:null})} className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors">
-                  New Transaction
-                </button>
+            </>
+          )}
+
+          {receiptModal.show && receiptModal.record && (
+            <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
+              <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
+                <div className="text-center mb-4">
+                  {shopSettings.logoUrl && (
+                    <img
+                      src={shopSettings.logoUrl}
+                      alt={shopSettings.shopName}
+                      className="h-16 w-auto mx-auto mb-2 object-contain"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">
+                    {shopSettings.shopName}
+                  </h2>
+                  {shopSettings.address && <p className="text-xs text-gray-500 mt-1">{shopSettings.address}</p>}
+                  {shopSettings.phone && <p className="text-xs text-gray-500">Tel: {shopSettings.phone}</p>}
+                </div>
+
+                <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span>Voucher No:</span>
+                    <span className="text-gray-900">{receiptModal.record.voucherNo}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Date & Time:</span>
+                    <span className="text-gray-900">
+                      {receiptModal.record.date} | {receiptModal.record.time}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Cashier:</span>
+                    <span className="text-gray-900">{receiptModal.record.cashier}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Customer:</span>
+                    <span className="text-gray-900">{receiptModal.record.personName}</span>
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-300 text-gray-500">
+                        <th className="text-left py-2 font-bold uppercase tracking-wider">Description</th>
+                        <th className="text-right py-2 font-bold uppercase tracking-wider">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receiptModal.record.itemsDetail.map((item, i) => (
+                        <tr key={`${item.name}-${i}`} className="border-b border-gray-100 last:border-0">
+                          <td className="py-2.5">
+                            <div className="font-bold text-gray-800">{item.name}</div>
+                            <div className="text-gray-500 text-[10px] mt-0.5">
+                              {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                              {item.itemDiscountAmt > 0 &&
+                                ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                            </div>
+                          </td>
+                          <td className="py-2.5 text-right font-bold text-gray-800 align-top">
+                            {Number(item.unitPrice * item.quantity - (item.itemDiscountAmt || 0)).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="border-t border-dashed border-gray-300 pt-3 text-[11px] font-semibold text-gray-600 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span className="text-gray-900">{formatMoney(receiptModal.record.subtotal)}</span>
+                  </div>
+
+                  {(receiptModal.record.itemDiscount > 0 || receiptModal.record.globalDiscount > 0) && (
+                    <div className="flex justify-between text-red-500">
+                      <span>Discount:</span>
+                      <span>
+                        -{formatMoney(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-300 pt-3 mt-3 flex justify-between text-lg font-black text-gray-900">
+                  <span>GRAND TOTAL</span>
+                  <span>{formatMoney(receiptModal.record.amount)}</span>
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-3 mt-4 space-y-1.5 text-xs font-semibold text-gray-600 border border-gray-200">
+                  <div className="flex justify-between">
+                    <span>Paid ({receiptModal.record.paymentMethod}):</span>
+                    <span className="text-gray-900">{formatMoney(receiptModal.record.paidAmount)}</span>
+                  </div>
+
+                  {receiptModal.record.remainingDebt > 0 ? (
+                    <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                      <span>Credit Balance:</span>
+                      <span>{formatMoney(receiptModal.record.remainingDebt)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-green-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5">
+                      <span>Change:</span>
+                      <span>{formatMoney(receiptModal.record.changeAmount)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-center mt-6 flex flex-col items-center gap-2">
+                  <span
+                    className={`font-black tracking-widest border-2 px-4 py-1 rounded-sm text-sm ${
+                      receiptModal.record.remainingDebt > 0
+                        ? 'text-red-500 border-red-500'
+                        : 'text-green-500 border-green-500'
+                    }`}
+                  >
+                    {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
+                  </span>
+                  <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={doPrint}
+                    className="w-full py-3 rounded-xl bg-cyan-600 text-white font-black flex items-center justify-center gap-2 active:scale-95 transition-transform shadow-lg shadow-cyan-600/30"
+                  >
+                    <Printer size={18} />
+                    Print Receipt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReceiptModal({ show: false, record: null })}
+                    className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold transition-colors"
+                  >
+                    New Transaction
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <style>{`
@@ -959,19 +1542,19 @@ export default function EntryPage({ products = [] }) {
             padding: 0;
             background: white;
           }
-          body * { 
-            visibility: hidden; 
+          body * {
+            visibility: hidden;
           }
-          #receipt-print-area, #receipt-print-area * { 
-            visibility: visible; 
+          #receipt-print-area, #receipt-print-area * {
+            visibility: visible;
           }
-          #receipt-print-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            margin: 0; 
-            padding: 4mm; 
+          #receipt-print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0;
+            padding: 4mm;
           }
           html, body {
             height: auto;
@@ -981,81 +1564,113 @@ export default function EntryPage({ products = [] }) {
       `}</style>
 
       {receiptModal.show && receiptModal.record && (
-         <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
-             <div className="text-center mb-3">
-                 {shopSettings.logoUrl && (
-                   <img
-                     src={shopSettings.logoUrl}
-                     alt={shopSettings.shopName}
-                     className="h-12 w-auto mx-auto mb-1 object-contain"
-                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                   />
-                 )}
-                 <h2 className="text-[18px] font-bold uppercase m-0">{shopSettings.shopName}</h2>
-                 {shopSettings.address && <p className="m-0 mt-1">{shopSettings.address}</p>}
-                 {shopSettings.phone && <p className="m-0">Tel: {shopSettings.phone}</p>}
-             </div>
-             <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
-                 <div className="flex justify-between"><span>Voucher:</span> <span className="font-bold">{receiptModal.record.voucherNo}</span></div>
-                 <div className="flex justify-between"><span>Date:</span> <span>{receiptModal.record.date} {receiptModal.record.time}</span></div>
-                 <div className="flex justify-between"><span>Cashier:</span> <span>{receiptModal.record.cashier}</span></div>
-                 <div className="flex justify-between"><span>Customer:</span> <span>{receiptModal.record.personName}</span></div>
-             </div>
-             <table className="w-full border-collapse mb-3">
-                 <thead>
-                     <tr className="border-b border-black">
-                         <th className="text-left pb-1 font-bold">Item</th>
-                         <th className="text-right pb-1 font-bold">Amount</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                     {receiptModal.record.itemsDetail.map((item, i) => (
-                         <tr key={i}>
-                             <td className="py-1.5 align-top">
-                                <div className="font-bold">{item.name}</div>
-                                <div className="text-[10px] mt-0.5">
-                                  {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
-                                  {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
-                                </div>
-                             </td>
-                             <td className="text-right py-1.5 align-top font-bold">
-                               {Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}
-                             </td>
-                         </tr>
-                     ))}
-                 </tbody>
-             </table>
-             <div className="border-t border-dashed border-black pt-2 mb-2 space-y-1">
-                 <div className="flex justify-between"><span>Subtotal:</span><span>{Number(receiptModal.record.subtotal).toLocaleString()}</span></div>
-                 {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
-                    <div className="flex justify-between"><span>Discount:</span><span>-{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()}</span></div>
-                 )}
-             </div>
-             <div className="flex justify-between font-bold border-t border-black pt-2 mb-3 text-[14px]">
-               <span>TOTAL:</span><span>{Number(receiptModal.record.amount).toLocaleString()}</span>
-             </div>
-             <div className="border-t border-black pt-2 mb-4 space-y-1">
-                 <div className="flex justify-between">
-                   <span>Paid ({receiptModal.record.paymentMethod}):</span>
-                   <span>{Number(receiptModal.record.paidAmount).toLocaleString()}</span>
-                 </div>
-                 {receiptModal.record.remainingDebt > 0 ? (
-                   <div className="flex justify-between font-bold">
-                     <span>Credit Balance:</span>
-                     <span>{Number(receiptModal.record.remainingDebt).toLocaleString()}</span>
-                   </div>
-                 ) : (
-                   <div className="flex justify-between font-bold">
-                     <span>Change:</span>
-                     <span>{Number(receiptModal.record.changeAmount).toLocaleString()}</span>
-                   </div>
-                 )}
-             </div>
-             <div className="text-center font-bold text-[14px] mb-2">
-                {receiptModal.record.remainingDebt > 0 ? '*** CREDIT ***' : '*** PAID ***'}
-             </div>
-             <div className="text-center text-[10px]">Thank you for your business!</div>
-         </div>
+        <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
+          <div className="text-center mb-3">
+            {shopSettings.logoUrl && (
+              <img
+                src={shopSettings.logoUrl}
+                alt={shopSettings.shopName}
+                className="h-12 w-auto mx-auto mb-1 object-contain"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
+            <h2 className="text-[18px] font-bold uppercase m-0">{shopSettings.shopName}</h2>
+            {shopSettings.address && <p className="m-0 mt-1">{shopSettings.address}</p>}
+            {shopSettings.phone && <p className="m-0">Tel: {shopSettings.phone}</p>}
+          </div>
+
+          <div className="border-t border-b border-dashed border-black py-2 mb-3 space-y-1">
+            <div className="flex justify-between">
+              <span>Voucher:</span>
+              <span className="font-bold">{receiptModal.record.voucherNo}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Date:</span>
+              <span>
+                {receiptModal.record.date} {receiptModal.record.time}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Cashier:</span>
+              <span>{receiptModal.record.cashier}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Customer:</span>
+              <span>{receiptModal.record.personName}</span>
+            </div>
+          </div>
+
+          <table className="w-full border-collapse mb-3">
+            <thead>
+              <tr className="border-b border-black">
+                <th className="text-left pb-1 font-bold">Item</th>
+                <th className="text-right pb-1 font-bold">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {receiptModal.record.itemsDetail.map((item, i) => (
+                <tr key={`${item.name}-${i}`}>
+                  <td className="py-1.5 align-top">
+                    <div className="font-bold">{item.name}</div>
+                    <div className="text-[10px] mt-0.5">
+                      {item.quantity} {item.unitName} x {Number(item.unitPrice).toLocaleString()}
+                      {item.itemDiscountAmt > 0 && ` (-${Number(item.itemDiscountAmt).toLocaleString()})`}
+                    </div>
+                  </td>
+                  <td className="text-right py-1.5 align-top font-bold">
+                    {Number(item.unitPrice * item.quantity - (item.itemDiscountAmt || 0)).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="border-t border-dashed border-black pt-2 mb-2 space-y-1">
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span>{Number(receiptModal.record.subtotal).toLocaleString()}</span>
+            </div>
+            {(receiptModal.record?.itemDiscount > 0 || receiptModal.record?.globalDiscount > 0) && (
+              <div className="flex justify-between">
+                <span>Discount:</span>
+                <span>
+                  -{Number(receiptModal.record.itemDiscount + receiptModal.record.globalDiscount).toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-between font-bold border-t border-black pt-2 mb-3 text-[14px]">
+            <span>TOTAL:</span>
+            <span>{Number(receiptModal.record.amount).toLocaleString()}</span>
+          </div>
+
+          <div className="border-t border-black pt-2 mb-4 space-y-1">
+            <div className="flex justify-between">
+              <span>Paid ({receiptModal.record.paymentMethod}):</span>
+              <span>{Number(receiptModal.record.paidAmount).toLocaleString()}</span>
+            </div>
+
+            {receiptModal.record.remainingDebt > 0 ? (
+              <div className="flex justify-between font-bold">
+                <span>Credit Balance:</span>
+                <span>{Number(receiptModal.record.remainingDebt).toLocaleString()}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between font-bold">
+                <span>Change:</span>
+                <span>{Number(receiptModal.record.changeAmount).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center font-bold text-[14px] mb-2">
+            {receiptModal.record.remainingDebt > 0 ? '*** CREDIT ***' : '*** PAID ***'}
+          </div>
+          <div className="text-center text-[10px]">Thank you for your business!</div>
+        </div>
       )}
     </>
   );

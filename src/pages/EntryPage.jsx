@@ -229,6 +229,7 @@ const ReceiptPreview = ({ record, shopSettings, title = 'Receipt Preview', compa
   const hasLogo = Boolean(shopSettings?.logoUrl);
   const totalDiscount = Number(record?.itemDiscount || 0) + Number(record?.globalDiscount || 0);
   const isCredit = Number(record?.remainingDebt || 0) > 0;
+  const footerText = shopSettings?.receiptFooter || 'Thank you for your business!';
 
   return (
     <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl shadow-cyan-950/20">
@@ -315,7 +316,7 @@ const ReceiptPreview = ({ record, shopSettings, title = 'Receipt Preview', compa
         </div>
 
         <div className="text-center font-black mt-3">{isCredit ? '*** CREDIT ***' : '*** PAID ***'}</div>
-        <div className="text-center text-[9px] mt-1">Thank you for your business!</div>
+        {footerText && <div className="text-center text-[9px] mt-1">{footerText}</div>}
       </div>
     </div>
   );
@@ -331,6 +332,9 @@ export default function EntryPage({ products = [] }) {
     phone: profile?.phone || '',
     address: profile?.address || '',
     logoUrl: '',
+    receiptFooter: 'Thank you for your business!',
+    currency: 'Ks',
+    receiptWidth: '80mm',
   });
 
   const todayISO = new Date().toISOString().split('T')[0];
@@ -452,6 +456,14 @@ export default function EntryPage({ products = [] }) {
             phone: sData.phone || sData.shopPhone || sData.contactPhone || profile?.phone || '',
             address: sData.address || sData.shopAddress || sData.location || profile?.address || '',
             logoUrl: sData.logoUrl || sData.logo || sData.shopLogo || sData.logoURL || '',
+            receiptFooter:
+              sData.receiptFooter ||
+              sData.invoiceFooterText ||
+              sData.footerText ||
+              sData.thankYouMessage ||
+              'Thank you for your business!',
+            currency: sData.currencySymbol || sData.currency || 'Ks',
+            receiptWidth: sData.receiptWidth || sData.printerWidth || '80mm',
           });
         }
 
@@ -1111,11 +1123,11 @@ export default function EntryPage({ products = [] }) {
                 </div>
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-black">
-                    <span className="text-white">NexPOS</span>{' '}
+                    <span className="text-white">{shopSettings.shopName || 'POS'}</span>{' '}
                     <span className="text-cyan-400">Entry</span>
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">
-                    Cashier: <span className="text-cyan-300">{cashierName}</span>
+                    Shop receipt uses Settings logo/name/phone/address • Cashier: <span className="text-cyan-300">{cashierName}</span>
                   </p>
                 </div>
               </div>
@@ -1576,7 +1588,7 @@ export default function EntryPage({ products = [] }) {
                     <span className="text-gray-900">{receiptModal.record.cashier}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Customer:</span>
+                    <span>{receiptModal.record.type === 'Purchase' ? 'Supplier:' : 'Customer:'}</span>
                     <span className="text-gray-900">{receiptModal.record.personName}</span>
                   </div>
                 </div>
@@ -1659,7 +1671,9 @@ export default function EntryPage({ products = [] }) {
                   >
                     {receiptModal.record.remainingDebt > 0 ? 'CREDIT' : 'PAID'}
                   </span>
-                  <p className="text-[10px] text-gray-400 font-semibold mt-1">Thank you for your business!</p>
+                  {shopSettings.receiptFooter && (
+                    <p className="text-[10px] text-gray-400 font-semibold mt-1">{shopSettings.receiptFooter}</p>
+                  )}
                 </div>
 
                 <div className="mt-6 flex flex-col gap-2">
@@ -1691,33 +1705,50 @@ export default function EntryPage({ products = [] }) {
             size: 80mm auto;
             margin: 0;
           }
-          body {
-            margin: 0;
-            padding: 0;
-            background: white;
+          html, body {
+            width: 80mm !important;
+            min-width: 80mm !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: white !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           body * {
-            visibility: hidden;
+            visibility: hidden !important;
+          }
+          .print\:hidden {
+            display: none !important;
+          }
+          #root, #root * {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
           }
           #receipt-print-area, #receipt-print-area * {
-            visibility: visible;
+            visibility: visible !important;
           }
           #receipt-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 80mm;
-            max-width: 80mm;
-            min-height: auto;
-            margin: 0;
-            padding: 4mm;
-            box-sizing: border-box;
-            page-break-after: avoid;
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 80mm !important;
+            max-width: 80mm !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 3mm 4mm !important;
+            box-sizing: border-box !important;
+            background: white !important;
+            page-break-before: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid-page !important;
           }
-          html, body {
-            width: 80mm;
-            height: auto;
-            overflow: visible;
+          #receipt-print-area table {
+            page-break-inside: avoid !important;
           }
         }
       `}</style>
@@ -1756,7 +1787,7 @@ export default function EntryPage({ products = [] }) {
               <span>{receiptModal.record.cashier}</span>
             </div>
             <div className="flex justify-between">
-              <span>Customer:</span>
+              <span>{receiptModal.record.type === 'Purchase' ? 'Supplier:' : 'Customer:'}</span>
               <span>{receiptModal.record.personName}</span>
             </div>
           </div>
@@ -1828,7 +1859,7 @@ export default function EntryPage({ products = [] }) {
           <div className="text-center font-bold text-[14px] mb-2">
             {receiptModal.record.remainingDebt > 0 ? '*** CREDIT ***' : '*** PAID ***'}
           </div>
-          <div className="text-center text-[10px]">Thank you for your business!</div>
+          {shopSettings.receiptFooter && <div className="text-center text-[10px]">{shopSettings.receiptFooter}</div>}
         </div>
       )}
     </>

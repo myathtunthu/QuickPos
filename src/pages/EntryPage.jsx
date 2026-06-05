@@ -1613,5 +1613,3 @@ EntryPage.propTypes = {
 EntryPage.defaultProps = {
   products: [],
 };
-
-export default EntryPage;

@@ -1,33 +1,53 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { translations } from '../utils/translations';
 
-const LanguageContext = createContext();
+const LanguageContext = createContext(null);
 
 export function LanguageProvider({ children }) {
-  // မှတ်တမ်းထဲမှာ ရွေးထားတဲ့ ဘာသာစကားရှိရင် အဲ့ဒါသုံးမယ်၊ မရှိရင် မြန်မာ (mm) ကို ပုံသေထားမယ်
   const [language, setLanguage] = useState(() => {
-    return localStorage.getItem('pos_language') || 'mm'; 
+    return localStorage.getItem('nexpos_language') || 'mm';
   });
 
-  // ဘာသာစကားပြောင်းတိုင်း မှတ်တမ်း (Local Storage) ထဲမှာ သိမ်းထားမယ်
   useEffect(() => {
-    localStorage.setItem('pos_language', language);
+    localStorage.setItem('nexpos_language', language);
   }, [language]);
 
-  // စာသားတွေကို ဘာသာပြန်ပေးမယ့် Function (ဥပမာ - t('dashboard') လို့ခေါ်သုံးရန်)
   const t = (key) => {
-    return translations[language]?.[key] || translations['en']?.[key] || key;
+    return translations?.[language]?.[key] || translations?.en?.[key] || key;
   };
 
   const toggleLanguage = () => {
     setLanguage((prev) => (prev === 'mm' ? 'en' : 'mm'));
   };
 
+  const setMyanmar = () => setLanguage('mm');
+  const setEnglish = () => setLanguage('en');
+
+  const value = useMemo(
+    () => ({
+      language,
+      setLanguage,
+      toggleLanguage,
+      setMyanmar,
+      setEnglish,
+      t,
+    }),
+    [language]
+  );
+
   return (
-    <LanguageContext.Provider value={{ language, toggleLanguage, t }}>
+    <LanguageContext.Provider value={value}>
       {children}
     </LanguageContext.Provider>
   );
 }
 
-export const useLanguage = () => useContext(LanguageContext);
+export const useLanguage = () => {
+  const context = useContext(LanguageContext);
+
+  if (!context) {
+    throw new Error('useLanguage must be used inside LanguageProvider');
+  }
+
+  return context;
+};

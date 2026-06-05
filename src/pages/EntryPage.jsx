@@ -224,16 +224,113 @@ const ScannerModal = ({ onClose, onScan }) => {
   );
 };
 
+const ReceiptPreview = ({ record, shopSettings, title = 'Receipt Preview', compact = false }) => {
+  const items = Array.isArray(record?.itemsDetail) ? record.itemsDetail : [];
+  const hasLogo = Boolean(shopSettings?.logoUrl);
+  const totalDiscount = Number(record?.itemDiscount || 0) + Number(record?.globalDiscount || 0);
+  const isCredit = Number(record?.remainingDebt || 0) > 0;
+
+  return (
+    <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl shadow-cyan-950/20">
+      <div className="flex items-center justify-between mb-3 print:hidden">
+        <div className="flex items-center gap-2">
+          <ReceiptText size={18} className="text-cyan-400" />
+          <h2 className="text-sm font-black text-slate-200">{title}</h2>
+        </div>
+        <span className="text-[10px] font-black text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2 py-1">
+          LIVE
+        </span>
+      </div>
+
+      <div className={`mx-auto bg-white text-black shadow-inner ${compact ? 'max-w-[280px]' : 'max-w-sm'} rounded-sm p-3 font-mono text-[10px] leading-tight`}>
+        <div className="text-center mb-2">
+          {hasLogo && (
+            <img
+              src={shopSettings.logoUrl}
+              alt={shopSettings.shopName || 'Shop Logo'}
+              className="h-9 w-auto mx-auto mb-1 object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          )}
+          <div className="font-black text-[13px] uppercase tracking-wide">{shopSettings?.shopName || 'POS'}</div>
+          {shopSettings?.address && <div className="text-[9px] mt-0.5">{shopSettings.address}</div>}
+          {shopSettings?.phone && <div className="text-[9px]">Tel: {shopSettings.phone}</div>}
+        </div>
+
+        <div className="border-t border-b border-dashed border-black py-2 space-y-1">
+          <div className="flex justify-between gap-3"><span>Voucher:</span><b>{record?.voucherNo || 'PREVIEW'}</b></div>
+          <div className="flex justify-between gap-3"><span>Date:</span><span>{record?.date || '-'}</span></div>
+          <div className="flex justify-between gap-3"><span>Time:</span><span>{record?.time || '-'}</span></div>
+          <div className="flex justify-between gap-3"><span>Cashier:</span><span>{record?.cashier || '-'}</span></div>
+          <div className="flex justify-between gap-3"><span>{record?.type === 'Purchase' ? 'Supplier:' : 'Customer:'}</span><span className="text-right">{record?.personName || 'Walk-in'}</span></div>
+        </div>
+
+        <table className="w-full my-2 border-collapse">
+          <thead>
+            <tr className="border-b border-black">
+              <th className="text-left py-1">Item</th>
+              <th className="text-right py-1">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr><td colSpan="2" className="py-5 text-center text-gray-400">No items</td></tr>
+            ) : (
+              items.map((item, index) => (
+                <tr key={`${item.name || 'item'}-${index}`}>
+                  <td className="py-1 align-top pr-2">
+                    <div className="font-bold break-words">{item.name || 'Item'}</div>
+                    <div className="text-[9px] text-gray-600">
+                      {Number(item.quantity || 0)} {item.unitName || ''} x {Number(item.unitPrice || 0).toLocaleString()}
+                      {Number(item.itemDiscountAmt || 0) > 0 && ` (-${Number(item.itemDiscountAmt || 0).toLocaleString()})`}
+                    </div>
+                  </td>
+                  <td className="py-1 align-top text-right font-bold whitespace-nowrap">
+                    {Number(item.itemTotal ?? (Number(item.unitPrice || 0) * Number(item.quantity || 0) - Number(item.itemDiscountAmt || 0))).toLocaleString()}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        <div className="border-t border-dashed border-black pt-2 space-y-1">
+          <div className="flex justify-between"><span>Subtotal:</span><span>{Number(record?.subtotal || 0).toLocaleString()}</span></div>
+          {totalDiscount > 0 && <div className="flex justify-between"><span>Discount:</span><span>-{totalDiscount.toLocaleString()}</span></div>}
+        </div>
+
+        <div className="flex justify-between border-t border-black pt-2 mt-2 text-[12px] font-black">
+          <span>TOTAL:</span><span>{Number(record?.amount || 0).toLocaleString()}</span>
+        </div>
+
+        <div className="border-t border-black pt-2 mt-2 space-y-1">
+          <div className="flex justify-between"><span>Paid ({record?.paymentMethod || 'Cash'}):</span><span>{Number(record?.paidAmount || 0).toLocaleString()}</span></div>
+          {isCredit ? (
+            <div className="flex justify-between font-bold"><span>Credit Balance:</span><span>{Number(record?.remainingDebt || 0).toLocaleString()}</span></div>
+          ) : (
+            <div className="flex justify-between font-bold"><span>Change:</span><span>{Number(record?.changeAmount || 0).toLocaleString()}</span></div>
+          )}
+        </div>
+
+        <div className="text-center font-black mt-3">{isCredit ? '*** CREDIT ***' : '*** PAID ***'}</div>
+        <div className="text-center text-[9px] mt-1">Thank you for your business!</div>
+      </div>
+    </div>
+  );
+};
+
 export default function EntryPage({ products = [] }) {
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const cashierName = cleanDisplayName(profile);
 
   const [shopSettings, setShopSettings] = useState({
-    shopName: profile?.shopName || 'NexPOS',
-    phone: '',
-    address: '',
-    logoUrl: '/logo.png',
+    shopName: profile?.shopName || profile?.businessName || profile?.storeName || 'POS',
+    phone: profile?.phone || '',
+    address: profile?.address || '',
+    logoUrl: '',
   });
 
   const todayISO = new Date().toISOString().split('T')[0];
@@ -343,10 +440,18 @@ export default function EntryPage({ products = [] }) {
         if (settingsSnap.exists()) {
           const sData = settingsSnap.data();
           setShopSettings({
-            shopName: sData.shopName || profile?.shopName || 'NexPOS',
-            phone: sData.phone || '',
-            address: sData.address || '',
-            logoUrl: sData.logoUrl || sData.logo || '/logo.png',
+            shopName:
+              sData.shopName ||
+              sData.businessName ||
+              sData.storeName ||
+              sData.name ||
+              profile?.shopName ||
+              profile?.businessName ||
+              profile?.storeName ||
+              'POS',
+            phone: sData.phone || sData.shopPhone || sData.contactPhone || profile?.phone || '',
+            address: sData.address || sData.shopAddress || sData.location || profile?.address || '',
+            logoUrl: sData.logoUrl || sData.logo || sData.shopLogo || sData.logoURL || '',
           });
         }
 
@@ -425,6 +530,53 @@ export default function EntryPage({ products = [] }) {
 
     return { productCount, lowStockCount, cartCount, total, paid, balance };
   }, [products, cart, cartTotals.total, paidAmount]);
+
+
+  const liveReceiptRecord = useMemo(() => {
+    const total = Number(cartTotals.total) || 0;
+    const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
+    const remainingDebt = Math.max(0, total - paid);
+    const changeAmount = Math.max(0, paid - total);
+    const currentTime = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const itemsDetail = cart.map((item) => {
+      const quantity = Number(item.quantity) || 0;
+      const unitPrice = Number(item.unitPrice) || 0;
+      const itemDiscountAmt = Number(item.itemDiscountAmt) || 0;
+      const itemTotal = unitPrice * quantity - itemDiscountAmt;
+
+      return {
+        name: item.name || 'Item',
+        quantity,
+        unitName: item.unitName || 'ခု',
+        unitPrice,
+        itemDiscountAmt,
+        itemTotal,
+      };
+    });
+
+    return {
+      type: entryTab,
+      voucherNo: 'PREVIEW',
+      date: entryDate,
+      time: currentTime,
+      cashier: cashierName,
+      personName: selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier'),
+      itemsDetail,
+      subtotal: Number(cartTotals.subtotal) || 0,
+      itemDiscount: Number(cartTotals.itemDiscounts) || 0,
+      globalDiscount: Number(cartTotals.globalDisc) || 0,
+      amount: total,
+      paymentMethod: paymentMethod || 'Cash',
+      paidAmount: paid,
+      remainingDebt,
+      changeAmount,
+    };
+  }, [cart, cartTotals, paidAmount, paymentMethod, entryTab, entryDate, cashierName, selectedPerson, personSearch]);
 
   const handleSelectProduct = useCallback(
     (product) => {
@@ -1370,6 +1522,8 @@ export default function EntryPage({ products = [] }) {
                     </div>
                   )}
 
+                  <ReceiptPreview record={liveReceiptRecord} shopSettings={shopSettings} compact />
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-[#0d1120]/95 border border-emerald-500/20 rounded-3xl p-4">
                       <p className="text-[10px] text-slate-500 font-black uppercase">Paid</p>
@@ -1387,7 +1541,7 @@ export default function EntryPage({ products = [] }) {
 
           {receiptModal.show && receiptModal.record && (
             <div className="fixed inset-0 z-[999] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-              <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
+              <div className="w-full max-w-sm bg-white text-black rounded-xl p-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans">
                 <div className="text-center mb-4">
                   {shopSettings.logoUrl && (
                     <img
@@ -1552,19 +1706,24 @@ export default function EntryPage({ products = [] }) {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 80mm;
+            max-width: 80mm;
+            min-height: auto;
             margin: 0;
             padding: 4mm;
+            box-sizing: border-box;
+            page-break-after: avoid;
           }
           html, body {
+            width: 80mm;
             height: auto;
-            overflow: hidden;
+            overflow: visible;
           }
         }
       `}</style>
 
       {receiptModal.show && receiptModal.record && (
-        <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[12px] leading-tight">
+        <div id="receipt-print-area" className="hidden print:block bg-white text-black font-sans text-[11px] leading-tight">
           <div className="text-center mb-3">
             {shopSettings.logoUrl && (
               <img

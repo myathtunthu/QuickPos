@@ -7,7 +7,7 @@ import { useLanguage } from '../../context/LanguageContext';
 
 export default function Layout() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const { language, toggleLanguage } = useLanguage();
+  const { languageLabel, toggleLanguage } = useLanguage();
 
   return (
     <div className="flex h-screen w-screen bg-[#080c14] overflow-hidden">
@@ -19,7 +19,7 @@ export default function Layout() {
         <div className="fixed inset-0 z-50 flex md:hidden">
           <button
             type="button"
-            aria-label="Close menu overlay"
+            aria-label="Close menu"
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsMobileOpen(false)}
           />
@@ -42,16 +42,14 @@ export default function Layout() {
 
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         <header className="flex md:hidden items-center justify-between px-4 py-3 bg-[#0d1120] border-b border-cyan-500/10 flex-shrink-0">
-          <div className="flex items-center min-w-0">
-            <img
-              src="/logo.png"
-              alt="NexPOS"
-              className="h-12 w-auto max-w-[190px] object-contain"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
+          <img
+            src="/logo.png"
+            alt="NexPOS"
+            className="h-12 w-auto max-w-[200px] object-contain"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
 
           <div className="flex items-center gap-2">
             <button
@@ -59,7 +57,7 @@ export default function Layout() {
               onClick={toggleLanguage}
               className="px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-sm font-black"
             >
-              {language === 'mm' ? 'MM' : 'EN'}
+              {languageLabel}
             </button>
 
             <button

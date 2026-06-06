@@ -331,8 +331,26 @@ export default function EntryPage({ products = [] }) {
     };
   }, [cart, cartTotals, paidAmount, paymentMethod, entryTab, entryDate, cashierName, selectedPerson, personSearch, tt, walkInName, unknownSupplierName]);
 
+  const preserveMobileScroll = useCallback((scrollY) => {
+    const isMobile = window.matchMedia?.('(max-width: 767px)').matches;
+    if (!isMobile) return;
+
+    const y = Number.isFinite(scrollY) ? scrollY : window.scrollY || window.pageYOffset || 0;
+    const restore = () => window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      setTimeout(restore, 0);
+      setTimeout(restore, 60);
+      setTimeout(restore, 180);
+      setTimeout(restore, 320);
+    });
+  }, []);
+
   const handleSelectProduct = useCallback(
-    (product) => {
+    (product, options = {}) => {
+      const scrollY = options.preserveScrollY ?? window.scrollY ?? window.pageYOffset ?? 0;
       const defaultUnit =
         product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
         product.packageUnits?.[0] || {
@@ -345,11 +363,13 @@ export default function EntryPage({ products = [] }) {
 
       if (response.success) {
         setProdSearch('');
+        preserveMobileScroll(scrollY);
       } else {
         showToast(response.message, 'error');
+        preserveMobileScroll(scrollY);
       }
     },
-    [addToCart]
+    [addToCart, preserveMobileScroll, tt]
   );
 
   const handleTabChange = (tab) => {

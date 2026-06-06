@@ -59,13 +59,31 @@ service cloud.firestore {
         && !('plainPassword' in request.resource.data);
     }
 
+    function hasNoStoredPasswordUnlessSuperAdmin() {
+      return isSuperAdmin() || hasNoStoredPassword();
+    }
+
+    function isStockOnlyProductUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['stock', 'stockBase', 'updatedAt', 'updatedAtServer']);
+    }
+
+    function canCreateSaleOrPurchase() {
+      return hasPermission('create_sale') || hasPermission('create_purchase');
+    }
+
+    function isDebtOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['totalDebt', 'updatedAt', 'updatedAtServer']);
+    }
+
     match /pos_users/{userId} {
       allow read: if isSuperAdmin()
         || (isActive() && request.auth.uid == userId)
         || (isAdmin() && resource.data.tenantId == myTenantId());
 
       allow create: if (isSuperAdmin() || isAdmin())
-        && hasNoStoredPassword()
+        && hasNoStoredPasswordUnlessSuperAdmin()
         && (
           isSuperAdmin()
           || request.resource.data.tenantId == myTenantId()
@@ -74,7 +92,7 @@ service cloud.firestore {
       allow update: if (isSuperAdmin()
           || (isAdmin() && resource.data.tenantId == myTenantId()))
         && request.resource.data.tenantId == resource.data.tenantId
-        && hasNoStoredPassword();
+        && hasNoStoredPasswordUnlessSuperAdmin();
 
       allow delete: if isSuperAdmin();
     }
@@ -82,12 +100,17 @@ service cloud.firestore {
     match /pos_products/{docId} {
       allow read: if isSuperAdmin() || sameTenant(resource.data.tenantId);
       allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_products');
-      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_products');
+      allow update: if sameTenant(resource.data.tenantId)
+        && (
+          hasPermission('manage_products')
+          || (canCreateSaleOrPurchase() && isStockOnlyProductUpdate())
+        );
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_records/{docId} {
-      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_sales'));
+      allow read: if isSuperAdmin()
+        || (sameTenant(resource.data.tenantId) && (hasPermission('view_sales') || hasPermission('view_reports')));
       allow create: if sameTenant(request.resource.data.tenantId)
         && (hasPermission('create_sale') || hasPermission('create_purchase') || hasPermission('create_expense'));
       allow update: if sameTenant(resource.data.tenantId) && hasPermission('delete_records');
@@ -96,15 +119,25 @@ service cloud.firestore {
 
     match /pos_customers/{docId} {
       allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_customers'));
-      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_customers');
-      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_customers');
+      allow create: if sameTenant(request.resource.data.tenantId)
+        && (hasPermission('manage_customers') || hasPermission('create_sale'));
+      allow update: if sameTenant(resource.data.tenantId)
+        && (
+          hasPermission('manage_customers')
+          || (hasPermission('create_sale') && isDebtOnlyUpdate())
+        );
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_suppliers/{docId} {
       allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_suppliers'));
-      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_suppliers');
-      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_suppliers');
+      allow create: if sameTenant(request.resource.data.tenantId)
+        && (hasPermission('manage_suppliers') || hasPermission('create_purchase'));
+      allow update: if sameTenant(resource.data.tenantId)
+        && (
+          hasPermission('manage_suppliers')
+          || (hasPermission('create_purchase') && isDebtOnlyUpdate())
+        );
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
@@ -116,9 +149,9 @@ service cloud.firestore {
     }
 
     match /pos_drafts/{docId} {
-      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('create_sale'));
-      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('create_sale');
-      allow update, delete: if sameTenant(resource.data.tenantId) && hasPermission('create_sale');
+      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && canCreateSaleOrPurchase());
+      allow create: if sameTenant(request.resource.data.tenantId) && canCreateSaleOrPurchase();
+      allow update, delete: if sameTenant(resource.data.tenantId) && canCreateSaleOrPurchase();
     }
 
     match /audit_logs/{docId} {

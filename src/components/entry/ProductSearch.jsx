@@ -46,11 +46,16 @@ const ProductSearch = React.memo(({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 text-cyan-500" size={14}/>
           <input 
-            type="text"
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
+            enterKeyHint="search"
             value={prodSearch} 
             onChange={handleSearchChange}
             placeholder={t('searchProductBarcode', 'Search products by name or barcode...')} 
-            className="w-full bg-black border border-cyan-500/20 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white outline-none focus:border-cyan-400 transition-colors" 
+            className="w-full bg-black border border-cyan-500/20 rounded-xl pl-9 pr-8 py-2.5 text-[16px] sm:text-xs text-white outline-none focus:border-cyan-400 transition-colors" 
           />
           {prodSearch && (
             <button 

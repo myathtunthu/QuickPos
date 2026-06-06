@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Package } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
@@ -6,10 +6,33 @@ import { useLanguage } from '../../context/LanguageContext';
 const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
   const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const scrollPositionRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     setSelectedIndex(0);
   }, [products.length, isOpen]);
+
+  const rememberScroll = useCallback(() => {
+    scrollPositionRef.current = {
+      x: window.scrollX || window.pageXOffset || 0,
+      y: window.scrollY || window.pageYOffset || 0,
+    };
+  }, []);
+
+  const restoreScroll = useCallback(() => {
+    const { x, y } = scrollPositionRef.current;
+    requestAnimationFrame(() => {
+      window.scrollTo({ left: x, top: y, behavior: 'auto' });
+      requestAnimationFrame(() => window.scrollTo({ left: x, top: y, behavior: 'auto' }));
+    });
+  }, []);
+
+  const selectProductSafely = useCallback((product) => {
+    rememberScroll();
+    onSelect(product);
+    restoreScroll();
+  }, [onSelect, rememberScroll, restoreScroll]);
+
 
   useEffect(() => {
     if (!isOpen || !products || products.length === 0) return undefined;
@@ -25,13 +48,13 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
         setSelectedIndex((prev) => (prev - 1 + products.length) % products.length);
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        if (products[selectedIndex]) onSelect(products[selectedIndex]);
+        if (products[selectedIndex]) selectProductSafely(products[selectedIndex]);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, products, selectedIndex, onSelect]);
+  }, [isOpen, products, selectedIndex, selectProductSafely]);
 
   if (!isOpen || !products || products.length === 0) return null;
 
@@ -45,8 +68,9 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
     return (
       <div 
         style={style} 
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => onSelect(product)}
+        onMouseDown={(event) => { event.preventDefault(); rememberScroll(); }}
+        onTouchStart={rememberScroll}
+        onClick={(event) => { event.preventDefault(); selectProductSafely(product); }}
         onMouseEnter={() => setSelectedIndex(index)}
         className={`flex justify-between items-center px-3 py-2 cursor-pointer border-b border-white/5 transition-colors ${
           isSelected ? 'bg-cyan-900/40 border-l-2 border-l-cyan-400' : 'hover:bg-cyan-900/20'

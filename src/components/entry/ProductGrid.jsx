@@ -73,7 +73,8 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
             }}
             onTouchStart={() => rememberScroll()}
             onClick={(event) => handleProductClick(event, product)}
-            className="bg-[#0d1120] border-2 border-white/5 rounded-xl p-2 text-center transition-all hover:border-cyan-500/50 active:scale-95 flex flex-col items-center justify-between min-h-[85px] touch-manipulation select-none"
+            aria-label={`${name} - ${t('stockLabel', 'Stock')}: ${product.stockBase || 0}`}
+            className="bg-[#0d1120] border-2 border-white/5 rounded-xl p-2 text-center transition-all hover:border-cyan-500/50 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 flex flex-col items-center justify-between min-h-[85px] touch-manipulation select-none"
           >
             <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1">
               <Package size={14} className="text-cyan-400" />

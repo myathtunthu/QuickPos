@@ -1,9 +1,14 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 
 export const useCart = (products, entryTab) => {
   const [cart, setCart] = useState([]);
+  const cartRef = useRef([]);
   const [globalDiscountAmt, setGlobalDiscountAmt] = useState('');
   const [globalDiscountType, setGlobalDiscountType] = useState('%'); // '%' or 'Flat'
+
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   const addToCart = useCallback((product, unit, priceType, quantity) => {
     const qtyNum = Number(quantity);
@@ -16,7 +21,7 @@ export const useCart = (products, entryTab) => {
       const currentStockBase = Number(product.stockBase) || Number(product.stock) || 0;
       
       // Cart ထဲမှာ ရွေးပြီးသား အရေအတွက် (baseQuantity) ကိုပါ ထည့်ပေါင်းပြီး စစ်ဆေးသည်
-      const existingQty = cart
+      const existingQty = cartRef.current
         .filter(x => x.productId === product.id)
         .reduce((a, b) => a + (Number(b.baseQuantity) || 0), 0);
 
@@ -29,11 +34,12 @@ export const useCart = (products, entryTab) => {
     }
 
     setCart(prev => {
-      const existing = prev.find(x => x.productId === product.id && x.unitName === unit.name && x.priceType === priceType);
+      const safePriceType = entryTab === 'Sale' ? priceType : 'purchase';
+      const existing = prev.find(x => x.productId === product.id && x.unitName === unit.name && x.priceType === safePriceType);
       
       if (existing) {
         return prev.map(x => x.id === existing.id 
-          ? { ...x, quantity: x.quantity + qtyNum, baseQuantity: x.baseQuantity + baseQty } 
+          ? { ...x, quantity: (Number(x.quantity) || 0) + qtyNum, baseQuantity: (Number(x.baseQuantity) || 0) + baseQty } 
           : x);
       }
 
@@ -46,7 +52,7 @@ export const useCart = (products, entryTab) => {
         name: product.name,
         unitName: unit.name,
         multiplier: Number(unit.multiplier) || 1,
-        priceType: priceType,
+        priceType: safePriceType,
         unitPrice: entryTab === 'Sale' ? (Number(unit.prices?.[priceType]) || 0) : defaultPurchasePrice,
         quantity: qtyNum,
         baseQuantity: baseQty,
@@ -55,7 +61,7 @@ export const useCart = (products, entryTab) => {
     });
 
     return { success: true };
-  }, [entryTab, cart]); // 🌟 Cart ကို Dependency ထည့်ထားမှ existingQty က အမြဲမှန်ကန်မည်
+  }, [entryTab]); // cartRef ကိုသုံးထားသောကြောင့် rapid tap များတွင် stale cart ဖြစ်နိုင်ခြေကိုလျှော့ထားသည်
 
   const removeCartItem = useCallback((id) => {
     setCart(prev => prev.filter(item => item.id !== id));
@@ -65,7 +71,7 @@ export const useCart = (products, entryTab) => {
   const updateCartItemQty = useCallback((id, newQty) => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
-        const qtyVal = newQty === '' ? '' : Number(newQty);
+        const qtyVal = newQty === '' ? '' : Math.max(0, Number(newQty) || 0);
         return { 
           ...item, 
           quantity: qtyVal, 
@@ -113,12 +119,17 @@ export const useCart = (products, entryTab) => {
   }, [products, entryTab]);
 
   const updateCartItemDiscount = useCallback((id, amt) => {
-    setCart(prev => prev.map(item => item.id === id ? { ...item, itemDiscountAmt: Number(amt) || 0 } : item));
+    setCart(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const rowSubtotal = (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
+      const discount = Math.min(Math.max(Number(amt) || 0, 0), rowSubtotal);
+      return { ...item, itemDiscountAmt: discount };
+    }));
   }, []);
 
   const updateCartItemPrice = useCallback((id, newPrice) => {
     setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, unitPrice: Number(newPrice) || 0 } : item
+      item.id === id ? { ...item, unitPrice: Math.max(Number(newPrice) || 0, 0) } : item
     ));
   }, []);
 
@@ -132,9 +143,13 @@ export const useCart = (products, entryTab) => {
   const cartTotals = useMemo(() => {
     const subtotal = cart.reduce((acc, item) => acc + (item.unitPrice * (Number(item.quantity) || 0)), 0);
     const itemDiscounts = cart.reduce((acc, item) => acc + Number(item.itemDiscountAmt || 0), 0);
-    const globalDisc = globalDiscountType === '%' ? (subtotal - itemDiscounts) * (Number(globalDiscountAmt || 0) / 100) : Number(globalDiscountAmt || 0);
+    const discountBase = Math.max(subtotal - itemDiscounts, 0);
+    const requestedGlobalDisc = globalDiscountType === '%'
+      ? discountBase * (Math.min(Math.max(Number(globalDiscountAmt || 0), 0), 100) / 100)
+      : Math.max(Number(globalDiscountAmt || 0), 0);
+    const globalDisc = Math.min(requestedGlobalDisc, discountBase);
       
-    return { subtotal, itemDiscounts, globalDisc, total: Math.max(subtotal - itemDiscounts - globalDisc, 0) };
+    return { subtotal, itemDiscounts, globalDisc, total: Math.max(discountBase - globalDisc, 0) };
   }, [cart, globalDiscountAmt, globalDiscountType]);
 
   return {

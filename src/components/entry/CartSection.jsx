@@ -10,7 +10,8 @@ const CartSection = React.memo(({
   onUpdatePriceType, 
   onUpdateDiscount, 
   onUpdatePrice, 
-  onRemove 
+  onRemove,
+  entryTab = 'Sale'
 }) => {
   const { t } = useLanguage();
 
@@ -44,10 +45,11 @@ const CartSection = React.memo(({
             <div className="flex flex-wrap items-center gap-1.5 w-full">
               <input 
                 type="number" 
+                inputMode="decimal"
                 min="1"
                 value={item.quantity} 
                 onChange={event => onUpdateQty(item.id, event.target.value)} 
-                className="w-14 bg-black/50 border border-white/10 rounded px-1.5 py-1.5 text-center text-xs text-white outline-none focus:border-cyan-400" 
+                className="w-16 bg-black/50 border border-white/10 rounded px-1.5 py-1.5 text-center text-[16px] sm:text-xs text-white outline-none focus:border-cyan-400" 
                 aria-label="Quantity"
               />
 
@@ -66,24 +68,31 @@ const CartSection = React.memo(({
                 <span className="px-2 py-1.5 rounded bg-black/30 text-[10px] text-slate-400">{item.unitName}</span>
               )}
 
-              <select 
-                value={item.priceType} 
-                onChange={event => onUpdatePriceType(item.id, event.target.value)} 
-                className="max-w-[90px] bg-black/50 border border-white/10 rounded px-1 py-1.5 text-[10px] text-white outline-none focus:border-cyan-400"
-                aria-label="Price Type"
-              >
-                <option value="retail">{t('retailPrice', 'Retail Price')}</option>
-                <option value="wholesaleA">{t('wholesaleA', 'Wholesale A')}</option>
-                <option value="wholesaleB">{t('wholesaleB', 'Wholesale B')}</option>
-                <option value="wholesaleC">{t('wholesaleC', 'Wholesale C')}</option>
-              </select>
+              {entryTab === 'Sale' ? (
+                <select 
+                  value={item.priceType} 
+                  onChange={event => onUpdatePriceType(item.id, event.target.value)} 
+                  className="max-w-[90px] bg-black/50 border border-white/10 rounded px-1 py-1.5 text-[10px] text-white outline-none focus:border-cyan-400"
+                  aria-label={t('priceType', 'Price Type')}
+                >
+                  <option value="retail">{t('retailPrice', 'Retail Price')}</option>
+                  <option value="wholesaleA">{t('wholesaleA', 'Wholesale A')}</option>
+                  <option value="wholesaleB">{t('wholesaleB', 'Wholesale B')}</option>
+                  <option value="wholesaleC">{t('wholesaleC', 'Wholesale C')}</option>
+                </select>
+              ) : (
+                <span className="px-2 py-1.5 rounded bg-black/30 text-[10px] text-slate-400 border border-white/10">
+                  {t('purchaseCost', 'Purchase Cost')}
+                </span>
+              )}
 
               <input 
                 type="number" 
+                inputMode="decimal"
                 min="0"
                 value={item.unitPrice} 
                 onChange={event => onUpdatePrice(item.id, event.target.value)} 
-                className="w-20 bg-black/50 border border-cyan-500/20 rounded px-1.5 py-1.5 text-right text-xs text-cyan-300 outline-none focus:border-cyan-400" 
+                className="w-24 bg-black/50 border border-cyan-500/20 rounded px-1.5 py-1.5 text-right text-[16px] sm:text-xs text-cyan-300 outline-none focus:border-cyan-400" 
                 aria-label={t('retailPrice', 'Price')}
               />
 
@@ -91,11 +100,12 @@ const CartSection = React.memo(({
                 <Tag size={10} className="absolute left-1.5 top-2 text-amber-400" />
                 <input 
                   type="number" 
+                  inputMode="decimal"
                   min="0"
                   value={item.itemDiscountAmt || ''} 
                   onChange={event => onUpdateDiscount(item.id, event.target.value)} 
                   placeholder="0" 
-                  className="w-16 bg-black/50 border border-amber-500/20 rounded pl-5 pr-1 py-1.5 text-right text-xs text-amber-300 outline-none focus:border-amber-400" 
+                  className="w-20 bg-black/50 border border-amber-500/20 rounded pl-5 pr-1 py-1.5 text-right text-[16px] sm:text-xs text-amber-300 outline-none focus:border-amber-400" 
                   aria-label={t('discountLabel', 'Discount')}
                 />
               </div>

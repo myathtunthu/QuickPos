@@ -16,9 +16,12 @@ export function LanguageProvider({ children }) {
     document.documentElement.lang = language;
   }, [language]);
 
-  const t = (key) => {
-    return translations?.[language]?.[key] || translations?.en?.[key] || key;
-  };
+  const t = useMemo(() => {
+    return (key, fallback = '') => {
+      if (!key) return fallback || '';
+      return translations?.[language]?.[key] || translations?.en?.[key] || fallback || key;
+    };
+  }, [language]);
 
   const toggleLanguage = () => {
     setLanguage((prev) => {
@@ -42,14 +45,10 @@ export function LanguageProvider({ children }) {
       languageLabel,
       t,
     }),
-    [language, languageLabel]
+    [language, languageLabel, t]
   );
 
-  return (
-    <LanguageContext.Provider value={value}>
-      {children}
-    </LanguageContext.Provider>
-  );
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
 export const useLanguage = () => {

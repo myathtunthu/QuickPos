@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, Tag } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 const CartSection = React.memo(({ 
   cart, 
@@ -11,10 +12,12 @@ const CartSection = React.memo(({
   onUpdatePrice, 
   onRemove 
 }) => {
+  const { t } = useLanguage();
+
   if (!cart || cart.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-slate-500 border-2 border-dashed border-white/5 rounded-xl">
-        <p className="text-xs font-bold">Cart is empty</p>
+        <p className="text-xs font-bold">{t('cartEmpty', 'Cart is empty')}</p>
       </div>
     );
   }
@@ -24,83 +27,83 @@ const CartSection = React.memo(({
       {cart.map(item => {
         const product = products && Array.isArray(products) ? products.find(p => p.id === item.productId) : null;
         const availableUnits = product?.packageUnits || [];
-
         const rowQty = Number(item.quantity) || 0; 
-        const rowSubtotal = item.unitPrice * rowQty;
+        const rowSubtotal = Number(item.unitPrice || 0) * rowQty;
         const rowDiscount = Number(item.itemDiscountAmt) || 0;
         const rowTotal = Math.max(rowSubtotal - rowDiscount, 0);
 
         return (
           <div key={item.id} className="bg-[#0d1120] border border-cyan-500/10 rounded-xl p-3 transition-all hover:border-cyan-500/30 w-full box-border">
-            {/* Top Row: Name and Delete Button */}
             <div className="flex justify-between items-center w-full mb-2">
-              <p className="font-black text-xs text-white truncate max-w-[85%]">{item.name || 'Unknown Item'}</p>
-              <button type="button" onClick={() => onRemove(item.id)} className="text-rose-400 hover:text-rose-300 transition-colors p-1 flex-shrink-0">
+              <p className="font-black text-xs text-white truncate max-w-[85%]">{item.name || t('unknownItem', 'Unknown Item')}</p>
+              <button type="button" onClick={() => onRemove(item.id)} className="text-rose-400 hover:text-rose-300 transition-colors p-1 flex-shrink-0" aria-label={t('delete', 'Delete')}>
                 <Trash2 size={14}/>
               </button>
             </div>
             
-            {/* Bottom Row: 🌟 Responsive Flex-Wrap Controls (ဘေးသို့ လုံးဝလျှံထွက်မသွားစေရပါ) */}
             <div className="flex flex-wrap items-center gap-1.5 w-full">
-              {/* အရေအတွက် ပြင်ရန် */}
               <input 
                 type="number" 
                 min="1"
                 value={item.quantity} 
-                onChange={(e) => onUpdateQty(item.id, e.target.value)}
-                className="w-14 bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white text-center outline-none focus:border-cyan-400"
-                placeholder="Qty"
+                onChange={event => onUpdateQty(item.id, event.target.value)} 
+                className="w-14 bg-black/50 border border-white/10 rounded px-1.5 py-1.5 text-center text-xs text-white outline-none focus:border-cyan-400" 
+                aria-label="Quantity"
               />
-              
-              {/* Unit ရွေးရန် */}
+
+              {availableUnits.length > 0 ? (
+                <select 
+                  value={item.unitName} 
+                  onChange={event => onUpdateUnit(item.id, event.target.value)} 
+                  className="max-w-[80px] bg-black/50 border border-white/10 rounded px-1 py-1.5 text-[10px] text-white outline-none focus:border-cyan-400"
+                  aria-label={t('unitName', 'Unit Name')}
+                >
+                  {availableUnits.map(unit => (
+                    <option key={unit.name} value={unit.name}>{unit.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="px-2 py-1.5 rounded bg-black/30 text-[10px] text-slate-400">{item.unitName}</span>
+              )}
+
               <select 
-                value={item.unitName}
-                onChange={(e) => onUpdateUnit(item.id, e.target.value)}
-                className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400 max-w-[80px]"
+                value={item.priceType} 
+                onChange={event => onUpdatePriceType(item.id, event.target.value)} 
+                className="max-w-[90px] bg-black/50 border border-white/10 rounded px-1 py-1.5 text-[10px] text-white outline-none focus:border-cyan-400"
+                aria-label="Price Type"
               >
-                {availableUnits.map(u => (
-                  <option key={u.name} value={u.name}>{u.name}</option>
-                ))}
+                <option value="retail">{t('retailPrice', 'Retail Price')}</option>
+                <option value="wholesaleA">{t('wholesaleA', 'Wholesale A')}</option>
+                <option value="wholesaleB">{t('wholesaleB', 'Wholesale B')}</option>
+                <option value="wholesaleC">{t('wholesaleC', 'Wholesale C')}</option>
               </select>
 
-              {/* ဈေးနှုန်းအမျိုးအစား (Retail/Wholesale) */}
-              <select 
-                value={item.priceType}
-                onChange={(e) => onUpdatePriceType(item.id, e.target.value)}
-                className="bg-black/60 border border-cyan-500/20 rounded px-1.5 py-1 text-[11px] text-white outline-none focus:border-cyan-400 max-w-[80px]"
-              >
-                <option value="retail">Retail</option>
-                <option value="wholesaleA">WS-A</option>
-                <option value="wholesaleB">WS-B</option>
-                <option value="wholesaleC">WS-C</option>
-              </select>
-
-              {/* ဈေးနှုန်း ပြင်ရန် */}
               <input 
                 type="number" 
-                value={item.unitPrice === 0 ? '' : item.unitPrice} 
-                onChange={(e) => onUpdatePrice(item.id, e.target.value)}
-                className="w-20 bg-amber-900/10 border border-amber-500/30 rounded px-1.5 py-1 text-[11px] text-amber-400 outline-none focus:border-amber-400 text-center"
-                placeholder="Price"
+                min="0"
+                value={item.unitPrice} 
+                onChange={event => onUpdatePrice(item.id, event.target.value)} 
+                className="w-20 bg-black/50 border border-cyan-500/20 rounded px-1.5 py-1.5 text-right text-xs text-cyan-300 outline-none focus:border-cyan-400" 
+                aria-label={t('retailPrice', 'Price')}
               />
 
-              {/* Item-level Row Discount Input */}
-              <div className="flex items-center gap-1 text-amber-400 text-[10px] bg-amber-900/10 px-1.5 py-1 rounded border border-amber-500/10 h-[24px] box-border">
-                <Tag size={10}/> 
+              <div className="relative">
+                <Tag size={10} className="absolute left-1.5 top-2 text-amber-400" />
                 <input 
-                  type="number"
-                  value={item.itemDiscountAmt === 0 ? '' : item.itemDiscountAmt} 
-                  onChange={e => onUpdateDiscount(item.id, e.target.value)} 
+                  type="number" 
+                  min="0"
+                  value={item.itemDiscountAmt || ''} 
+                  onChange={event => onUpdateDiscount(item.id, event.target.value)} 
                   placeholder="0" 
-                  className="w-10 bg-transparent text-[10px] text-amber-400 outline-none text-right placeholder-amber-700"
-                /> Ks
+                  className="w-16 bg-black/50 border border-amber-500/20 rounded pl-5 pr-1 py-1.5 text-right text-xs text-amber-300 outline-none focus:border-amber-400" 
+                  aria-label={t('discountLabel', 'Discount')}
+                />
               </div>
             </div>
 
-            {/* Calculations Row */}
-            <div className="text-cyan-400 text-[10px] mt-2 font-bold border-t border-white/5 pt-1.5 w-full">
-              {Number(item.unitPrice).toLocaleString()} Ks × {rowQty}
-              {rowDiscount > 0 ? ` (- Disc ${rowDiscount.toLocaleString()} Ks)` : ''} = {rowTotal.toLocaleString()} Ks
+            <div className="flex justify-between items-center mt-2 pt-2 border-t border-white/5 text-[11px]">
+              <span className="text-slate-500">{t('totalLabel', 'Total')}</span>
+              <span className="font-black text-cyan-300">{rowTotal.toLocaleString()} Ks</span>
             </div>
           </div>
         );

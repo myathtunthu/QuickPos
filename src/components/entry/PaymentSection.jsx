@@ -1,5 +1,17 @@
 import React from 'react';
 import { Wallet, Loader2, ShoppingCart } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
+
+const PAYMENT_METHOD_KEYS = {
+  Cash: 'cash',
+  Kpay: 'kpay',
+  KPay: 'kpay',
+  Wave: 'wavePay',
+  WavePay: 'wavePay',
+  AYAPay: 'ayaPay',
+  Bank: 'bank',
+  Credit: 'credit',
+};
 
 const PaymentSection = React.memo(({ 
   paymentMethod, 
@@ -10,58 +22,56 @@ const PaymentSection = React.memo(({
   loading, 
   entryTab 
 }) => {
+  const { t } = useLanguage();
   const methods = ['Cash', 'Kpay', 'Wave', 'AYAPay', 'Credit'];
 
-  // 🌟 Credit ရွေးလျှင် Paid Amount ကို 0 ဟု သတ်မှတ်ပြီး အခြား Method ပြန်ရွေးလျှင် Placeholder ပေါ်စေရန် ရှင်းလင်းပေးခြင်း
-  const handleMethodChange = (m) => {
-    setPaymentMethod(m);
-    if (m === 'Credit') {
+  const methodLabel = (method) => t(PAYMENT_METHOD_KEYS[method] || method, method);
+
+  const handleMethodChange = (method) => {
+    setPaymentMethod(method);
+    if (method === 'Credit') {
       setPaidAmount('0');
     } else if (paidAmount === '0') {
-      setPaidAmount(''); // Cash သို့ပြန်ပြောင်းပါက Full Payment အဖြစ် အလိုအလျောက် ပြန်ပြောင်းပေးခြင်း
+      setPaidAmount('');
     }
   };
 
   return (
     <div className="bg-[#0d1120] border border-cyan-500/20 rounded-xl p-3 space-y-3">
-      {/* Payment Methods */}
       <div className="grid grid-cols-5 gap-1.5">
-        {methods.map(m => (
+        {methods.map(method => (
           <button 
             type="button"
-            key={m} 
-            onClick={() => handleMethodChange(m)} 
+            key={method} 
+            onClick={() => handleMethodChange(method)} 
             className={`py-2 rounded-lg text-[10px] font-bold border transition-all ${
-              paymentMethod === m 
+              paymentMethod === method 
                 ? 'bg-cyan-600 border-cyan-400 text-white shadow-md shadow-cyan-900/20' 
                 : 'bg-black/40 border-white/5 text-slate-400 hover:bg-white/5'
             }`}
           >
-            {m}
+            {methodLabel(method)}
           </button>
         ))}
       </div>
 
-      {/* Paid Amount Input */}
       <div className="relative">
         <Wallet className="absolute left-3 top-2.5 text-emerald-400" size={14}/>
         <input 
           type="number"
           min="0"
           value={paidAmount} 
-          onChange={e => {
-            const val = e.target.value;
-            // 🌟 Bug Fix: အနှုတ်ကိန်း (Negative Value) ရိုက်ထည့်ပြီး ဒေတာဘေ့စ်စာရင်းဖျက်ဆီးခြင်းကို လုံးဝခွင့်မပြုပါ
+          onChange={event => {
+            const val = event.target.value;
             if (Number(val) < 0) return;
             setPaidAmount(val);
           }} 
-          placeholder={paymentMethod === 'Credit' ? '0' : 'Paid Amount (Empty = Full)'} 
+          placeholder={paymentMethod === 'Credit' ? '0' : t('paidAmountPlaceholder', 'Paid Amount (Empty = Full)')} 
           className="w-full bg-black/40 border border-emerald-500/30 focus:border-emerald-400 rounded-lg pl-9 pr-3 py-2 text-xs text-emerald-300 outline-none transition-colors"
           readOnly={paymentMethod === 'Credit'}
         />
       </div>
 
-      {/* Submit Button */}
       <button 
         type="button"
         onClick={submitTransaction} 
@@ -73,9 +83,9 @@ const PaymentSection = React.memo(({
         }`}
       >
         {loading ? (
-          <><Loader2 className="animate-spin" size={16}/> Processing...</>
+          <><Loader2 className="animate-spin" size={16}/> {t('processing', 'Processing...')}</>
         ) : (
-          <><ShoppingCart size={16}/> Complete {entryTab === 'Sale' ? 'Sale' : 'Purchase'}</>
+          <><ShoppingCart size={16}/> {entryTab === 'Sale' ? t('completeSale', 'Complete Sale') : t('completePurchase', 'Complete Purchase')}</>
         )}
       </button>
     </div>

@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   FileText,
+  BarChart3,
   Truck,
   PauseCircle,
 } from 'lucide-react';
@@ -40,7 +41,7 @@ export default function Sidebar({ onCloseMobile }) {
     { path: '/customers', icon: Users, label: t('customers'), perm: 'view_customers' },
     { path: '/suppliers', icon: Truck, label: t('suppliers'), perm: 'view_suppliers' },
     { path: '/records', icon: FileText, label: t('records'), perm: 'view_sales' },
-    { path: '/reports', icon: FileText, label: t('reports'), perm: 'view_reports' },
+    { path: '/reports', icon: BarChart3, label: t('reports') || 'Reports', perm: 'view_reports' },
     { path: '/admin', icon: Users, label: t('admin'), adminOnly: true },
     { path: '/settings', icon: Settings, label: t('settings'), adminOnly: true },
   ];

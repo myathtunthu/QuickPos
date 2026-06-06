@@ -16,6 +16,7 @@ import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import LedgerPage from './pages/LedgerPage';
 import RecordsPage from './pages/RecordsPage';
+import ReportsPage from './pages/ReportsPage';
 import SuperAdminPage from './pages/SuperAdminPage';
 import CustomersPage from './pages/CustomersPage';
 import SuppliersPage from './pages/SuppliersPage';
@@ -231,6 +232,15 @@ function AppContent() {
               </PermissionRoute>
             }
           />
+          <Route
+            path="reports"
+            element={
+              <PermissionRoute permission="view_reports" fallback="/entry">
+                <ReportsPage records={allRecords} />
+              </PermissionRoute>
+            }
+          />
+
         </Route>
 
         <Route path="*" element={<Navigate to="/entry" replace />} />

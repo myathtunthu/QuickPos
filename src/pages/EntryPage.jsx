@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   collection,
   doc,
@@ -65,12 +65,34 @@ export default function EntryPage({ products = [] }) {
     return value && value !== key ? value : fallback;
   }, [t]);
 
+  const productTapScrollRef = useRef(null);
+
+  const capturePageScroll = useCallback(() => ({
+    x: window.scrollX || window.pageXOffset || 0,
+    y: window.scrollY || window.pageYOffset || 0,
+  }), []);
+
+  const restorePageScroll = useCallback((position) => {
+    if (!position) return;
+
+    const scrollOptions = { left: position.x || 0, top: position.y || 0, behavior: 'auto' };
+    window.scrollTo(scrollOptions);
+
+    requestAnimationFrame(() => {
+      window.scrollTo(scrollOptions);
+      requestAnimationFrame(() => window.scrollTo(scrollOptions));
+    });
+
+    window.setTimeout(() => window.scrollTo(scrollOptions), 60);
+    window.setTimeout(() => window.scrollTo(scrollOptions), 180);
+  }, []);
+
   const [shopSettings, setShopSettings] = useState({
     shopName: profile?.shopName || profile?.businessName || profile?.storeName || 'POS',
     phone: profile?.phone || '',
     address: profile?.address || '',
     logoUrl: '',
-    receiptFooter: tt('receiptFooterDefault', 'Thank you for your business!'),
+    receiptFooter: 'Thank you for your business!',
     currency: 'Ks',
     receiptWidth: '80mm',
   });
@@ -199,7 +221,7 @@ export default function EntryPage({ products = [] }) {
               sData.invoiceFooterText ||
               sData.footerText ||
               sData.thankYouMessage ||
-              tt('receiptFooterDefault', 'Thank you for your business!'),
+              'Thank you for your business!',
             currency: sData.currencySymbol || sData.currency || 'Ks',
             receiptWidth: sData.receiptWidth || sData.printerWidth || '80mm',
           });
@@ -216,7 +238,7 @@ export default function EntryPage({ products = [] }) {
         setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
         logger.error('Error fetching initial data:', err);
-        showToast(tt('dataLoadError', 'Failed to load data.'), 'error');
+        showToast('ဒေတာများရယူရာတွင် အမှားအယွင်းရှိနေပါသည်', 'error');
       }
     };
 
@@ -282,9 +304,6 @@ export default function EntryPage({ products = [] }) {
   }, [products, cart, cartTotals.total, paidAmount]);
 
 
-  const walkInName = tt('walkInCustomer', 'Walk-in Customer');
-  const unknownSupplierName = tt('unknownSupplier', 'Unknown Supplier');
-
   const liveReceiptRecord = useMemo(() => {
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -303,9 +322,9 @@ export default function EntryPage({ products = [] }) {
       const itemTotal = unitPrice * quantity - itemDiscountAmt;
 
       return {
-        name: item.name || tt('itemLabel', 'Item'),
+        name: item.name || 'Item',
         quantity,
-        unitName: item.unitName || tt('defaultUnit', 'pcs'),
+        unitName: item.unitName || 'ခု',
         unitPrice,
         itemDiscountAmt,
         itemTotal,
@@ -314,11 +333,11 @@ export default function EntryPage({ products = [] }) {
 
     return {
       type: entryTab,
-      voucherNo: tt('previewVoucher', 'PREVIEW'),
+      voucherNo: 'PREVIEW',
       date: entryDate,
       time: currentTime,
       cashier: cashierName,
-      personName: selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? walkInName : unknownSupplierName),
+      personName: selectedPerson?.name || personSearch.trim() || (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier'),
       itemsDetail,
       subtotal: Number(cartTotals.subtotal) || 0,
       itemDiscount: Number(cartTotals.itemDiscounts) || 0,
@@ -329,32 +348,17 @@ export default function EntryPage({ products = [] }) {
       remainingDebt,
       changeAmount,
     };
-  }, [cart, cartTotals, paidAmount, paymentMethod, entryTab, entryDate, cashierName, selectedPerson, personSearch, tt, walkInName, unknownSupplierName]);
-
-  const preserveMobileScroll = useCallback((scrollY) => {
-    const isMobile = window.matchMedia?.('(max-width: 767px)').matches;
-    if (!isMobile) return;
-
-    const y = Number.isFinite(scrollY) ? scrollY : window.scrollY || window.pageYOffset || 0;
-    const restore = () => window.scrollTo({ top: y, left: 0, behavior: 'auto' });
-
-    restore();
-    requestAnimationFrame(() => {
-      restore();
-      setTimeout(restore, 0);
-      setTimeout(restore, 60);
-      setTimeout(restore, 180);
-      setTimeout(restore, 320);
-    });
-  }, []);
+  }, [cart, cartTotals, paidAmount, paymentMethod, entryTab, entryDate, cashierName, selectedPerson, personSearch]);
 
   const handleSelectProduct = useCallback(
     (product, options = {}) => {
-      const scrollY = options.preserveScrollY ?? window.scrollY ?? window.pageYOffset ?? 0;
+      const scrollBeforeTap = options.scrollPosition || capturePageScroll();
+      productTapScrollRef.current = scrollBeforeTap;
+
       const defaultUnit =
         product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
         product.packageUnits?.[0] || {
-          name: tt('defaultUnit', 'pcs'),
+          name: 'ခု',
           multiplier: 1,
           prices: { retail: 0 },
         };
@@ -363,21 +367,28 @@ export default function EntryPage({ products = [] }) {
 
       if (response.success) {
         setProdSearch('');
-        preserveMobileScroll(scrollY);
+        restorePageScroll(scrollBeforeTap);
       } else {
+        productTapScrollRef.current = null;
         showToast(response.message, 'error');
-        preserveMobileScroll(scrollY);
       }
     },
-    [addToCart, preserveMobileScroll, tt]
+    [addToCart, capturePageScroll, restorePageScroll]
   );
+
+  useLayoutEffect(() => {
+    if (!productTapScrollRef.current) return;
+    const scrollPosition = productTapScrollRef.current;
+    restorePageScroll(scrollPosition);
+    productTapScrollRef.current = null;
+  }, [cart.length, restorePageScroll]);
 
   const handleTabChange = (tab) => {
     if (cart.length > 0) {
       setConfirmDialog({
         isOpen: true,
-        title: tt('tabChange', 'Change Tab'),
-        message: tt('cartNotEmptyMsg', 'Cart has items. Clear cart and change tab?'),
+        title: 'Tab ပြောင်းလဲခြင်း',
+        message: 'Cart ထဲတွင် ပစ္စည်းများရှိနေပါသည်။ ဖယ်ရှားပြီး Tab အသစ်သို့ကူးပြောင်းမည်မှာ သေချာပါသလား?',
         onConfirm: () => {
           setEntryTab(tab);
           clearCart();
@@ -396,7 +407,7 @@ export default function EntryPage({ products = [] }) {
 
     if (cart.some((x) => x.quantity === '' || Number(x.quantity) <= 0)) {
       showToast(
-        tt('qtyErrorMsg', 'Please check item quantities.'),
+        'အမှား: Cart ထဲရှိ ပစ္စည်းအရေအတွက်များအား သေချာစွာ ထည့်သွင်းပေးပါ။',
         'error'
       );
       return;
@@ -448,7 +459,7 @@ export default function EntryPage({ products = [] }) {
         createdAt: serverTimestamp(),
       });
 
-      showToast(tt('draftSavedSuccess', 'Draft saved successfully.'), 'success');
+      showToast('ဘေလ်ကို ခဏဆိုင်းထားလိုက်ပါပြီ။', 'success');
       clearCart();
       setPersonSearch('');
       setSelectedPerson(null);
@@ -457,7 +468,7 @@ export default function EntryPage({ products = [] }) {
       fetchDrafts();
     } catch (err) {
       logger.error('Error saving draft:', err);
-      showToast(`${tt('draftSaveError', 'Error saving draft')}: ${err.message}`, 'error');
+      showToast(`Error saving draft: ${err.message}`, 'error');
     } finally {
       setLoading(false);
       setPromptModal({ isOpen: false, name: '' });
@@ -485,7 +496,7 @@ export default function EntryPage({ products = [] }) {
       await deleteDoc(doc(db, 'pos_drafts', draft.id));
       fetchDrafts();
       setShowDrafts(false);
-      showToast(tt('draftRestoredSuccess', 'Draft restored successfully.'), 'success');
+      showToast('ဘေလ်မှတ်တမ်းအား ပြန်လည်ရယူပြီးပါပြီ။', 'success');
     } catch (err) {
       logger.error('Error restoring draft:', err);
     }
@@ -495,8 +506,8 @@ export default function EntryPage({ products = [] }) {
     if (cart.length > 0) {
       setConfirmDialog({
         isOpen: true,
-        title: tt('restoreDraftTitle', 'Restore Draft'),
-        message: tt('restoreDraftMsg', 'Clear current cart and restore this draft?'),
+        title: 'Draft ပြန်လည်ရယူခြင်း',
+        message: 'လက်ရှိ cart ကို ဖျက်ပြီး draft ကို ပြန်ယူမှာ သေချာပါသလား?',
         onConfirm: () => executeRestoreDraft(draft),
       });
       return;
@@ -508,15 +519,15 @@ export default function EntryPage({ products = [] }) {
   const deleteDraft = (id) => {
     setConfirmDialog({
       isOpen: true,
-      title: tt('deleteDraftTitle', 'Delete Draft'),
-      message: tt('deleteDraftMsg', 'Delete this draft?'),
+      title: 'Draft ဖျက်သိမ်းခြင်း',
+      message: 'ဤ Draft အား ဖျက်မှာ သေချာပါသလား?',
       onConfirm: async () => {
         setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null });
 
         try {
           await deleteDoc(doc(db, 'pos_drafts', id));
           fetchDrafts();
-          showToast(tt('draftDeletedSuccess', 'Draft deleted successfully.'), 'success');
+          showToast('Draft ဖျက်သိမ်းပြီးပါပြီ', 'success');
         } catch (err) {
           logger.error('Error deleting draft:', err);
         }
@@ -564,10 +575,10 @@ export default function EntryPage({ products = [] }) {
       await batch.commit();
       setExpenseTitle('');
       setExpenseAmt('');
-      showToast(tt('expenseSavedSuccess', 'Expense saved successfully.'), 'success');
+      showToast('Expense သိမ်းဆည်းပြီးပါပြီ!', 'success');
     } catch (err) {
       logger.error('Error saving expense:', err);
-      showToast(tt('expenseSaveError', 'Error saving expense'), 'error');
+      showToast('Error saving expense', 'error');
     } finally {
       submitLock.current = false;
       setLoading(false);
@@ -581,7 +592,7 @@ export default function EntryPage({ products = [] }) {
     const invalidItem = cart.find((item) => item.quantity === '' || Number(item.quantity) <= 0);
 
     if (invalidItem) {
-      showToast(`${tt('invalidQuantityFor', 'Invalid quantity for')} "${invalidItem.name}"`, 'error');
+      showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။`, 'error');
       return;
     }
 
@@ -594,11 +605,11 @@ export default function EntryPage({ products = [] }) {
     let personNameForRecord =
       selectedPerson?.name ||
       personSearch.trim() ||
-      (entryTab === 'Sale' ? walkInName : unknownSupplierName);
+      (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier');
 
-    if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? walkInName : unknownSupplierName)) {
+    if (remainingDebt > 0 && personNameForRecord === (entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier')) {
       showToast(
-        tt('creditRequiresName', 'Credit transaction requires a customer/supplier name.'),
+        `အကြွေး (Credit) ဖြင့် ${entryTab === 'Sale' ? 'ရောင်းချပါက' : 'ဝယ်ယူပါက'} အမည်ကို မဖြစ်မနေ ထည့်သွင်းပေးပါ။`,
         'error'
       );
       return;
@@ -619,14 +630,14 @@ export default function EntryPage({ products = [] }) {
           const prodRef = doc(db, 'pos_products', item.productId);
           const prodSnap = await transaction.get(prodRef);
 
-          if (!prodSnap.exists()) throw new Error(`${tt('productNotFound', 'Product not found')}: ${item.name}`);
+          if (!prodSnap.exists()) throw new Error(`ပစ္စည်းရှာမတွေ့ပါ: ${item.name}`);
 
           const productData = prodSnap.data();
           const currentStockBase = Number(productData.stockBase ?? productData.stock ?? 0);
           const requiredQty = Number(item.baseQuantity) || Number(item.quantity) || 0;
 
           if (entryTab === 'Sale' && requiredQty > currentStockBase) {
-            throw new Error(`${tt('stockNotEnough', 'Insufficient stock')}: ${item.name} (${tt('stockLabel', 'Stock')}: ${currentStockBase})`);
+            throw new Error(`"${item.name}" အတွက် Stock မလုံလောက်ပါ။ လက်ကျန်: ${currentStockBase}`);
           }
 
           stockChecks.push({
@@ -650,7 +661,7 @@ export default function EntryPage({ products = [] }) {
         const countField = `${entryTab.toLowerCase()}Count`;
         const nextCount = counterSnap.exists() ? (Number(counterSnap.data()[countField]) || 0) + 1 : 1;
 
-        if (personNameForRecord !== walkInName && personNameForRecord !== unknownSupplierName && !personIdForRecord) {
+        if (personNameForRecord !== 'Walk-in' && personNameForRecord !== 'Unknown Supplier' && !personIdForRecord) {
           const collectionName = entryTab === 'Sale' ? 'pos_customers' : 'pos_suppliers';
           const newPersonRef = doc(collection(db, collectionName));
           personIdForRecord = newPersonRef.id;
@@ -704,12 +715,12 @@ export default function EntryPage({ products = [] }) {
 
           return {
             productId: i.productId || '',
-            name: i.name || tt('unknownItem', 'Unknown Item'),
+            name: i.name || 'Unknown Item',
             quantity,
             unitPrice,
             costPrice,
             itemDiscountAmt,
-            unitName: i.unitName || tt('defaultUnit', 'pcs'),
+            unitName: i.unitName || 'ခု',
             multiplier: Number(i.multiplier) || 1,
             priceType: i.priceType || 'retail',
             baseQuantity: Number(i.baseQuantity) || quantity,
@@ -736,7 +747,7 @@ export default function EntryPage({ products = [] }) {
           time: currentTime,
           voucherNo,
           itemsDetail,
-          item: itemsDetail.length > 1 ? tt('multipleItems', 'Multiple') : itemsDetail[0]?.name || tt('multipleItems', 'Multiple'),
+          item: itemsDetail.length > 1 ? 'Multiple' : itemsDetail[0]?.name || 'Multiple',
           amount: total,
           subtotal: Number(cartTotals.subtotal) || 0,
           itemDiscount: Number(cartTotals.itemDiscounts) || 0,
@@ -782,10 +793,10 @@ export default function EntryPage({ products = [] }) {
       const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
       setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-      showToast(`${tt(entryTab.toLowerCase(), entryTab)} ${tt('transactionSavedSuccess', 'saved successfully.')}`, 'success');
+      showToast(`${entryTab} သိမ်းဆည်းပြီးပါပြီ။`, 'success');
     } catch (err) {
       logger.error('Transaction Error: ', err);
-      showToast(err.message || tt('transactionSaveError', 'Error saving transaction. Please check your connection and try again.'), 'error');
+      showToast(err.message || 'Error saving transaction! Please check your connection and try again.', 'error');
     } finally {
       submitLock.current = false;
       setLoading(false);
@@ -813,7 +824,7 @@ export default function EntryPage({ products = [] }) {
     const match = barcodeMap.get(cleanText);
 
     if (!match) {
-      showToast(`${tt('barcodeNotFound', 'No product found for barcode')}: ${text}`, 'error');
+      showToast(`Barcode (${text}) ဖြင့် ပစ္စည်းရှာမတွေ့ပါ။`, 'error');
       return;
     }
 
@@ -856,14 +867,14 @@ export default function EntryPage({ products = [] }) {
 
       {showScanner && <ScannerModal onClose={() => setShowScanner(false)} onScan={handleBarcodeScanned} />}
 
-      <div className="relative min-h-screen bg-[#060816] text-white overflow-x-hidden print:hidden">
+      <div className="relative min-h-screen bg-[#060816] text-white overflow-x-hidden print:hidden" style={{ overflowAnchor: 'none' }}>
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-cyan-500/10 blur-[120px]" />
           <div className="absolute top-1/3 -right-24 w-96 h-96 rounded-full bg-blue-500/10 blur-[120px]" />
           <div className="absolute -bottom-32 left-1/4 w-[500px] h-[500px] rounded-full bg-violet-500/10 blur-[140px]" />
         </div>
 
-        <div className="relative z-10 p-3 sm:p-5 pb-28 max-w-[1600px] mx-auto space-y-4">
+        <div className="relative z-10 p-3 sm:p-5 pb-28 max-w-[1600px] mx-auto space-y-4" style={{ overflowAnchor: 'none' }}>
           <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 sm:p-5 shadow-2xl shadow-black/30">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
               <div className="flex items-start gap-3">

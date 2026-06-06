@@ -114,7 +114,6 @@ export default function EntryPage({ products = [] }) {
   });
   const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
   const submitLock = useRef(false);
-  const productClickScrollRef = useRef(0);
 
   const {
     cart,
@@ -331,8 +330,6 @@ export default function EntryPage({ products = [] }) {
 
   const handleSelectProduct = useCallback(
     (product) => {
-      productClickScrollRef.current = window.scrollY || window.pageYOffset || 0;
-
       const defaultUnit =
         product.packageUnits?.find((u) => Number(u.multiplier) === 1) ||
         product.packageUnits?.[0] || {
@@ -345,11 +342,6 @@ export default function EntryPage({ products = [] }) {
 
       if (response.success) {
         setProdSearch('');
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => {
-            window.scrollTo({ top: productClickScrollRef.current, left: 0, behavior: 'auto' });
-          });
-        });
       } else {
         showToast(response.message, 'error');
       }

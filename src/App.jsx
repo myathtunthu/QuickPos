@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onSnapshot, collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { onSnapshot, collection, query, where } from 'firebase/firestore';
 import { db } from './firebase/config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
@@ -52,20 +52,12 @@ const AdminOnlyRoute = ({ children }) => {
   return children;
 };
 
-const PermissionRoute = ({ permission, permissions, mode = 'any', children, fallback = '/entry' }) => {
+const PermissionRoute = ({ permission, children, fallback = '/entry' }) => {
   const { user, profile, loading, hasPermission } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!user || !profile) return <Navigate to="/login" replace />;
-
-  const requiredPermissions = permissions || (permission ? [permission] : []);
-  const allowed =
-    requiredPermissions.length === 0 ||
-    (mode === 'all'
-      ? requiredPermissions.every((perm) => hasPermission(perm))
-      : requiredPermissions.some((perm) => hasPermission(perm)));
-
-  if (!allowed) return <Navigate to={fallback} replace />;
+  if (!hasPermission(permission)) return <Navigate to={fallback} replace />;
 
   return children;
 };
@@ -79,26 +71,13 @@ function AppContent() {
     if (!profile?.tenantId) return;
 
     const unsubRecords = onSnapshot(
-      query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', profile.tenantId),
-        orderBy('createdAt', 'desc'),
-        limit(1000)
-      ),
-      (snap) => setAllRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (error) => {
-        console.error('Failed to load records:', error);
-        setAllRecords([]);
-      }
+      query(collection(db, 'pos_records'), where('tenantId', '==', profile.tenantId)),
+      (snap) => setAllRecords(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     const unsubProducts = onSnapshot(
       query(collection(db, 'pos_products'), where('tenantId', '==', profile.tenantId)),
-      (snap) => setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (error) => {
-        console.error('Failed to load products:', error);
-        setAllProducts([]);
-      }
+      (snap) => setAllProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     return () => {
@@ -162,7 +141,7 @@ function AppContent() {
           <Route
             path="entry"
             element={
-              <PermissionRoute permissions={['create_sale', 'create_purchase', 'create_expense']} fallback="/inventory">
+              <PermissionRoute permission="create_sale" fallback="/inventory">
                 <EntryPage products={mappedProducts} />
               </PermissionRoute>
             }
@@ -232,15 +211,15 @@ function AppContent() {
               </PermissionRoute>
             }
           />
+
           <Route
             path="reports"
             element={
               <PermissionRoute permission="view_reports" fallback="/entry">
-                <ReportsPage records={allRecords} />
+                <ReportsPage />
               </PermissionRoute>
             }
           />
-
         </Route>
 
         <Route path="*" element={<Navigate to="/entry" replace />} />

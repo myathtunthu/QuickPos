@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, orderBy, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, getDoc, limit } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import {
   FileText, Calendar, FileQuestion, Printer, Search, X,
@@ -66,6 +66,8 @@ const doPrint = (record, settings) => {
   w.document.close();
 };
 
+const RECORDS_FETCH_LIMIT = 300;
+
 export default function RecordsPage() {
   const { profile } = useAuth();
   const tenantId = profile?.tenantId;
@@ -77,6 +79,7 @@ export default function RecordsPage() {
   const [receiptModal, setReceiptModal] = useState({ show: false, record: null });
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [recordsLimited, setRecordsLimited] = useState(false);
 
   const todayISO = new Date().toISOString().split('T')[0];
   const [dateRange, setDateRange] = useState({ start: todayISO, end: todayISO });
@@ -105,15 +108,30 @@ export default function RecordsPage() {
     const qProd = query(collection(db, 'pos_products'), where('tenantId', '==', tenantId));
     const unsubProd = onSnapshot(qProd, (snap) => setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    // Fetch Records
-    const qRec = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'));
+    // Fetch Records: query the selected date range only and cap the realtime listener size.
+    // The old version listened to the whole tenant transaction history, which becomes slow/costly.
+    const qRec = query(
+      collection(db, 'pos_records'),
+      where('tenantId', '==', tenantId),
+      where('date', '>=', dateRange.start),
+      where('date', '<=', dateRange.end),
+      orderBy('date', 'desc'),
+      orderBy('createdAt', 'desc'),
+      limit(RECORDS_FETCH_LIMIT)
+    );
     const unsubRec = onSnapshot(qRec, (snap) => {
       setRecords(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setRecordsLimited(snap.size >= RECORDS_FETCH_LIMIT);
+      setIsLoading(false);
+    }, (err) => {
+      console.error('Records query failed:', err);
+      setRecords([]);
+      setRecordsLimited(false);
       setIsLoading(false);
     });
 
     return () => { unsubProd(); unsubRec(); };
-  }, [tenantId, profile]);
+  }, [tenantId, profile, dateRange.start, dateRange.end]);
 
   const productMap = useMemo(() => {
     const map = {};
@@ -294,6 +312,12 @@ export default function RecordsPage() {
           ))
         )}
       </div>
+
+      {recordsLimited && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
+          Selected date range ထဲမှာ records များလွန်းလို့ latest {RECORDS_FETCH_LIMIT} ခုကိုသာ realtime ပြထားပါတယ်။ Date range ကို ကျဉ်းပြီးရှာပါ။
+        </div>
+      )}
 
       {/* ─── Receipt Modal ─── */}
       {receiptModal.show && receiptModal.record && (

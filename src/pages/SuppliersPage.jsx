@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
+import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
 import { Truck, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
 
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
+
+const SUPPLIER_FETCH_LIMIT = 500;
+const SUPPLIER_RENDER_PAGE_SIZE = 50;
+const SUPPLIER_HISTORY_LIMIT = 800;
 
 export default function SuppliersPage() {
   const { profile, hasPermission } = useAuth();
@@ -17,6 +21,8 @@ export default function SuppliersPage() {
   const [allRecords, setAllRecords] = useState([]); 
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [visibleLimit, setVisibleLimit] = useState(SUPPLIER_RENDER_PAGE_SIZE);
+  const [historyVisibleLimit, setHistoryVisibleLimit] = useState(SUPPLIER_RENDER_PAGE_SIZE);
 
   const [autoMergeDone, setAutoMergeDone] = useState(false);
 
@@ -42,13 +48,13 @@ export default function SuppliersPage() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const suppQ = query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId));
+      const suppQ = query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId), orderBy('name'), limit(SUPPLIER_FETCH_LIMIT));
       const suppSnap = await getDocs(suppQ);
       const suppData = suppSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       suppData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setSuppliers(suppData);
 
-      const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId));
+      const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), where('type', '==', 'Supplier Payment'), orderBy('createdAt', 'desc'), limit(SUPPLIER_HISTORY_LIMIT));
       const recSnap = await getDocs(recQ);
       setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     } catch (error) { console.error("Error fetching data:", error); }
@@ -58,8 +64,13 @@ export default function SuppliersPage() {
   useEffect(() => { fetchData(); }, [tenantId]);
 
   useEffect(() => {
-    if (suppliers.length > 0 && allRecords.length > 0 && !autoMergeDone) checkAndMergeDuplicates();
+    if (suppliers.length > 0 && allRecords.length > 0 && !autoMergeDone && suppliers.length < SUPPLIER_FETCH_LIMIT) checkAndMergeDuplicates();
   }, [suppliers, allRecords, autoMergeDone]);
+
+  useEffect(() => {
+    setVisibleLimit(SUPPLIER_RENDER_PAGE_SIZE);
+    setHistoryVisibleLimit(SUPPLIER_RENDER_PAGE_SIZE);
+  }, [searchTerm, activeTab]);
 
   const checkAndMergeDuplicates = async () => {
     const groups = {};
@@ -104,6 +115,8 @@ export default function SuppliersPage() {
     return suppliers.filter(s => (s.name || '').toLowerCase().includes(lowerSearch) || (s.phone || '').includes(lowerSearch));
   }, [suppliers, searchTerm]);
 
+  const visibleSuppliers = useMemo(() => filteredSuppliers.slice(0, visibleLimit), [filteredSuppliers, visibleLimit]);
+
   const mergedHistory = useMemo(() => {
     const payments = allRecords.filter(r => r.type === 'Supplier Payment');
     const merged = {};
@@ -119,6 +132,8 @@ export default function SuppliersPage() {
     if (searchTerm.trim()) historyArr = historyArr.filter(h => (h.personName || '').toLowerCase().includes(searchTerm.toLowerCase()));
     return historyArr;
   }, [allRecords, searchTerm]);
+
+  const visibleHistory = useMemo(() => mergedHistory.slice(0, historyVisibleLimit), [mergedHistory, historyVisibleLimit]);
 
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
@@ -296,7 +311,7 @@ export default function SuppliersPage() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filteredSuppliers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">No Suppliers</td></tr> : 
-                  filteredSuppliers.map(s => (
+                  visibleSuppliers.map(s => (
                     <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="p-4 font-bold text-white text-base">{s.name}</td>
                       <td className="p-4 text-slate-400"><p>{s.phone || '-'}</p><p className="text-xs text-slate-500 truncate max-w-[200px]">{s.address || '-'}</p></td>
@@ -322,7 +337,7 @@ export default function SuppliersPage() {
             </div>
 
             <div className="block sm:hidden divide-y divide-white/5">
-              {filteredSuppliers.map(s => {
+              {visibleSuppliers.map(s => {
                 const isExpanded = expandedSupp[s.id];
                 return (
                   <div key={s.id} className="bg-[#0d1120] transition-colors">
@@ -370,7 +385,7 @@ export default function SuppliersPage() {
                </thead>
                <tbody className="divide-y divide-white/5">
                  {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေချေမှတ်တမ်း မရှိသေးပါ။</td></tr> :
-                 mergedHistory.map((h, i) => (
+                 visibleHistory.map((h, i) => (
                    <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-rose-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
                  ))}
                </tbody>
@@ -378,6 +393,28 @@ export default function SuppliersPage() {
            </div>
         )}
       </div>
+
+      {activeTab === 'book' && filteredSuppliers.length > visibleSuppliers.length && (
+        <div className="flex justify-center">
+          <button onClick={() => setVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-cyan-600/20 text-cyan-300 border border-cyan-500/20 font-bold hover:bg-cyan-600/30">
+            Load More ({visibleSuppliers.length}/{filteredSuppliers.length})
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
+        <div className="flex justify-center">
+          <button onClick={() => setHistoryVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/20 font-bold hover:bg-purple-600/30">
+            Load More ({visibleHistory.length}/{mergedHistory.length})
+          </button>
+        </div>
+      )}
+
+      {(suppliers.length >= SUPPLIER_FETCH_LIMIT || allRecords.length >= SUPPLIER_HISTORY_LIMIT) && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
+          Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့ပဲ ဖော်ပြထားပါတယ်။ Search/Filter မတွေ့ပါက date/filter pagination phase ဆက်လိုပါမယ်။
+        </div>
+      )}
 
       {/* --- MODALS --- */}
       {isSupplierModalOpen && (

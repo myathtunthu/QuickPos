@@ -1,15 +1,20 @@
 import React from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function ConfirmDialog({
   isOpen,
-  title = "အတည်ပြုပါ",
-  message = "ဤလုပ်ဆောင်ချက်ကို ဆက်လက်လုပ်ဆောင်ရန် သေချာပါသလား?",
+  title,
+  message,
   onConfirm,
   onCancel,
   isLoading = false,
   isDangerous = true // True ဆိုလျှင် အနီရောင်ခလုတ်ပြမည်
 }) {
+  const { t } = useLanguage();
+  const dialogTitle = title || t('confirmDefaultTitle', 'Confirm');
+  const dialogMessage = message || t('confirmDefaultMessage', 'Are you sure you want to continue?');
+
   if (!isOpen) return null;
 
   return (
@@ -20,11 +25,11 @@ export default function ConfirmDialog({
           <div className={`p-3 rounded-full ${isDangerous ? 'bg-rose-500/10 text-rose-500' : 'bg-cyan-500/10 text-cyan-500'}`}>
             {isDangerous ? <AlertTriangle size={24} /> : <Info size={24} />}
           </div>
-          <h2 className="text-xl font-black text-white">{title}</h2>
+          <h2 className="text-xl font-black text-white">{dialogTitle}</h2>
         </div>
 
         <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-          {message}
+          {dialogMessage}
         </p>
 
         <div className="flex gap-3">
@@ -33,7 +38,7 @@ export default function ConfirmDialog({
             disabled={isLoading}
             className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
           >
-            မလုပ်တော့ပါ (Cancel)
+            {t('cancel', 'Cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -48,7 +53,7 @@ export default function ConfirmDialog({
             {isLoading ? (
               <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
             ) : (
-              'အတည်ပြုမည်'
+              t('confirm', 'Confirm')
             )}
           </button>
         </div>

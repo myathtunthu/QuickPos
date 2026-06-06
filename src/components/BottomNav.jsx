@@ -1,14 +1,14 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Users, PauseCircle } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Package, FileText, BarChart3 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 // 🌟 Menu များနှင့် သက်ဆိုင်ရာ Permission များကို ချိတ်ဆက်ထားပါသည်
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dash', perm: 'view_reports' },
   { path: '/entry', icon: ShoppingCart, label: 'Entry', perm: 'create_sale' },
-  { path: '/drafts', icon: PauseCircle, label: 'Hold', perm: 'create_sale' }, // 🌟 အသစ်
   { path: '/inventory', icon: Package, label: 'Stock', perm: 'view_inventory' },
-  { path: '/customers', icon: Users, label: 'People', perm: 'accept_payment' }, // 🌟 လွယ်ကူစေရန် Customer သို့ ချိတ်ထားသည်
+  { path: '/records', icon: FileText, label: 'Records', perm: 'view_sales' },
+  { path: '/reports', icon: BarChart3, label: 'Reports', perm: 'view_reports' }
 ];
 
 export default function BottomNav() {

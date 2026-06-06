@@ -50,7 +50,7 @@ const CartSection = React.memo(({
                 value={item.quantity} 
                 onChange={event => onUpdateQty(item.id, event.target.value)} 
                 className="w-16 bg-black/50 border border-white/10 rounded px-1.5 py-1.5 text-center text-[16px] sm:text-xs text-white outline-none focus:border-cyan-400" 
-                aria-label="Quantity"
+                aria-label={t('quantity', 'Quantity')}
               />
 
               {availableUnits.length > 0 ? (
@@ -93,7 +93,7 @@ const CartSection = React.memo(({
                 value={item.unitPrice} 
                 onChange={event => onUpdatePrice(item.id, event.target.value)} 
                 className="w-24 bg-black/50 border border-cyan-500/20 rounded px-1.5 py-1.5 text-right text-[16px] sm:text-xs text-cyan-300 outline-none focus:border-cyan-400" 
-                aria-label={t('retailPrice', 'Price')}
+                aria-label={t('price', 'Price')}
               />
 
               <div className="relative">

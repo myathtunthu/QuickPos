@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PlusCircle } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function ProductUnitSelector({
   product,
@@ -8,6 +9,7 @@ export default function ProductUnitSelector({
   stockBase,
   playBeep
 }) {
+  const { t } = useLanguage();
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [priceType, setPriceType] = useState('retail');
   const [unitPrice, setUnitPrice] = useState('');
@@ -55,7 +57,7 @@ export default function ProductUnitSelector({
     if (entryTab === 'Sale') {
       const needBase = qty * (selectedUnit.multiplier || 1);
       if (needBase > (Number(stockBase) || 0)) {
-        setWarning('Stock မလုံလောက်ပါ');
+        setWarning(t('stockNotEnough', 'Insufficient stock'));
         playBeep('error');
         return;
       }
@@ -97,10 +99,10 @@ export default function ProductUnitSelector({
             onChange={e => handlePriceTypeChange(e.target.value)}
             className="flex-1 bg-black border border-cyan-500/20 rounded-md px-2 py-1.5 text-[11px] text-white outline-none"
           >
-            <option value="retail">Retail</option>
-            <option value="wholesaleA">Wholesale A</option>
-            <option value="wholesaleB">Wholesale B</option>
-            <option value="wholesaleC">Wholesale C</option>
+            <option value="retail">{t('retailPrice', 'Retail Price')}</option>
+            <option value="wholesaleA">{t('wholesaleA', 'Wholesale A')}</option>
+            <option value="wholesaleB">{t('wholesaleB', 'Wholesale B')}</option>
+            <option value="wholesaleC">{t('wholesaleC', 'Wholesale C')}</option>
           </select>
         )}
       </div>
@@ -108,21 +110,21 @@ export default function ProductUnitSelector({
         <input
           value={unitPrice}
           onChange={e => setUnitPrice(e.target.value)}
-          placeholder="Price"
-          className="w-16 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[11px] text-white text-center"
+          placeholder={t('price', 'Price')}
+          className="w-16 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[16px] sm:text-xs text-white text-center"
         />
         <span className="text-slate-500 text-[10px]">×</span>
         <input
           value={quantity}
           onChange={e => setQuantity(e.target.value)}
           placeholder="1"
-          className="w-10 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[11px] text-white text-center"
+          className="w-10 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[16px] sm:text-xs text-white text-center"
         />
         <button
           onClick={handleAdd}
           className="flex-1 py-1.5 bg-cyan-600 rounded-md font-bold text-[11px] flex items-center justify-center gap-1 active:scale-95"
         >
-          <PlusCircle size={12} /> Add
+          <PlusCircle size={12} /> {t('addToCart', 'Add')}
         </button>
       </div>
       {warning && (

@@ -107,6 +107,14 @@ export default function EntryPage({ products = [] }) {
     ? 'Expense'
     : 'Sale';
 
+  const allowedTabs = useMemo(() => {
+    const tabs = [];
+    if (hasPermission('create_sale')) tabs.push('Sale');
+    if (hasPermission('create_purchase')) tabs.push('Purchase');
+    if (hasPermission('create_expense')) tabs.push('Expense');
+    return tabs;
+  }, [hasPermission]);
+
   const [entryDate, setEntryDate] = useState(todayISO);
   const [entryTab, setEntryTab] = useState(initialTab);
   const [customers, setCustomers] = useState([]);
@@ -154,6 +162,13 @@ export default function EntryPage({ products = [] }) {
     globalDiscountType,
     setGlobalDiscountType,
   } = useCart(products, entryTab);
+
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(entryTab)) {
+      setEntryTab(allowedTabs[0]);
+      clearCart();
+    }
+  }, [allowedTabs, entryTab, clearCart]);
 
   const fetchDrafts = useCallback(async () => {
     if (!tenantId) return;
@@ -304,6 +319,51 @@ export default function EntryPage({ products = [] }) {
   }, [products, cart, cartTotals.total, paidAmount]);
 
 
+  const entryValidation = useMemo(() => {
+    if (entryTab === 'Expense') {
+      if (!expenseTitle.trim()) return { ok: false, message: tt('expenseTitleRequired', 'Expense title is required') };
+      if (!expenseAmt || Number(expenseAmt) <= 0) return { ok: false, message: tt('expenseAmountRequired', 'Expense amount must be greater than 0') };
+      return { ok: true, message: '' };
+    }
+
+    if (!tenantId) return { ok: false, message: tt('tenantMissing', 'Tenant is missing') };
+    if (cart.length === 0) return { ok: false, message: tt('cartEmpty', 'Cart is empty') };
+
+    const invalidItem = cart.find((item) => item.quantity === '' || Number(item.quantity) <= 0);
+    if (invalidItem) {
+      return { ok: false, message: `${invalidItem.name || tt('unknownItem', 'Unknown Item')} ${tt('invalidQuantity', 'has invalid quantity')}` };
+    }
+
+    const negativePrice = cart.find((item) => Number(item.unitPrice) < 0);
+    if (negativePrice) {
+      return { ok: false, message: `${negativePrice.name || tt('unknownItem', 'Unknown Item')} ${tt('invalidPrice', 'has invalid price')}` };
+    }
+
+    if (entryTab === 'Sale') {
+      const oversold = cart.find((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        if (!product) return false;
+        return (Number(item.baseQuantity) || 0) > getProductStock(product);
+      });
+      if (oversold) {
+        return { ok: false, message: `${oversold.name || tt('unknownItem', 'Unknown Item')} ${tt('stockNotEnough', 'stock is not enough')}` };
+      }
+    }
+
+    const total = Number(cartTotals.total) || 0;
+    const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
+    if (paid < 0) return { ok: false, message: tt('invalidPaidAmount', 'Paid amount is invalid') };
+
+    const remainingDebt = Math.max(0, total - paid);
+    const anonymousName = entryTab === 'Sale' ? 'Walk-in' : 'Unknown Supplier';
+    const personName = selectedPerson?.name || personSearch.trim() || anonymousName;
+    if (remainingDebt > 0 && personName === anonymousName) {
+      return { ok: false, message: entryTab === 'Sale' ? tt('creditCustomerRequired', 'Customer name is required for credit sale') : tt('creditSupplierRequired', 'Supplier name is required for credit purchase') };
+    }
+
+    return { ok: true, message: '' };
+  }, [entryTab, expenseTitle, expenseAmt, tenantId, cart, products, cartTotals.total, paidAmount, selectedPerson, personSearch, tt]);
+
   const liveReceiptRecord = useMemo(() => {
     const total = Number(cartTotals.total) || 0;
     const paid = paidAmount === '' ? total : Number(paidAmount) || 0;
@@ -384,6 +444,11 @@ export default function EntryPage({ products = [] }) {
   }, [cart.length, restorePageScroll]);
 
   const handleTabChange = (tab) => {
+    if (!allowedTabs.includes(tab)) {
+      showToast(tt('permissionDenied', 'Permission denied'), 'error');
+      return;
+    }
+
     if (cart.length > 0) {
       setConfirmDialog({
         isOpen: true,
@@ -537,7 +602,18 @@ export default function EntryPage({ products = [] }) {
 
   const submitExpense = async () => {
     if (submitLock.current) return;
-    if (!expenseTitle || !expenseAmt || !tenantId) return;
+    if (!tenantId) {
+      showToast(tt('tenantMissing', 'Tenant is missing'), 'error');
+      return;
+    }
+    if (!expenseTitle.trim()) {
+      showToast(tt('expenseTitleRequired', 'Expense title is required'), 'error');
+      return;
+    }
+    if (!expenseAmt || Number(expenseAmt) <= 0) {
+      showToast(tt('expenseAmountRequired', 'Expense amount must be greater than 0'), 'error');
+      return;
+    }
 
     submitLock.current = true;
     setLoading(true);
@@ -553,8 +629,8 @@ export default function EntryPage({ products = [] }) {
       batch.set(ref, {
         type: 'Expense',
         tenantId,
-        item: expenseTitle,
-        amount: Number(expenseAmt) || 0,
+        item: expenseTitle.trim(),
+        amount: Math.max(Number(expenseAmt) || 0, 0),
         date: entryDate,
         time: new Date().toLocaleTimeString('en-US', {
           hour: '2-digit',
@@ -587,12 +663,16 @@ export default function EntryPage({ products = [] }) {
 
   const submitTransaction = async () => {
     if (submitLock.current) return;
-    if (cart.length === 0 || !tenantId) return;
-
-    const invalidItem = cart.find((item) => item.quantity === '' || Number(item.quantity) <= 0);
-
-    if (invalidItem) {
-      showToast(`အမှား: "${invalidItem.name}" ၏ အရေအတွက် မှားယွင်းနေပါသည်။`, 'error');
+    if (!tenantId) {
+      showToast(tt('tenantMissing', 'Tenant is missing'), 'error');
+      return;
+    }
+    if (!allowedTabs.includes(entryTab) || entryTab === 'Expense') {
+      showToast(tt('permissionDenied', 'Permission denied'), 'error');
+      return;
+    }
+    if (!entryValidation.ok) {
+      showToast(entryValidation.message, 'error');
       return;
     }
 
@@ -787,11 +867,13 @@ export default function EntryPage({ products = [] }) {
       setPaidAmount('');
       setPaymentMethod('Cash');
 
-      const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
-      setCustomers(custSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
-
-      const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
-      setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      if (entryTab === 'Sale') {
+        const custSnap = await getDocs(query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId)));
+        setCustomers(custSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } else if (entryTab === 'Purchase') {
+        const suppSnap = await getDocs(query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId)));
+        setSuppliers(suppSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      }
 
       showToast(`${entryTab} သိမ်းဆည်းပြီးပါပြီ။`, 'success');
     } catch (err) {
@@ -1048,7 +1130,7 @@ export default function EntryPage({ products = [] }) {
                           onClick={() => restoreDraft(d)}
                           className="px-3 py-2 bg-cyan-600 rounded-xl text-xs font-bold text-white"
                         >
-                          Restore
+                          {tt('restore', 'Restore')}
                         </button>
                         <button
                           type="button"
@@ -1069,7 +1151,7 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex items-center gap-2 mb-3">
                       <User size={16} className="text-cyan-400" />
                       <h2 className="font-black text-sm text-slate-200">
-                        {entryTab === 'Sale' ? 'Customer' : 'Supplier'}
+                        {entryTab === 'Sale' ? tt('customer', 'Customer') : tt('supplier', 'Supplier')}
                       </h2>
                     </div>
 
@@ -1217,6 +1299,7 @@ export default function EntryPage({ products = [] }) {
                       onUpdateDiscount={updateCartItemDiscount}
                       onUpdatePrice={updateCartItemPrice}
                       onRemove={removeCartItem}
+                      entryTab={entryTab}
                     />
 
                     {cart.length > 0 ? (
@@ -1290,6 +1373,8 @@ export default function EntryPage({ products = [] }) {
                         submitTransaction={submitTransaction}
                         loading={loading}
                         entryTab={entryTab}
+                        disabled={!entryValidation.ok}
+                        disabledReason={entryValidation.message}
                       />
                     </div>
                   )}

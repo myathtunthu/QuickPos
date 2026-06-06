@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -138,7 +138,7 @@ export default function DashboardPage() {
     setLoading(true);
 
     const unsubRecords = onSnapshot(
-      query(collection(db, 'pos_records'), where('tenantId', '==', tenantId)),
+      query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(500)),
       (snap) => {
         setRecords(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         setLoading(false);

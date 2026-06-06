@@ -1,30 +1,20 @@
 /**
- * Simple Internationalization (i18n) Setup for Multi-language support
- * (English and Myanmar/Burmese)
+ * Compatibility i18n module.
+ * The main app uses src/context/LanguageContext.jsx + src/utils/translations.js.
+ * This file now re-exports the same dictionary so old imports do not use a tiny,
+ * incomplete translation table.
  */
+import { translations as baseTranslations } from '../utils/translations';
 
 export const translations = {
-  en: {
-    dashboard: "Dashboard",
-    pos_entry: "POS Entry",
-    inventory: "Inventory",
-    reports: "Reports",
-    settings: "Settings",
-    total_sales: "Total Sales",
-    checkout: "Checkout"
-  },
-  my: {
-    dashboard: "ဒက်ရှ်ဘုတ်",
-    pos_entry: "အရောင်းမှတ်ရန်",
-    inventory: "ကုန်ပစ္စည်းစာရင်း",
-    reports: "အစီရင်ခံစာများ",
-    settings: "ဆက်တင်များ",
-    total_sales: "စုစုပေါင်းရောင်းရငွေ",
-    checkout: "ငွေရှင်းမည်"
-  }
+  ...baseTranslations,
+  my: baseTranslations.mm, // backward compatibility for older code using "my"
 };
 
-export const getTranslation = (lang, key) => {
-  if (!translations[lang]) return key;
-  return translations[lang][key] || key;
+export const getTranslation = (lang, key, fallback = '') => {
+  const normalizedLang = lang === 'my' ? 'mm' : lang;
+  return baseTranslations?.[normalizedLang]?.[key]
+    || baseTranslations?.en?.[key]
+    || fallback
+    || key;
 };

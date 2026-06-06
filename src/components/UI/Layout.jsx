@@ -95,7 +95,7 @@ export default function Layout() {
           </button>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 pb-20 md:pb-6">
+        <main data-app-scroll-container="true" className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 pb-20 md:pb-6 overscroll-contain">
           <Outlet />
         </main>
       </div>

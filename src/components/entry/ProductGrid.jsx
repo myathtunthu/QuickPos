@@ -6,25 +6,31 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
   const { t } = useLanguage();
   const gridRef = useRef(null);
   const windowScrollRef = useRef(0);
+  const mainScrollRef = useRef(0);
   const gridScrollRef = useRef(0);
 
   const rememberScroll = useCallback(() => {
+    const mainScroller = document.querySelector('[data-app-scroll-container="true"]');
     windowScrollRef.current = window.scrollY || window.pageYOffset || 0;
+    mainScrollRef.current = mainScroller?.scrollTop || 0;
     gridScrollRef.current = gridRef.current?.scrollTop || 0;
   }, []);
 
   const restoreScroll = useCallback(() => {
     const y = windowScrollRef.current;
+    const mainY = mainScrollRef.current;
     const gridY = gridScrollRef.current;
 
-    requestAnimationFrame(() => {
+    const apply = () => {
+      const mainScroller = document.querySelector('[data-app-scroll-container="true"]');
       window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+      if (mainScroller) mainScroller.scrollTop = mainY;
       if (gridRef.current) gridRef.current.scrollTop = gridY;
+    };
 
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: y, left: 0, behavior: 'auto' });
-        if (gridRef.current) gridRef.current.scrollTop = gridY;
-      });
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
     });
   }, []);
 
@@ -65,6 +71,8 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
         return (
           <button
             type="button"
+            tabIndex={-1}
+            aria-label={`${t('addItem', 'Add Item')}: ${name}`}
             key={product.id || name}
             onPointerDown={() => rememberScroll()}
             onMouseDown={(event) => {

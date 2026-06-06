@@ -858,10 +858,10 @@ export default function EntryPage({ products = [] }) {
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-black">
                     <span className="text-white">{shopSettings.shopName || 'POS'}</span>{' '}
-                    <span className="text-cyan-400">Entry</span>
+                    <span className="text-cyan-400">{tt('posEntry', 'POS Entry')}</span>
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">
-                    Shop receipt uses Settings logo/name/phone/address • Cashier: <span className="text-cyan-300">{cashierName}</span>
+                    {tt('receiptUsesSettings', 'Shop receipt uses Settings logo/name/phone/address')} • {tt('cashierLabel', 'Cashier')}: <span className="text-cyan-300">{cashierName}</span>
                   </p>
                 </div>
               </div>
@@ -877,7 +877,7 @@ export default function EntryPage({ products = [] }) {
                         : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
                     }`}
                   >
-                    Sale
+                    {tt('sale', 'Sale')}
                   </button>
                 )}
                 {hasPermission('create_purchase') && (
@@ -890,7 +890,7 @@ export default function EntryPage({ products = [] }) {
                         : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
                     }`}
                   >
-                    Purchase
+                    {tt('purchase', 'Purchase')}
                   </button>
                 )}
                 {hasPermission('create_expense') && (
@@ -903,7 +903,7 @@ export default function EntryPage({ products = [] }) {
                         : 'bg-black/30 border border-white/5 text-slate-400 hover:text-white'
                     }`}
                   >
-                    Expense
+                    {tt('expense', 'Expense')}
                   </button>
                 )}
                 <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-2">
@@ -925,19 +925,19 @@ export default function EntryPage({ products = [] }) {
               <div className="xl:col-span-2 bg-[#0d1120]/95 border border-amber-500/20 rounded-3xl p-5 space-y-4 shadow-xl">
                 <h2 className="text-amber-400 font-black text-xl flex items-center gap-2">
                   <Wallet size={22} />
-                  Record Expense
+                  {tt('recordExpense', 'Record Expense')}
                 </h2>
                 <input
                   value={expenseTitle}
                   onChange={(e) => setExpenseTitle(e.target.value)}
-                  placeholder="Expense Title (e.g. မီတာခ)"
+                  placeholder={tt('expenseTitlePlaceholder', 'Expense Title (e.g. electricity bill)')}
                   className="w-full bg-black/40 border border-amber-500/30 rounded-2xl px-4 py-4 text-sm text-white outline-none focus:border-amber-400"
                 />
                 <input
                   type="number"
                   value={expenseAmt}
                   onChange={(e) => setExpenseAmt(e.target.value)}
-                  placeholder="Amount (Ks)"
+                  placeholder={tt('expenseAmountPlaceholder', 'Amount (Ks)')}
                   className="w-full bg-black/40 border border-amber-500/30 rounded-2xl px-4 py-4 text-sm text-white outline-none focus:border-amber-400"
                 />
                 <button
@@ -950,14 +950,14 @@ export default function EntryPage({ products = [] }) {
                 </button>
               </div>
               <div className="bg-[#0d1120]/95 border border-white/5 rounded-3xl p-5">
-                <h3 className="font-black text-slate-300 mb-3">Today Info</h3>
+                <h3 className="font-black text-slate-300 mb-3">{tt('dailySummary', 'Today Info')}</h3>
                 <div className="space-y-3">
                   <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
-                    <p className="text-xs text-slate-500 font-bold">Voucher Prefix</p>
+                    <p className="text-xs text-slate-500 font-bold">{tt('voucher', 'Voucher')} Prefix</p>
                     <p className="text-amber-400 font-black">EXP</p>
                   </div>
                   <div className="bg-black/30 rounded-2xl p-4 border border-white/5">
-                    <p className="text-xs text-slate-500 font-bold">Cashier</p>
+                    <p className="text-xs text-slate-500 font-bold">{tt('cashierLabel', 'Cashier')}</p>
                     <p className="text-white font-black">{cashierName}</p>
                   </div>
                 </div>
@@ -967,19 +967,19 @@ export default function EntryPage({ products = [] }) {
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Products</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('productsLabel', 'Products')}</p>
                   <p className="text-2xl font-black text-cyan-400 mt-1">{summary.productCount}</p>
                 </div>
                 <div className="rounded-3xl border border-violet-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Cart Qty</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('cartQty', 'Cart Qty')}</p>
                   <p className="text-2xl font-black text-violet-400 mt-1">{summary.cartCount}</p>
                 </div>
                 <div className="rounded-3xl border border-amber-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Low Stock</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('lowStock', 'Low Stock')}</p>
                   <p className="text-2xl font-black text-amber-400 mt-1">{summary.lowStockCount}</p>
                 </div>
                 <div className="rounded-3xl border border-emerald-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">Total</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('totalLabel', 'Total')}</p>
                   <p className="text-xl font-black text-emerald-400 mt-1">{formatMoney(summary.total)}</p>
                 </div>
               </div>
@@ -1002,8 +1002,8 @@ export default function EntryPage({ products = [] }) {
 
               {showDrafts && entryTab === 'Sale' && (
                 <div className="bg-[#0d1120]/95 border border-indigo-500/20 rounded-3xl p-4 space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
-                  <h3 className="text-sm font-black text-indigo-400 mb-2">Saved Hold Invoices</h3>
-                  {drafts.length === 0 && <p className="text-slate-500 text-xs">No saved drafts.</p>}
+                  <h3 className="text-sm font-black text-indigo-400 mb-2">{tt('savedHoldInvoices', 'Saved Hold Invoices')}</h3>
+                  {drafts.length === 0 && <p className="text-slate-500 text-xs">{tt('noSavedDrafts', 'No saved drafts.')}</p>}
                   {drafts.map((d) => (
                     <div
                       key={d.id}
@@ -1012,7 +1012,7 @@ export default function EntryPage({ products = [] }) {
                       <div>
                         <p className="text-sm font-bold text-white">{d.draftName}</p>
                         <p className="text-[10px] text-slate-400">
-                          {d.type} | {d.cart?.length || 0} items |{' '}
+                          {d.type} | {d.cart?.length || 0} {tt('items', 'items')} |{' '}
                           {d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString() : 'Loading...'}
                         </p>
                       </div>
@@ -1066,8 +1066,8 @@ export default function EntryPage({ products = [] }) {
                           onBlur={() => setTimeout(() => setShowPersonDropdown(false), 200)}
                           placeholder={
                             entryTab === 'Sale'
-                              ? 'Customer အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ'
-                              : 'Supplier အမည် ရှာဖွေပါ (သို့) အသစ်ရိုက်ထည့်ပါ'
+                              ? tt('customerSearchPlaceholder', 'Search customer or type new customer')
+                              : tt('supplierSearchPlaceholder', 'Search supplier or type new supplier')
                           }
                           className={`w-full bg-black/40 border rounded-2xl pl-10 pr-3 py-3 text-xs text-white outline-none transition-colors ${
                             selectedPerson
@@ -1101,19 +1101,19 @@ export default function EntryPage({ products = [] }) {
                       {!selectedPerson && personSearch.trim().length > 0 && (
                         <div className="p-3 bg-green-500/10 rounded-2xl border border-green-500/20 shadow-inner">
                           <p className="text-[11px] font-bold text-green-400 mb-2">
-                            <span className="text-white">"{personSearch}"</span> အား စာရင်းအသစ်အဖြစ် မှတ်သားမည်
+                            <span className="text-white">"{personSearch}"</span> {tt('saveAsNew', 'Will save as new')}
                           </p>
                           <div className="flex flex-col sm:flex-row gap-2">
                             <input
                               value={newPersonPhone}
                               onChange={(e) => setNewPersonPhone(e.target.value)}
-                              placeholder="ဖုန်းနံပါတ်"
+                              placeholder={tt('phoneOptional', 'Phone (Optional)')}
                               className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-400"
                             />
                             <input
                               value={newPersonAddress}
                               onChange={(e) => setNewPersonAddress(e.target.value)}
-                              placeholder="လိပ်စာ"
+                              placeholder={tt('addressOptional', 'Address (Optional)')}
                               className="w-full sm:w-1/2 bg-black/40 border border-green-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-green-400"
                             />
                           </div>
@@ -1126,7 +1126,7 @@ export default function EntryPage({ products = [] }) {
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <Boxes size={17} className="text-cyan-400" />
-                        <h2 className="font-black text-sm text-slate-200">Product Board</h2>
+                        <h2 className="font-black text-sm text-slate-200">{tt('productsLabel', 'Products')}</h2>
                       </div>
                       <button
                         type="button"
@@ -1134,7 +1134,7 @@ export default function EntryPage({ products = [] }) {
                         className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-xs font-black"
                       >
                         <ScanLine size={14} />
-                        Scan
+                        {tt('scanBarcode', 'Scan Barcode')}
                       </button>
                     </div>
 
@@ -1177,7 +1177,7 @@ export default function EntryPage({ products = [] }) {
                           }`}
                         >
                           <PauseCircle size={12} />
-                          Hold
+                          {tt('hold', 'Hold')}
                         </button>
                       )}
                     </div>
@@ -1244,7 +1244,7 @@ export default function EntryPage({ products = [] }) {
                       </div>
                     ) : (
                       <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-white/10 rounded-2xl">
-                        Select product to start sale.
+                        {tt('selectProductStart', 'Select product to start sale')}
                       </div>
                     )}
                   </div>
@@ -1272,11 +1272,11 @@ export default function EntryPage({ products = [] }) {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-[#0d1120]/95 border border-emerald-500/20 rounded-3xl p-4">
-                      <p className="text-[10px] text-slate-500 font-black uppercase">Paid</p>
+                      <p className="text-[10px] text-slate-500 font-black uppercase">{tt('paidLabel', 'Paid')}</p>
                       <p className="text-lg font-black text-emerald-400">{formatMoney(summary.paid)}</p>
                     </div>
                     <div className="bg-[#0d1120]/95 border border-rose-500/20 rounded-3xl p-4">
-                      <p className="text-[10px] text-slate-500 font-black uppercase">Balance</p>
+                      <p className="text-[10px] text-slate-500 font-black uppercase">{tt('balance', 'Balance')}</p>
                       <p className="text-lg font-black text-rose-400">{formatMoney(summary.balance)}</p>
                     </div>
                   </div>

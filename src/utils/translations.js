@@ -1,6 +1,9 @@
 export const translations = {
   en: {
     dashboard: 'Dashboard',
+    reports: 'Reports',
+    startDate: 'Start Date',
+    endDate: 'End Date',
     posEntry: 'POS Entry',
     holdInvoices: 'Hold Invoices',
     inventory: 'Inventory',
@@ -299,6 +302,9 @@ export const translations = {
 
   mm: {
     dashboard: 'ဒက်ရှ်ဘုတ်',
+    reports: 'အစီရင်ခံစာများ',
+    startDate: 'စတင်ရက်',
+    endDate: 'ဆုံးရက်',
     posEntry: 'အရောင်း / အဝယ်',
     holdInvoices: 'ဆိုင်းငံ့ဘေလ်များ',
     inventory: 'ကုန်လက်ကျန်',
@@ -597,6 +603,9 @@ export const translations = {
 
   zh: {
     dashboard: '仪表盘',
+    reports: '报表',
+    startDate: '开始日期',
+    endDate: '结束日期',
     posEntry: '销售 / 采购',
     holdInvoices: '挂单',
     inventory: '库存',

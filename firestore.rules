@@ -7,6 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userDocExists() {
+      return signedIn() && exists(/databases/$(database)/documents/pos_users/$(request.auth.uid));
+    }
+
     function myUser() {
       return get(/databases/$(database)/documents/pos_users/$(request.auth.uid)).data;
     }
@@ -19,10 +23,19 @@ service cloud.firestore {
       return myUser().role;
     }
 
+    function isSuperAdmin() {
+      return userDocExists() && (myRole() == 'superadmin' || myRole() == 'super_admin');
+    }
+
     function isActive() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/pos_users/$(request.auth.uid))
-        && myUser().active == true;
+      return userDocExists()
+        && (
+          isSuperAdmin()
+          || myUser().status == 'active'
+          || myUser().active == true
+          || !('status' in myUser())
+        )
+        && myUser().status != 'blocked';
     }
 
     function isAdmin() {
@@ -35,60 +48,92 @@ service cloud.firestore {
     }
 
     function hasPermission(permission) {
-      return isAdmin()
+      return isSuperAdmin()
+        || isAdmin()
         || (isActive() && permission in myUser().permissions);
     }
 
+    function hasNoStoredPassword() {
+      return !('password' in request.resource.data)
+        && !('passwordRaw' in request.resource.data)
+        && !('plainPassword' in request.resource.data);
+    }
+
     match /pos_users/{userId} {
-      allow read: if isActive()
+      allow read: if isSuperAdmin()
+        || (isActive() && request.auth.uid == userId)
+        || (isAdmin() && resource.data.tenantId == myTenantId());
+
+      allow create: if (isSuperAdmin() || isAdmin())
+        && hasNoStoredPassword()
         && (
-          request.auth.uid == userId
-          || (isAdmin() && resource.data.tenantId == myTenantId())
+          isSuperAdmin()
+          || request.resource.data.tenantId == myTenantId()
         );
 
-      allow create: if isAdmin()
-        && request.resource.data.tenantId == myTenantId()
-        && request.resource.data.active == true
-        && !('password' in request.resource.data);
-
-      allow update: if isAdmin()
-        && resource.data.tenantId == myTenantId()
+      allow update: if (isSuperAdmin()
+          || (isAdmin() && resource.data.tenantId == myTenantId()))
         && request.resource.data.tenantId == resource.data.tenantId
-        && !('password' in request.resource.data);
+        && hasNoStoredPassword();
 
-      allow delete: if false;
+      allow delete: if isSuperAdmin();
     }
 
     match /pos_products/{docId} {
-      allow read: if sameTenant(resource.data.tenantId);
+      allow read: if isSuperAdmin() || sameTenant(resource.data.tenantId);
       allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_products');
       allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_products');
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_records/{docId} {
-      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_sales');
-      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('create_sale');
+      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_sales'));
+      allow create: if sameTenant(request.resource.data.tenantId)
+        && (hasPermission('create_sale') || hasPermission('create_purchase') || hasPermission('create_expense'));
       allow update: if sameTenant(resource.data.tenantId) && hasPermission('delete_records');
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_customers/{docId} {
-      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_customers');
-      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_customers');
+      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_customers'));
+      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_customers');
+      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_customers');
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_suppliers/{docId} {
-      allow read: if sameTenant(resource.data.tenantId) && hasPermission('view_suppliers');
-      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_suppliers');
+      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_suppliers'));
+      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('manage_suppliers');
+      allow update: if sameTenant(resource.data.tenantId) && hasPermission('manage_suppliers');
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
 
     match /pos_settings/{docId} {
-      allow read: if sameTenant(resource.data.tenantId);
-      allow create, update: if sameTenant(request.resource.data.tenantId) && hasPermission('settings');
-      allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
+      allow read: if isSuperAdmin() || sameTenant(resource.data.tenantId) || (isActive() && docId == myTenantId());
+      allow create: if (isSuperAdmin() || sameTenant(request.resource.data.tenantId)) && hasPermission('settings');
+      allow update: if (isSuperAdmin() || sameTenant(resource.data.tenantId)) && hasPermission('settings');
+      allow delete: if isSuperAdmin() || (isAdmin() && resource.data.tenantId == myTenantId());
+    }
+
+    match /pos_drafts/{docId} {
+      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('create_sale'));
+      allow create: if sameTenant(request.resource.data.tenantId) && hasPermission('create_sale');
+      allow update, delete: if sameTenant(resource.data.tenantId) && hasPermission('create_sale');
+    }
+
+    match /audit_logs/{docId} {
+      allow read: if isSuperAdmin() || isAdmin();
+      allow create: if isActive();
+      allow update, delete: if false;
+    }
+
+    match /tenant_compliance_reviews/{docId} {
+      allow read, create, update: if isSuperAdmin();
+      allow delete: if false;
+    }
+
+    match /admin_sessions/{docId} {
+      allow read, write: if isSuperAdmin();
     }
 
     match /{document=**} {

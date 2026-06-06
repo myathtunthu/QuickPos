@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase/config';
+import { db, auth, secondaryAuth } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 Auth functions
 import { 
@@ -181,7 +181,7 @@ export default function SuperAdminPage() {
     if (!form.shopName || !form.username || !form.password || !form.expiryDate) return alert("အားလုံးဖြည့်ပါ");
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(auth, form.username.trim(), form.password);
+      const uc = await createUserWithEmailAndPassword(secondaryAuth, form.username.trim(), form.password);
       
       // 🌟 PasswordRaw ထည့်သွင်းသိမ်းဆည်းခြင်း
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
@@ -196,6 +196,7 @@ export default function SuperAdminPage() {
         status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
+      await signOut(secondaryAuth).catch(() => {});
       addLog(`✅ Created: ${form.username}`);
       setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
       setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
@@ -298,7 +299,7 @@ export default function SuperAdminPage() {
     if (!newPassword || newPassword.length < 6) return alert('Password min 6 chars');
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(auth, newEmail.trim(), newPassword);
+      const uc = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
         permissions: user.permissions || [], tenantId: tid, 
@@ -307,6 +308,7 @@ export default function SuperAdminPage() {
         createdAt: Date.now(), status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: `${user.username || 'Shop'} (Clone)`, tenantId: tid, createdAt: Date.now() });
+      await signOut(secondaryAuth).catch(() => {});
       addLog(`📋 Cloned: ${user.username} → ${newEmail}`);
       alert(`✅ Cloned! Email: ${newEmail}`);
     } catch (err) { alert('Error: ' + err.message); }

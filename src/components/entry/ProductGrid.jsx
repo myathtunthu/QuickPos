@@ -2,17 +2,6 @@ import React, { useCallback, useRef } from 'react';
 import { Package } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
-const restoreWindowScroll = (scrollY) => {
-  const restore = () => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });
-  restore();
-  requestAnimationFrame(() => {
-    restore();
-    setTimeout(restore, 0);
-    setTimeout(restore, 60);
-    setTimeout(restore, 180);
-  });
-};
-
 const ProductGrid = React.memo(({ products = [], onSelect }) => {
   const { t } = useLanguage();
   const gridRef = useRef(null);
@@ -28,26 +17,30 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
     const y = windowScrollRef.current;
     const gridY = gridScrollRef.current;
 
-    const restoreGrid = () => {
-      if (gridRef.current) gridRef.current.scrollTop = gridY;
-    };
-
-    restoreWindowScroll(y);
-    restoreGrid();
     requestAnimationFrame(() => {
-      restoreGrid();
-      setTimeout(restoreGrid, 60);
-      setTimeout(restoreGrid, 180);
+      window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+      if (gridRef.current) gridRef.current.scrollTop = gridY;
+
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+        if (gridRef.current) gridRef.current.scrollTop = gridY;
+      });
     });
   }, []);
 
-  const handleProductPress = useCallback(
+  const handleProductClick = useCallback(
     (event, product) => {
       event.preventDefault();
       event.stopPropagation();
 
       rememberScroll();
-      onSelect(product, { preserveScrollY: windowScrollRef.current });
+
+      onSelect(product, {
+        scrollPosition: {
+          x: window.scrollX || window.pageXOffset || 0,
+          y: windowScrollRef.current,
+        },
+      });
       restoreScroll();
     },
     [onSelect, rememberScroll, restoreScroll]
@@ -65,23 +58,24 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
     <div
       ref={gridRef}
       className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-[30vh] overflow-y-auto custom-scrollbar pr-1 overscroll-contain"
+      style={{ overflowAnchor: 'none', touchAction: 'manipulation' }}
     >
       {products.slice(0, 100).map((product) => {
         const defaultPrice = product.packageUnits?.[0]?.prices?.retail || 0;
         const name = product.name || t('unknownItem', 'Unknown Item');
 
         return (
-          <div
-            role="button"
-            tabIndex={-1}
+          <button
+            type="button"
             key={product.id || name}
-            onPointerDown={(event) => {
+            onPointerDown={() => rememberScroll()}
+            onMouseDown={(event) => {
               event.preventDefault();
               rememberScroll();
             }}
             onTouchStart={() => rememberScroll()}
-            onClick={(event) => handleProductPress(event, product)}
-            className="bg-[#0d1120] border-2 border-white/5 rounded-xl p-2 text-center transition-all hover:border-cyan-500/50 active:scale-95 flex flex-col items-center justify-between min-h-[85px] touch-manipulation select-none cursor-pointer outline-none"
+            onClick={(event) => handleProductClick(event, product)}
+            className="bg-[#0d1120] border-2 border-white/5 rounded-xl p-2 text-center transition-all hover:border-cyan-500/50 active:scale-95 flex flex-col items-center justify-between min-h-[85px] touch-manipulation select-none"
           >
             <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center mb-1">
               <Package size={14} className="text-cyan-400" />
@@ -96,7 +90,7 @@ const ProductGrid = React.memo(({ products = [], onSelect }) => {
                 {t('stockLabel', 'Stock')}: {product.stockBase || 0}
               </p>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>

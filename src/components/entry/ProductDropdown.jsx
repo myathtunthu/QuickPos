@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Package } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
@@ -6,31 +6,6 @@ import { useLanguage } from '../../context/LanguageContext';
 const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
   const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const dropdownScrollRef = useRef(0);
-
-  const rememberScroll = useCallback(() => {
-    dropdownScrollRef.current = window.scrollY || window.pageYOffset || 0;
-  }, []);
-
-  const restoreScroll = useCallback(() => {
-    const y = dropdownScrollRef.current;
-    const restore = () => window.scrollTo({ top: y, left: 0, behavior: 'auto' });
-    restore();
-    requestAnimationFrame(() => {
-      restore();
-      setTimeout(restore, 0);
-      setTimeout(restore, 60);
-      setTimeout(restore, 180);
-    });
-  }, []);
-
-  const handleSelect = useCallback((event, product) => {
-    event.preventDefault();
-    event.stopPropagation();
-    rememberScroll();
-    onSelect(product, { preserveScrollY: dropdownScrollRef.current });
-    restoreScroll();
-  }, [onSelect, rememberScroll, restoreScroll]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -50,7 +25,7 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
         setSelectedIndex((prev) => (prev - 1 + products.length) % products.length);
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        if (products[selectedIndex]) onSelect(products[selectedIndex], { preserveScrollY: window.scrollY || window.pageYOffset || 0 });
+        if (products[selectedIndex]) onSelect(products[selectedIndex]);
       }
     };
 
@@ -70,9 +45,8 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
     return (
       <div 
         style={style} 
-        onPointerDown={(event) => { event.preventDefault(); rememberScroll(); }}
-        onMouseDown={(event) => { event.preventDefault(); rememberScroll(); }}
-        onClick={(event) => handleSelect(event, product)}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onSelect(product, { scrollPosition: { x: window.scrollX || window.pageXOffset || 0, y: window.scrollY || window.pageYOffset || 0 } })}
         onMouseEnter={() => setSelectedIndex(index)}
         className={`flex justify-between items-center px-3 py-2 cursor-pointer border-b border-white/5 transition-colors ${
           isSelected ? 'bg-cyan-900/40 border-l-2 border-l-cyan-400' : 'hover:bg-cyan-900/20'

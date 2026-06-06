@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth, secondaryAuth } from '../firebase/config';
+import { db, auth } from '../firebase/config';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut, sendPasswordResetEmail } from 'firebase/auth'; // 🌟 Auth functions
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 Auth functions
 import { 
   ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
   Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
-  Filter, Key, RotateCcw, Copy, ShieldCheck, AlertTriangle, Send,
+  Filter, Key, RotateCcw, Copy, Zap, AlertTriangle, Send,
   BarChart3, TrendingUp, RefreshCw, ToggleRight, Bell, 
   HardDrive, Database, DollarSign, FileText, Cloud
 } from 'lucide-react';
@@ -181,8 +181,9 @@ export default function SuperAdminPage() {
     if (!form.shopName || !form.username || !form.password || !form.expiryDate) return alert("အားလုံးဖြည့်ပါ");
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(secondaryAuth, form.username.trim(), form.password);
+      const uc = await createUserWithEmailAndPassword(auth, form.username.trim(), form.password);
       
+      // 🌟 PasswordRaw ထည့်သွင်းသိမ်းဆည်းခြင်း
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: form.username.trim(), 
         username: form.username.trim(), 
@@ -190,12 +191,12 @@ export default function SuperAdminPage() {
         permissions: [], 
         tenantId: tid, 
         expiryDate: form.expiryDate, 
+        passwordRaw: form.password, // Super Admin auto-login အတွက်
         createdAt: Date.now(), 
         status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: form.shopName.trim(), tenantId: tid, createdAt: Date.now() });
-      await signOut(secondaryAuth).catch(() => {});
-      addLog(`✅ Created tenant without storing raw password: ${form.username}`);
+      addLog(`✅ Created: ${form.username}`);
       setNotifications(prev => [{ id: Date.now(), msg: `✅ New admin created: ${form.username}`, type: 'success' }, ...prev]);
       setForm({ shopName:'', username:'', password:'', expiryDate:'' }); setAdding(false);
     } catch (er) { alert(er.code==='auth/email-already-in-use'?'Email သုံးပြီးသားဖြစ်နေပါသည်':'Error: '+er.message); }
@@ -207,13 +208,8 @@ export default function SuperAdminPage() {
     if (!editingUser) return;
     const up = {};
     if (editForm.username.trim()) up.username = editForm.username.trim();
-    if (Object.keys(up).length > 0) {
-      await updateDoc(doc(db, 'pos_users', editingUser.id), up);
-    }
-    if (editForm.password.trim()) {
-      await sendPasswordResetEmail(auth, editingUser.email || editingUser.username);
-      addLog(`📧 Password reset email sent: ${editingUser.username}`);
-    }
+    if (editForm.password.trim()) up.password = editForm.password.trim();
+    await updateDoc(doc(db, 'pos_users', editingUser.id), up);
     addLog(`✏️ Edited: ${editingUser.username}`);
     setEditingUser(null); setEditForm({ username:'', password:'' });
   };
@@ -225,22 +221,14 @@ export default function SuperAdminPage() {
     addLog(`🔒 Status: ${userId} → ${newStatus}`);
   };
 
-  // ==================== PASSWORD RESET (NO RAW PASSWORD STORAGE) ====================
+  // ==================== FORCE PASSWORD RESET ====================
   const forcePasswordReset = async (user) => {
-    const targetEmail = user.email || user.username;
-    if (!targetEmail || !targetEmail.includes('@')) return alert('Valid email မရှိပါ။');
-    if (!window.confirm(`${targetEmail} သို့ password reset email ပို့မည်။ သေချာပါသလား?`)) return;
-    await sendPasswordResetEmail(auth, targetEmail);
-    await setDoc(doc(db, 'tenant_compliance_reviews', `${user.tenantId || user.id}_pwd_${Date.now()}`), {
-      tenantId: user.tenantId || '',
-      tenantUserId: user.id,
-      type: 'password_reset_requested',
-      status: 'sent',
-      requestedBy: auth.currentUser?.uid || '',
-      createdAt: new Date().toISOString(),
-    });
-    addLog(`📧 Password reset email sent: ${targetEmail}`);
-    alert('✅ Password reset email ပို့ပြီးပါပြီ။');
+    const newPwd = prompt(`Enter new password for ${user.username}:`);
+    if (!newPwd || newPwd.length < 6) return alert('အနည်းဆုံး ၆ လုံး');
+    // Save as raw password too so we can still impersonate
+    await updateDoc(doc(db, 'pos_users', user.id), { password: newPwd, passwordRaw: newPwd });
+    addLog(`🔄 Password Reset: ${user.username}`);
+    alert('✅ Password ပြောင်းပြီး');
   };
 
   // ==================== UPDATE EXPIRY ====================
@@ -281,23 +269,25 @@ export default function SuperAdminPage() {
     } catch (e) { console.error(e); }
   };
 
-  // ==================== COMPLIANCE REVIEW (NO COVERT LOGIN / CAMERA) ====================
-  const requestComplianceReview = async (user) => {
-    const reason = prompt(`Review reason for ${user.username || user.email}:`, 'Suspected prohibited business use');
-    if (!reason) return;
-    const reviewId = `${user.tenantId || user.id}_${Date.now()}`;
-    await setDoc(doc(db, 'tenant_compliance_reviews', reviewId), {
-      tenantId: user.tenantId || '',
-      tenantUserId: user.id,
-      username: user.username || user.email || '',
-      reason,
-      status: 'review_requested',
-      requestedBy: auth.currentUser?.uid || '',
-      createdAt: new Date().toISOString(),
-      note: 'Covert login/camera access is disabled. Use audit records, consent-based evidence, and block/suspend controls.',
-    });
-    addLog(`🛡️ Compliance review requested: ${user.username || user.email}`);
-    alert('✅ Compliance review မှတ်တမ်းဖန်တီးပြီးပါပြီ။ လိုအပ်ပါက Block ခလုတ်ဖြင့် ယာယီပိတ်နိုင်ပါတယ်။');
+  // ==================== IMPERSONATE (AUTO-LOGIN) ====================
+  const impersonateTenant = async (user) => {
+    // Database မှ Password အစစ်ကို ဆွဲထုတ်မည်
+    const targetPwd = user.passwordRaw || user.password;
+    if (!targetPwd) {
+      const manualPwd = prompt(`စကားဝှက်မှတ်တမ်း မရှိပါ။ ${user.username} ၏ Password ကို ထည့်ပါ:`);
+      if (!manualPwd) return;
+      try {
+        await signInWithEmailAndPassword(auth, user.email || user.username, manualPwd);
+        window.open('/dashboard', '_blank');
+      } catch (err) { alert('Login failed: ' + err.message); }
+      return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, user.email || user.username, targetPwd);
+      window.open('/dashboard', '_blank');
+      addLog(`👤 Impersonated: ${user.username}`);
+    } catch (err) { alert(`Auto Login Error: ${err.message}\n(ဆိုင်ပိုင်ရှင်သည် ပြင်ပမှ Password ပြောင်းသွားပုံရပါသည်)`); }
   };
 
   // ==================== CLONE TENANT ====================
@@ -308,16 +298,16 @@ export default function SuperAdminPage() {
     if (!newPassword || newPassword.length < 6) return alert('Password min 6 chars');
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
-      const uc = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
+      const uc = await createUserWithEmailAndPassword(auth, newEmail.trim(), newPassword);
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
         permissions: user.permissions || [], tenantId: tid, 
         expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], 
+        passwordRaw: newPassword, // Clone လုပ်လျှင်လည်း မှတ်ထားမည်
         createdAt: Date.now(), status: 'active' 
       });
       await setDoc(doc(db, 'pos_settings', tid), { shopName: `${user.username || 'Shop'} (Clone)`, tenantId: tid, createdAt: Date.now() });
-      await signOut(secondaryAuth).catch(() => {});
-      addLog(`📋 Cloned tenant without storing raw password: ${user.username} → ${newEmail}`);
+      addLog(`📋 Cloned: ${user.username} → ${newEmail}`);
       alert(`✅ Cloned! Email: ${newEmail}`);
     } catch (err) { alert('Error: ' + err.message); }
   };
@@ -565,8 +555,9 @@ export default function SuperAdminPage() {
                       <p className="font-black text-xl">{t.username||t.email}</p>
                       <p className="text-xs text-slate-500 mt-1">Tenant ID: {t.tenantId}</p>
                       
-                      <p className="text-xs mt-1.5 flex items-center gap-1 font-bold text-emerald-400">
-                        <ShieldCheck size={12}/> Credentials hidden — reset by email only
+                      {/* 🌟 Super Admin အတွက် Password ဖော်ပြပေးမည့် နေရာ */}
+                      <p className="text-xs mt-1.5 flex items-center gap-1 font-bold text-amber-400">
+                        <Key size={12}/> Pwd: <span className="bg-black/50 px-2 py-0.5 rounded text-white tracking-wider">{t.passwordRaw || t.password || 'N/A'}</span>
                       </p>
 
                       <div className="flex gap-2 mt-2 flex-wrap">
@@ -584,7 +575,7 @@ export default function SuperAdminPage() {
                   {editingUser?.id===t.id?(
                     <div className="flex gap-2 items-center mt-4 sm:mt-0">
                       <input value={editForm.username} onChange={e=>setEditForm({...editForm,username:e.target.value})} placeholder="Username" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-32"/>
-                      <input value={editForm.password} onChange={e=>setEditForm({...editForm,password:e.target.value})} placeholder="Reset email" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-24"/>
+                      <input value={editForm.password} onChange={e=>setEditForm({...editForm,password:e.target.value})} placeholder="New Pwd" className="bg-black border border-indigo-500/20 rounded-lg px-3 py-2 text-sm w-24"/>
                       <button onClick={handleEditSave} className="p-2 bg-indigo-600 rounded-lg"><Save size={16}/></button>
                       <button onClick={()=>setEditingUser(null)} className="p-2 bg-slate-700 rounded-lg"><X size={16}/></button>
                     </div>
@@ -595,8 +586,9 @@ export default function SuperAdminPage() {
                       <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg" title="Force Reset Password"><RotateCcw size={16}/></button>
                       <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>
                       
-                      <button onClick={()=>requestComplianceReview(t)} className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 font-bold rounded-lg flex items-center gap-2 transition-colors border border-purple-500/30" title="Create a visible compliance-review record">
-                        <ShieldCheck size={16}/> Compliance Review
+                      {/* 🌟 Auto Login ခလုတ် */}
+                      <button onClick={()=>impersonateTenant(t)} className="px-4 py-2 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 font-bold rounded-lg flex items-center gap-2 transition-colors border border-purple-500/30">
+                        <Zap size={16}/> Auto Login
                       </button>
                       
                       <button onClick={()=>cloneTenant(t)} className="p-2 bg-cyan-600/20 text-cyan-400 rounded-lg" title="Clone"><Copy size={16}/></button>

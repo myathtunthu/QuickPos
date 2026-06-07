@@ -5,19 +5,19 @@ import BottomNav from '../BottomNav';
 import { HelpCircle, Menu, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import GuideModal from './GuideModal';
-import { getGuideConfig, getGuidePageKey } from '../../utils/pageGuides';
+import { getPageGuide } from '../../utils/pageGuides';
 
 export default function Layout() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const location = useLocation();
+  const [guideOpen, setGuideOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('nexpos_desktop_sidebar_open');
     return saved === null ? true : saved === 'true';
   });
 
   const { languageLabel, toggleLanguage, t } = useLanguage();
-  const location = useLocation();
-  const [guideOpen, setGuideOpen] = useState(false);
-  const guide = getGuideConfig(t, getGuidePageKey(location.pathname));
+  const currentGuide = getPageGuide(location.pathname, t);
 
   useEffect(() => {
     localStorage.setItem('nexpos_desktop_sidebar_open', String(sidebarOpen));
@@ -92,16 +92,16 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-2">
-            {guide && (
-              <button
-                type="button"
-                onClick={() => setGuideOpen(true)}
-                className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-sm font-black flex items-center gap-2"
-              >
-                <HelpCircle size={17} />
-                <span className="hidden sm:inline">{t('guide', 'Guide')}</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-sm font-black hover:bg-emerald-500/20 active:scale-95"
+              aria-label={t('openGuide', 'Open guide')}
+            >
+              <HelpCircle size={18} />
+              <span className="hidden sm:inline">{t('guide', 'Guide')}</span>
+            </button>
+
             <button
               type="button"
               onClick={toggleLanguage}
@@ -117,11 +117,11 @@ export default function Layout() {
         </main>
       </div>
 
-      <GuideModal open={guideOpen} onClose={() => setGuideOpen(false)} guide={guide} t={t} />
-
       <div className="md:hidden">
         <BottomNav />
       </div>
+
+      {guideOpen && <GuideModal guide={currentGuide} onClose={() => setGuideOpen(false)} />}
     </div>
   );
 }

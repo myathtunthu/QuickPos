@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, serverTimestamp, increment } from 'firebase/firestore'; 
+import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
 import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
 
@@ -41,6 +41,7 @@ export default function CustomersPage() {
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '' });
   const [paymentForm, setPaymentForm] = useState({ amount: '', note: '' });
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   const fileRef = useRef(null); 
 
@@ -177,25 +178,68 @@ export default function CustomersPage() {
 
   const handlePayment = async (e) => {
     e.preventDefault();
+    if (paymentSaving) return;
     if (!hasPermission('accept_payment')) return showToast("ငွေချေခွင့် မရှိပါ။", "error");
+    if (!selectedCustomer?.id) return showToast("Customer မရွေးရသေးပါ။", "error");
 
     const payAmount = Number(paymentForm.amount);
-    if (!payAmount || payAmount <= 0) return showToast("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။", "error");
-    if (payAmount > selectedCustomer.totalDebt + 10) return showToast("ဆပ်သည့်ငွေသည် အကြွေးထက် များနေပါသည်။", "error");
+    if (!Number.isFinite(payAmount) || payAmount <= 0) return showToast("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။", "error");
 
+    setPaymentSaving(true);
     setLoading(true);
     try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'pos_customers', selectedCustomer.id), { totalDebt: increment(-payAmount) });
-      batch.set(doc(collection(db, 'pos_records')), {
-        type: 'Customer Payment', tenantId: tenantId, customerId: selectedCustomer.id, personName: selectedCustomer.name, 
-        amount: payAmount, note: paymentForm.note || 'အကြွေးလာဆပ်သည်', date: new Date().toISOString().split('T')[0],
-        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        cashier: profile?.username || profile?.name || 'Admin', createdAt: serverTimestamp()
+      const customerRef = doc(db, 'pos_customers', selectedCustomer.id);
+      const recordRef = doc(collection(db, 'pos_records'));
+      const today = new Date();
+      const paymentRecord = await runTransaction(db, async (transaction) => {
+        const customerSnap = await transaction.get(customerRef);
+        if (!customerSnap.exists()) throw new Error('CUSTOMER_NOT_FOUND');
+        const liveCustomer = customerSnap.data();
+        if (liveCustomer.tenantId !== tenantId) throw new Error('CUSTOMER_TENANT_MISMATCH');
+
+        const liveDebt = Math.max(0, Number(liveCustomer.totalDebt) || 0);
+        if (liveDebt <= 0) throw new Error('NO_DEBT');
+        if (payAmount > liveDebt) throw new Error('PAYMENT_EXCEEDS_DEBT');
+
+        const nextDebt = Math.max(0, liveDebt - payAmount);
+        const payload = {
+          type: 'Customer Payment',
+          tenantId,
+          customerId: selectedCustomer.id,
+          personName: liveCustomer.name || selectedCustomer.name || '',
+          amount: payAmount,
+          beforeDebt: liveDebt,
+          afterDebt: nextDebt,
+          note: paymentForm.note || 'အကြွေးလာဆပ်သည်',
+          date: today.toISOString().split('T')[0],
+          time: today.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          cashier: profile?.username || profile?.name || 'Admin',
+          createdAt: serverTimestamp()
+        };
+
+        transaction.update(customerRef, { totalDebt: nextDebt, updatedAt: serverTimestamp() });
+        transaction.set(recordRef, payload);
+        return payload;
       });
-      await batch.commit(); setPaymentModalOpen(false); showToast("ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ", "success"); fetchData();
-    } catch (error) { console.error(error); showToast("Error saving payment", "error"); }
-    setLoading(false);
+
+      setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, totalDebt: paymentRecord.afterDebt } : c));
+      setSelectedCustomer(prev => prev ? { ...prev, totalDebt: paymentRecord.afterDebt } : prev);
+      setPaymentModalOpen(false);
+      setPaymentForm({ amount: '', note: '' });
+      showToast("ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ", "success");
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      const message = error?.message === 'PAYMENT_EXCEEDS_DEBT'
+        ? "ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။"
+        : error?.message === 'NO_DEBT'
+          ? "လက်ရှိအကြွေး မရှိတော့ပါ။"
+          : "Error saving payment";
+      showToast(message, "error");
+    } finally {
+      setPaymentSaving(false);
+      setLoading(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -436,10 +480,10 @@ export default function CustomersPage() {
             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေသွင်းမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
             <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Credit Balance</p><p className="text-3xl font-black text-amber-400 mt-2">{Number(selectedCustomer.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required max={selectedCustomer.totalDebt + 10} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedCustomer.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေသွင်းမည်</button>
+            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေသွင်းမည်</button>
           </form>
         </div>
       )}

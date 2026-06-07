@@ -3,6 +3,7 @@ import { db, auth } from '../firebase/config';
 import { doc, getDoc, setDoc, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircle, Store, Wallet } from 'lucide-react';
 
 // 🌟 UI & Utilities 
@@ -16,6 +17,7 @@ const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split(''
 
 export default function SettingsPage() {
   const { profile, logout } = useAuth();
+  const { t } = useLanguage();
   
   const [shopName, setShopName] = useState('');
   const [tgToken, setTgToken] = useState('');
@@ -230,13 +232,13 @@ export default function SettingsPage() {
       <div className="bg-[#0d1120] border-2 border-cyan-500/15 rounded-3xl p-6 sm:p-8 shadow-xl flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Settings size={32} className="text-cyan-500"/>
-          <h3 className="font-black text-2xl">Settings</h3>
+          <h3 className="font-black text-2xl">{t('settings', 'Settings')}</h3>
         </div>
       </div>
 
       {/* 📚 Setup Guides (Gemini Removed completely) */}
       <div className="bg-[#0d1120] border-2 border-amber-500/20 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
-        <h4 className="text-lg font-black text-amber-400 flex items-center gap-2"><HelpCircle size={22}/> API ချိတ်ဆက်နည်း လမ်းညွှန်</h4>
+        <h4 className="text-lg font-black text-amber-400 flex items-center gap-2"><HelpCircle size={22}/> {t('settingsApiGuide', 'API setup guide')}</h4>
         
         {/* Telegram Guide */}
         <details className="bg-black/30 rounded-xl border border-blue-500/10">
@@ -275,9 +277,9 @@ export default function SettingsPage() {
         
         {/* General + API Config (Gemini Removed completely) */}
         <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-5">
-          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Store size={20}/> General & API Config</h4>
+          <h4 className="text-lg font-black text-cyan-400 mb-4 border-b border-white/10 pb-2 flex items-center gap-2"><Store size={20}/> {t('generalApiConfig', 'General & API Config')}</h4>
           <div>
-            <label className="text-sm font-bold text-slate-400 block mb-2">Shop Name</label>
+            <label className="text-sm font-bold text-slate-400 block mb-2">{t('shopName', 'Shop Name')}</label>
             <input value={shopName} onChange={e => setShopName(e.target.value)} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500"/>
           </div>
           <div>

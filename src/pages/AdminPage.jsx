@@ -305,9 +305,7 @@ export default function AdminPage() {
             <Users size={30} className="text-indigo-500" />
             {t('staffManagement') || 'Staff Management'}
           </h3>
-          <p className="text-slate-500 font-bold mt-2">
-            Firebase Auth ဖြင့် User ဖန်တီးမည်။ Password ကို Firestore ထဲ မသိမ်းပါ။
-          </p>
+          <p className="text-slate-500 font-bold mt-2">{t('admin_subtitle', 'Staff & permissions')}</p>
         </div>
 
         <button
@@ -331,12 +329,12 @@ export default function AdminPage() {
             required
             value={form.username}
             onChange={(e) => setForm({ ...form, username: e.target.value })}
-            placeholder="Username သို့မဟုတ် Email"
+            placeholder={t('username', 'Username')}
             className="w-full px-5 py-4 sm:py-5 bg-black border-2 border-indigo-500/15 rounded-xl text-lg sm:text-xl outline-none focus:border-indigo-500/50"
           />
 
           <p className="text-xs text-slate-500 -mt-3 ml-2">
-            ဥပမာ: cashier1 သို့မဟုတ် cashier1@gmail.com
+            {t('exampleUsername', 'Example: cashier1 or cashier1@gmail.com')}
           </p>
 
           <div className="relative">

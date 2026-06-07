@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -138,7 +138,7 @@ export default function DashboardPage() {
     setLoading(true);
 
     const unsubRecords = onSnapshot(
-      query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(500)),
+      query(collection(db, 'pos_records'), where('tenantId', '==', tenantId)),
       (snap) => {
         setRecords(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
@@ -356,12 +356,12 @@ export default function DashboardPage() {
   const statCards = [
     { title: translate(t, 'revenue', 'Revenue'), value: analytics.revenue, suffix: 'Ks', subtitle: `${analytics.orders} orders`, icon: DollarSign, color: 'cyan', trend: analytics.revenue > 0 ? 'Live' : 'No sales', isNegative: false },
     { title: translate(t, 'netProfit', 'Net Profit'), value: analytics.profit, suffix: 'Ks', subtitle: `${analytics.profitMargin.toFixed(1)}% margin`, icon: TrendingUp, color: analytics.profit >= 0 ? 'emerald' : 'rose', trend: analytics.profit >= 0 ? 'Positive' : 'Loss', isNegative: analytics.profit < 0 },
-    { title: 'Cash Flow', value: analytics.cashInHand, suffix: 'Ks', subtitle: `In ${fmt(analytics.cashIn)} • Out ${fmt(analytics.cashOut)}`, icon: Wallet, color: 'blue', trend: analytics.cashInHand >= 0 ? 'Healthy' : 'Negative', isNegative: analytics.cashInHand < 0 },
-    { title: translate(t, 'expenses', 'Expenses'), value: analytics.expenses, suffix: 'Ks', subtitle: 'Operational costs', icon: TrendingDown, color: 'rose', trend: analytics.expenses > 0 ? 'Tracked' : 'None', isNegative: true },
-    { title: 'Inventory Value', value: inventoryStats.inventoryValue, suffix: 'Ks', subtitle: `${inventoryStats.totalProducts} products`, icon: Package, color: 'violet', trend: 'Stock capital', isNegative: false },
-    { title: 'Customer Credit', value: analytics.creditGiven, suffix: 'Ks', subtitle: 'Unpaid sale balance', icon: CreditCard, color: 'amber', trend: analytics.creditGiven > 0 ? 'Need follow-up' : 'Clear', isNegative: analytics.creditGiven > 0 },
-    { title: 'Customers', value: customers.length, suffix: '', subtitle: 'Customer records', icon: Users, color: 'emerald', trend: 'CRM', isNegative: false },
-    { title: 'Low Stock', value: inventoryStats.lowStockCount, suffix: '', subtitle: `${inventoryStats.outOfStock} out of stock`, icon: AlertTriangle, color: inventoryStats.lowStockCount > 0 ? 'rose' : 'emerald', trend: inventoryStats.lowStockCount > 0 ? 'Action needed' : 'Good', isNegative: inventoryStats.lowStockCount > 0 },
+    { title: translate(t, 'cashFlowBalance', 'Cash Flow'), value: analytics.cashInHand, suffix: 'Ks', subtitle: `${translate(t, 'cashIn', 'Cash In')} ${fmt(analytics.cashIn)} • ${translate(t, 'cashOut', 'Cash Out')} ${fmt(analytics.cashOut)}`, icon: Wallet, color: 'blue', trend: analytics.cashInHand >= 0 ? translate(t, 'healthy', 'Healthy') : translate(t, 'negative', 'Negative'), isNegative: analytics.cashInHand < 0 },
+    { title: translate(t, 'expenses', 'Expenses'), value: analytics.expenses, suffix: 'Ks', subtitle: translate(t, 'expenses', 'Operational costs'), icon: TrendingDown, color: 'rose', trend: analytics.expenses > 0 ? translate(t, 'tracked', 'Tracked') : translate(t, 'none', 'None'), isNegative: true },
+    { title: translate(t, 'inventoryValue', 'Inventory Value'), value: inventoryStats.inventoryValue, suffix: 'Ks', subtitle: `${inventoryStats.totalProducts} ${translate(t, 'products', 'products')}`, icon: Package, color: 'violet', trend: translate(t, 'stockCapital', 'Stock capital'), isNegative: false },
+    { title: 'Customer Credit', value: analytics.creditGiven, suffix: 'Ks', subtitle: translate(t, 'unpaidSaleBalance', 'Unpaid sale balance'), icon: CreditCard, color: 'amber', trend: analytics.creditGiven > 0 ? translate(t, 'needFollowUp', 'Need follow-up') : translate(t, 'clear', 'Clear'), isNegative: analytics.creditGiven > 0 },
+    { title: translate(t, 'customers', 'Customers'), value: customers.length, suffix: '', subtitle: translate(t, 'customerRecords', 'Customer records'), icon: Users, color: 'emerald', trend: 'CRM', isNegative: false },
+    { title: translate(t, 'lowStock', 'Low Stock'), value: inventoryStats.lowStockCount, suffix: '', subtitle: `${inventoryStats.outOfStock} ${translate(t, 'outOfStock', 'out of stock')}`, icon: AlertTriangle, color: inventoryStats.lowStockCount > 0 ? 'rose' : 'emerald', trend: inventoryStats.lowStockCount > 0 ? translate(t, 'actionNeeded', 'Action needed') : translate(t, 'good', 'Good'), isNegative: inventoryStats.lowStockCount > 0 },
   ];
 
   const Card = ({ children, className = '' }) => (
@@ -401,7 +401,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-[#060816] flex flex-col items-center justify-center text-white">
         <div className="w-14 h-14 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-        <p className="mt-4 text-cyan-400 font-black animate-pulse">Loading NexPOS Dashboard...</p>
+        <p className="mt-4 text-cyan-400 font-black animate-pulse">{translate(t, 'loadingDashboard', 'Loading NexPOS Dashboard...')}</p>
       </div>
     );
   }
@@ -422,11 +422,11 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-2xl bg-cyan-500/10 text-cyan-400"><Zap size={28} /></div>
                   <div>
-                    <h1 className="text-2xl sm:text-3xl font-black"><span className="text-white">NexPOS</span> <span className="text-cyan-400">Analytics</span></h1>
-                    <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">Welcome back, {currentUserName}</p>
+                    <h1 className="text-2xl sm:text-3xl font-black"><span className="text-white">NexPOS</span> <span className="text-cyan-400">Dashboard</span></h1>
+                    <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">{translate(t, 'dashboard_welcome', 'Welcome back')}, {currentUserName}</p>
                   </div>
                 </div>
-                <p className="mt-4 text-slate-400 text-sm">Realtime business intelligence for sales, profit, inventory, customers and cash flow.</p>
+                <p className="mt-4 text-slate-400 text-sm">{translate(t, 'dashboard_liveOverview', 'Live POS overview')}</p>
               </div>
             </div>
           </div>
@@ -454,12 +454,12 @@ export default function DashboardPage() {
                   <p className="text-xs text-cyan-400 font-black uppercase tracking-[0.25em]">{translate(t, 'cashFlowBalance', 'Cash Flow Balance')}</p>
                   <h2 className="text-4xl sm:text-6xl font-black mt-3">{fmt(analytics.cashInHand)} <span className="text-xl text-slate-400">Ks</span></h2>
                   <div className="flex flex-wrap gap-3 mt-4">
-                    <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black">Cash In: {fmt(analytics.cashIn)} Ks</span>
-                    <span className="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-xs font-black">Cash Out: {fmt(analytics.cashOut)} Ks</span>
+                    <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black">{translate(t, 'cashIn', 'Cash In')}: {fmt(analytics.cashIn)} Ks</span>
+                    <span className="px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-xs font-black">{translate(t, 'cashOut', 'Cash Out')}: {fmt(analytics.cashOut)} Ks</span>
                   </div>
                 </div>
                 <div className="bg-black/30 border border-white/5 rounded-2xl p-4 min-w-[150px]">
-                  <p className="text-xs text-slate-500 font-black">Profit Margin</p>
+                  <p className="text-xs text-slate-500 font-black">{translate(t, 'margin', 'Margin')}</p>
                   <p className={`text-3xl font-black mt-2 ${analytics.profitMargin >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{analytics.profitMargin.toFixed(1)}%</p>
                   <div className="mt-3 h-2 bg-slate-800 rounded-full overflow-hidden"><div className={`h-full rounded-full ${analytics.profitMargin >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`} style={{ width: `${Math.min(Math.abs(analytics.profitMargin), 100)}%` }} /></div>
                 </div>
@@ -469,7 +469,7 @@ export default function DashboardPage() {
             <Card className={`p-6 ${aiInsight.tone === 'danger' ? 'border-rose-500/20' : aiInsight.tone === 'warning' ? 'border-amber-500/20' : 'border-emerald-500/20'}`}>
               <div className="flex items-center gap-3">
                 <div className={`p-3 rounded-2xl ${aiInsight.tone === 'danger' ? 'bg-rose-500/10 text-rose-400' : aiInsight.tone === 'warning' ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'}`}><BarChart3 size={24} /></div>
-                <div><p className="text-xs text-slate-500 font-black uppercase">NexPOS Insight</p><h3 className="text-lg font-black">{aiInsight.title}</h3></div>
+                <div><p className="text-xs text-slate-500 font-black uppercase">{translate(t, 'liveInsight', 'Live Insight')}</p><h3 className="text-lg font-black">{aiInsight.title}</h3></div>
               </div>
               <p className="mt-4 text-sm text-slate-400 leading-6">{aiInsight.message}</p>
             </Card>
@@ -479,7 +479,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <Card className="xl:col-span-2 p-5">
-              <div className="flex items-center justify-between mb-5"><h2 className="font-black flex items-center gap-2"><TrendingUp size={18} className="text-cyan-400" />{translate(t, 'salesProfitTrend', 'Sales & Profit Trend')}</h2><span className="text-xs text-slate-500 font-bold">Last 7 days</span></div>
+              <div className="flex items-center justify-between mb-5"><h2 className="font-black flex items-center gap-2"><TrendingUp size={18} className="text-cyan-400" />{translate(t, 'salesProfitTrend', 'Sales & Profit Trend')}</h2><span className="text-xs text-slate-500 font-bold">{translate(t, 'last7Days', 'Last 7 days')}</span></div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
@@ -501,23 +501,23 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="p-5">
-              <h2 className="font-black mb-5 flex items-center gap-2"><Calendar size={18} className="text-cyan-400" />Today Summary</h2>
-              <div className="space-y-3">{[['Average Order', `${fmt(analytics.averageOrderValue)} Ks`], ['Total Orders', analytics.orders], ['Products', inventoryStats.totalProducts], ['Customers', customers.length], ['Suppliers', suppliers.length]].map(([label, value]) => <div key={label} className="flex items-center justify-between bg-black/25 border border-white/5 rounded-2xl p-3"><span className="text-xs text-slate-400 font-bold">{label}</span><span className="font-black text-white">{value}</span></div>)}</div>
-              <div className="mt-5 grid grid-cols-2 gap-3"><Link to="/entry" className="flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-2xl py-3 text-xs font-black border border-cyan-500/20"><Plus size={15} /> Sale</Link><Link to="/inventory" className="flex items-center justify-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 rounded-2xl py-3 text-xs font-black border border-violet-500/20"><Package size={15} /> Stock</Link></div>
+              <h2 className="font-black mb-5 flex items-center gap-2"><Calendar size={18} className="text-cyan-400" />{translate(t, 'todaySummary', 'Today Summary')}</h2>
+              <div className="space-y-3">{[[translate(t, 'averageOrder', 'Average Order'), `${fmt(analytics.averageOrderValue)} Ks`], [translate(t, 'totalOrders', 'Total Orders'), analytics.orders], [translate(t, 'products', 'Products'), inventoryStats.totalProducts], [translate(t, 'customers', 'Customers'), customers.length], [translate(t, 'suppliers', 'Suppliers'), suppliers.length]].map(([label, value]) => <div key={label} className="flex items-center justify-between bg-black/25 border border-white/5 rounded-2xl p-3"><span className="text-xs text-slate-400 font-bold">{label}</span><span className="font-black text-white">{value}</span></div>)}</div>
+              <div className="mt-5 grid grid-cols-2 gap-3"><Link to="/entry" className="flex items-center justify-center gap-2 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-2xl py-3 text-xs font-black border border-cyan-500/20"><Plus size={15} /> {translate(t, 'sale', 'Sale')}</Link><Link to="/inventory" className="flex items-center justify-center gap-2 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 rounded-2xl py-3 text-xs font-black border border-violet-500/20"><Package size={15} /> {translate(t, 'stockAction', 'Stock')}</Link></div>
             </Card>
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <Card className="p-5"><h2 className="font-black mb-5 flex items-center gap-2">🏆 {translate(t, 'topSellingProducts', 'Top Selling Products')}</h2>{analytics.topProducts.length === 0 ? <EmptyState text={translate(t, 'noProductsSold', 'No products sold yet.')} /> : <div className="space-y-4">{analytics.topProducts.map((product, index) => { const max = analytics.topProducts[0]?.qty || 1; const width = Math.max((product.qty / max) * 100, 8); return <div key={product.name}><div className="flex items-center justify-between text-xs font-bold mb-2"><span className="truncate pr-3">{index === 0 ? '👑 ' : ''}{product.name}</span><span className="text-cyan-400">{product.qty}</span></div><div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-300 rounded-full" style={{ width: `${width}%` }} /></div></div>; })}</div>}</Card>
-            <Card className="p-5"><h2 className="font-black mb-5 flex items-center gap-2"><Users size={18} className="text-emerald-400" /> Best Customers</h2>{analytics.topCustomers.length === 0 ? <EmptyState text="No customer data." /> : <div className="space-y-4">{analytics.topCustomers.map((customer) => { const max = analytics.topCustomers[0]?.total || 1; const width = Math.max((customer.total / max) * 100, 8); return <div key={customer.name}><div className="flex items-center justify-between text-xs font-bold mb-2"><span className="truncate pr-3">{customer.name}</span><span className="text-emerald-400">{fmt(customer.total)} Ks</span></div><div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-300 rounded-full" style={{ width: `${width}%` }} /></div></div>; })}</div>}</Card>
-            <Card className="p-5 border-rose-500/10"><h2 className="font-black mb-5 flex items-center gap-2"><AlertTriangle size={18} className="text-rose-400" /> Low Stock Center</h2>{inventoryStats.lowStock.length === 0 ? <EmptyState text="All products are healthy." /> : <div className="space-y-3 max-h-72 overflow-y-auto pr-1">{inventoryStats.lowStock.slice(0, 8).map((product) => <div key={product.id} className="flex items-center justify-between bg-black/25 border border-white/5 rounded-2xl p-3"><div className="min-w-0"><p className="font-bold text-sm truncate">{product.name}</p><p className="text-[10px] text-slate-500">{product.category}</p></div><span className={`px-3 py-1 rounded-full text-xs font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>{product.stock}</span></div>)}</div>}</Card>
+            <Card className="p-5"><h2 className="font-black mb-5 flex items-center gap-2"><Users size={18} className="text-emerald-400" /> {translate(t, 'bestCustomers', 'Best Customers')}</h2>{analytics.topCustomers.length === 0 ? <EmptyState text={translate(t, 'noCustomerData', 'No customer data.')} /> : <div className="space-y-4">{analytics.topCustomers.map((customer) => { const max = analytics.topCustomers[0]?.total || 1; const width = Math.max((customer.total / max) * 100, 8); return <div key={customer.name}><div className="flex items-center justify-between text-xs font-bold mb-2"><span className="truncate pr-3">{customer.name}</span><span className="text-emerald-400">{fmt(customer.total)} Ks</span></div><div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-300 rounded-full" style={{ width: `${width}%` }} /></div></div>; })}</div>}</Card>
+            <Card className="p-5 border-rose-500/10"><h2 className="font-black mb-5 flex items-center gap-2"><AlertTriangle size={18} className="text-rose-400" /> {translate(t, 'lowStockCenter', 'Low Stock Center')}</h2>{inventoryStats.lowStock.length === 0 ? <EmptyState text={translate(t, 'allProductsHealthy', 'All products are healthy.')} /> : <div className="space-y-3 max-h-72 overflow-y-auto pr-1">{inventoryStats.lowStock.slice(0, 8).map((product) => <div key={product.id} className="flex items-center justify-between bg-black/25 border border-white/5 rounded-2xl p-3"><div className="min-w-0"><p className="font-bold text-sm truncate">{product.name}</p><p className="text-[10px] text-slate-500">{product.category}</p></div><span className={`px-3 py-1 rounded-full text-xs font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-400' : 'bg-amber-500/15 text-amber-400'}`}>{product.stock}</span></div>)}</div>}</Card>
           </div>
 
           <Card className="p-5 overflow-hidden">
-            <div className="flex items-center justify-between mb-5"><h2 className="font-black flex items-center gap-2"><ShoppingBag size={18} className="text-blue-400" />{translate(t, 'recentTransactions', 'Recent Transactions')}</h2><span className="text-xs text-slate-500 font-bold">{recentTransactions.length} latest</span></div>
+            <div className="flex items-center justify-between mb-5"><h2 className="font-black flex items-center gap-2"><ShoppingBag size={18} className="text-blue-400" />{translate(t, 'recentTransactions', 'Recent Transactions')}</h2><span className="text-xs text-slate-500 font-bold">{recentTransactions.length} {translate(t, 'latest', 'latest')}</span></div>
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-sm whitespace-nowrap">
-                <thead><tr className="text-left text-[10px] uppercase tracking-widest text-slate-500 border-b border-white/5"><th className="pb-3 pr-4">Type</th><th className="pb-3 px-4">Date</th><th className="pb-3 px-4">Voucher</th><th className="pb-3 px-4">Person</th><th className="pb-3 px-4">Payment</th><th className="pb-3 pl-4 text-right">Amount</th></tr></thead>
+                <thead><tr className="text-left text-[10px] uppercase tracking-widest text-slate-500 border-b border-white/5"><th className="pb-3 pr-4">{translate(t, 'type', 'Type')}</th><th className="pb-3 px-4">{translate(t, 'dateLabel', 'Date')}</th><th className="pb-3 px-4">{translate(t, 'voucher', 'Voucher')}</th><th className="pb-3 px-4">{translate(t, 'person', 'Person')}</th><th className="pb-3 px-4">{translate(t, 'paymentType', 'Payment')}</th><th className="pb-3 pl-4 text-right">{translate(t, 'amountHeader', 'Amount')}</th></tr></thead>
                 <tbody className="divide-y divide-white/5">
                   {recentTransactions.length === 0 ? <tr><td colSpan="6" className="py-8 text-center text-slate-500">{translate(t, 'noTransactions', 'No transactions recorded')}</td></tr> : recentTransactions.map((transaction) => { const type = getRecordType(transaction); const isExpense = type === 'expense'; const isSale = type === 'sale'; return <tr key={transaction.id} className="hover:bg-white/[0.02]"><td className="py-3 pr-4"><span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${isSale ? 'bg-cyan-500/10 text-cyan-400' : isExpense ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}`}>{transaction.type || '-'}</span></td><td className="py-3 px-4 text-slate-400">{getRecordDateISO(transaction)}</td><td className="py-3 px-4 text-slate-400 font-mono text-xs">{transaction.voucherNo || transaction.invoiceNo || '-'}</td><td className="py-3 px-4 font-bold">{transaction.personName || transaction.item || translate(t, 'walkInCustomer', 'Walk-in')}</td><td className="py-3 px-4 text-slate-400">{transaction.paymentType || transaction.paymentMethod || '-'}</td><td className={`py-3 pl-4 text-right font-black ${isExpense ? 'text-rose-400' : 'text-emerald-400'}`}>{isExpense ? '-' : '+'}{fmt(getRecordAmount(transaction))} Ks</td></tr>; })}
                 </tbody>

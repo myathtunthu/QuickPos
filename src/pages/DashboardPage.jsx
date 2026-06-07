@@ -17,7 +17,6 @@ import {
   Plus,
   Search,
   ShoppingCart,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Users,
@@ -27,8 +26,6 @@ import {
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -123,6 +120,42 @@ function Panel({ children, className = '' }) {
 
 function EmptyMini({ text }) {
   return <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 py-6 text-center text-sm font-bold text-slate-500">{text}</div>;
+}
+
+
+function MiniLegend({ items }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-[11px] font-black text-slate-400">
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${item.dot}`} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ComparisonBars({ rows, fmt }) {
+  const max = Math.max(...rows.map((row) => Math.abs(row.value)), 1);
+  return (
+    <div className="space-y-4">
+      {rows.map((row) => {
+        const width = Math.max((Math.abs(row.value) / max) * 100, row.value ? 8 : 2);
+        return (
+          <div key={row.label} className="rounded-2xl border border-white/5 bg-black/25 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black">
+              <span className="text-slate-300">{row.label}</span>
+              <span className={row.text}>{fmt(row.value)} Ks</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-white/10">
+              <div className={`h-full rounded-full ${row.bar}`} style={{ width: `${width}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -221,6 +254,7 @@ export default function DashboardPage() {
     let cashOut = 0;
     let customerCredit = 0;
     const productCounter = {};
+    const productRevenueCounter = {};
     const productProfitCounter = {};
 
     saleRecords.forEach((record) => {
@@ -246,6 +280,7 @@ export default function DashboardPage() {
         const itemCost = cost * qty;
         costOfGoods += itemCost;
         productCounter[name] = (productCounter[name] || 0) + qty;
+        productRevenueCounter[name] = (productRevenueCounter[name] || 0) + itemRevenue;
         productProfitCounter[name] = (productProfitCounter[name] || 0) + (itemRevenue - itemCost);
       });
     });
@@ -279,7 +314,7 @@ export default function DashboardPage() {
       orders: saleRecords.length,
       averageOrder: saleRecords.length ? revenue / saleRecords.length : 0,
       topProducts: Object.entries(productCounter)
-        .map(([name, qty]) => ({ name, qty, profit: productProfitCounter[name] || 0 }))
+        .map(([name, qty]) => ({ name, qty, revenue: productRevenueCounter[name] || 0, profit: productProfitCounter[name] || 0 }))
         .sort((a, b) => b.qty - a.qty)
         .slice(0, 5),
     };
@@ -331,15 +366,6 @@ export default function DashboardPage() {
     return days;
   }, [records, productMap]);
 
-  const health = useMemo(() => {
-    const salesScore = analytics.revenue > 0 ? 100 : 45;
-    const profitScore = analytics.margin >= 25 ? 100 : analytics.margin >= 10 ? 80 : analytics.margin >= 0 ? 60 : 20;
-    const stockScore = inventoryStats.lowStockCount === 0 ? 100 : inventoryStats.outOfStock > 0 ? 35 : 70;
-    const cashScore = analytics.cashFlow >= 0 ? 90 : 40;
-    const score = Math.round((salesScore + profitScore + stockScore + cashScore) / 4);
-    return { score, salesScore, profitScore, stockScore, cashScore };
-  }, [analytics, inventoryStats]);
-
   const alerts = useMemo(() => {
     const list = [];
     if (inventoryStats.outOfStock > 0) list.push({ tone: 'rose', title: t('alertOutOfStock', 'Out of stock'), body: `${inventoryStats.outOfStock} ${t('productsNeedRestock', 'products need restock')}` });
@@ -364,6 +390,21 @@ export default function DashboardPage() {
     { title: t('cashFlow', 'Cash Flow'), value: analytics.cashFlow, suffix: 'Ks', icon: Wallet, color: analytics.cashFlow >= 0 ? 'blue' : 'rose', note: `${t('cashIn', 'In')} ${fmt(analytics.cashIn)} • ${t('cashOut', 'Out')} ${fmt(analytics.cashOut)}`, bad: analytics.cashFlow < 0 },
     { title: t('supplierCredit', 'Supplier Credit'), value: supplierDebt, suffix: 'Ks', icon: FileText, color: supplierDebt > 0 ? 'amber' : 'emerald', note: t('unpaidPurchaseBalance', 'Unpaid purchase balance'), bad: supplierDebt > 0 },
     { title: t('lowStock', 'Low Stock'), value: inventoryStats.lowStockCount, suffix: '', icon: AlertTriangle, color: inventoryStats.lowStockCount > 0 ? 'rose' : 'emerald', note: `${inventoryStats.outOfStock} ${t('outOfStock', 'out of stock')}`, bad: inventoryStats.lowStockCount > 0 },
+  ];
+
+
+  const financialRows = [
+    { label: t('revenue', 'Revenue'), value: analytics.revenue, text: 'text-cyan-300', bar: 'bg-gradient-to-r from-cyan-600 to-cyan-300' },
+    { label: t('expenses', 'Expenses'), value: analytics.expenses, text: 'text-rose-300', bar: 'bg-gradient-to-r from-rose-600 to-rose-300' },
+    { label: t('grossProfit', 'Gross Profit'), value: analytics.grossProfit, text: analytics.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-300', bar: analytics.grossProfit >= 0 ? 'bg-gradient-to-r from-emerald-600 to-emerald-300' : 'bg-gradient-to-r from-rose-600 to-rose-300' },
+    { label: t('netProfit', 'Net Profit'), value: analytics.netProfit, text: analytics.netProfit >= 0 ? 'text-violet-300' : 'text-rose-300', bar: analytics.netProfit >= 0 ? 'bg-gradient-to-r from-violet-600 to-violet-300' : 'bg-gradient-to-r from-rose-600 to-rose-300' },
+  ];
+
+  const todaySnapshot = [
+    { label: t('revenue', 'Revenue'), value: analytics.revenue, tone: 'text-cyan-300' },
+    { label: t('grossProfit', 'Gross Profit'), value: analytics.grossProfit, tone: analytics.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
+    { label: t('expenses', 'Expenses'), value: analytics.expenses, tone: 'text-rose-300' },
+    { label: t('netProfit', 'Net Profit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'text-violet-300' : 'text-rose-300' },
   ];
 
   function KpiCard({ card, compact = false }) {
@@ -436,24 +477,19 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Panel className="p-5 xl:col-span-2 border-emerald-500/10">
-            <div className="flex items-center justify-between gap-4 mb-5">
+          <Panel className="p-5 xl:col-span-2 border-cyan-500/10">
+            <div className="mb-5 flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-widest text-emerald-300">{t('businessHealth', 'Business Health')}</p>
-                <h2 className="mt-1 text-2xl font-black">{health.score}%</h2>
+                <p className="text-xs font-black uppercase tracking-widest text-cyan-300">{t('todayBusinessSnapshot', 'Today Business Snapshot')}</p>
+                <h2 className="mt-1 text-xl sm:text-2xl font-black">{t('ownerSummary', 'Sales, costs and net result')}</h2>
               </div>
-              <Sparkles className="text-emerald-300" size={28} />
+              <BarChart3 className="text-cyan-300" size={28} />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                [t('sales', 'Sales'), health.salesScore],
-                [t('profit', 'Profit'), health.profitScore],
-                [t('stock', 'Stock'), health.stockScore],
-                [t('cashFlow', 'Cash Flow'), health.cashScore],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl bg-black/25 border border-white/5 p-3">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-400"><span>{label}</span><span>{value}%</span></div>
-                  <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${value}%` }} /></div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {todaySnapshot.map((item) => (
+                <div key={item.label} className="rounded-2xl bg-black/25 border border-white/5 p-4">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
+                  <p className={`mt-2 text-xl sm:text-2xl font-black ${item.tone}`}>{fmt(item.value)} Ks</p>
                 </div>
               ))}
             </div>
@@ -476,13 +512,20 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           <Panel className="xl:col-span-2 p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="font-black flex items-center gap-2"><TrendingUp size={18} className="text-cyan-300" /> {t('salesProfitTrend', 'Sales & Profit Trend')}</h2>
-              <span className="text-xs text-slate-500 font-bold">{t('last7Days', 'Last 7 days')}</span>
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-black flex items-center gap-2"><TrendingUp size={18} className="text-cyan-300" /> {t('salesProfitTrend', 'Sales & Profit Trend')}</h2>
+                <p className="mt-1 text-xs font-bold text-slate-500">{t('last7Days', 'Last 7 days')}</p>
+              </div>
+              <MiniLegend items={[
+                { label: t('revenue', 'Revenue'), dot: 'bg-cyan-400' },
+                { label: t('profit', 'Profit'), dot: 'bg-emerald-400' },
+                { label: t('expenses', 'Expenses'), dot: 'bg-rose-400' },
+              ]} />
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
                   <defs>
                     <linearGradient id="salesColor" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.45} /><stop offset="95%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
                     <linearGradient id="profitColor" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.35} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
@@ -490,7 +533,7 @@ export default function DashboardPage() {
                   </defs>
                   <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} width={48} tickFormatter={(value) => Number(value) >= 1000000 ? `${Math.round(Number(value) / 1000000)}M` : Number(value) >= 1000 ? `${Math.round(Number(value) / 1000)}K` : value} />
                   <Tooltip contentStyle={{ background: '#060816', border: '1px solid rgba(6,182,212,0.25)', borderRadius: 14 }} formatter={(value, name) => [`${fmt(value)} Ks`, t(String(name).toLowerCase(), name)]} />
                   <Area type="monotone" dataKey="sales" name="Sales" stroke="#06b6d4" strokeWidth={3} fill="url(#salesColor)" />
                   <Area type="monotone" dataKey="profit" name="Profit" stroke="#10b981" strokeWidth={2} fill="url(#profitColor)" />
@@ -501,18 +544,11 @@ export default function DashboardPage() {
           </Panel>
 
           <Panel className="p-5">
-            <h2 className="font-black mb-5 flex items-center gap-2"><BarChart3 size={18} className="text-violet-300" /> {t('revenueVsExpense', 'Revenue vs Expense')}</h2>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[{ name: t('revenue', 'Revenue'), value: analytics.revenue }, { name: t('expenses', 'Expenses'), value: analytics.expenses }, { name: t('profit', 'Profit'), value: analytics.netProfit }]}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ background: '#060816', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14 }} formatter={(value) => [`${fmt(value)} Ks`, t('amount', 'Amount')]} />
-                  <Bar dataKey="value" fill="#06b6d4" radius={[10, 10, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="mb-5">
+              <h2 className="font-black flex items-center gap-2"><BarChart3 size={18} className="text-violet-300" /> {t('revenueVsExpense', 'Revenue vs Expense')}</h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">{t('financeComparisonHint', 'Compare money in, costs and profit without clipped chart labels.')}</p>
             </div>
+            <ComparisonBars rows={financialRows} fmt={fmt} />
           </Panel>
         </div>
 
@@ -524,7 +560,13 @@ export default function DashboardPage() {
                 {analytics.topProducts.map((product, index) => {
                   const max = analytics.topProducts[0]?.qty || 1;
                   const width = Math.max((product.qty / max) * 100, 8);
-                  return <div key={product.name}><div className="flex justify-between gap-3 text-xs font-bold mb-2"><span className="truncate">{index + 1}. {product.name}</span><span className="text-cyan-300">{product.qty}</span></div><div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-300 rounded-full" style={{ width: `${width}%` }} /></div></div>;
+                  return (
+                    <div key={product.name} className="rounded-2xl border border-white/5 bg-black/20 p-3">
+                      <div className="flex justify-between gap-3 text-sm font-black mb-2"><span className="truncate">{index + 1}. {product.name}</span><span className="text-cyan-300">{product.qty}</span></div>
+                      <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-500"><span>{t('revenue', 'Revenue')}: {fmt(product.revenue)} Ks</span><span>{t('profit', 'Profit')}: {fmt(product.profit)} Ks</span></div>
+                      <div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-300 rounded-full" style={{ width: `${width}%` }} /></div>
+                    </div>
+                  );
                 })}
               </div>
             )}

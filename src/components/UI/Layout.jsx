@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import BottomNav from '../BottomNav';
-import { Menu, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { HelpCircle, Menu, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import GuideModal from './GuideModal';
+import { getGuideConfig, getGuidePageKey } from '../../utils/pageGuides';
 
 export default function Layout() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -12,7 +14,10 @@ export default function Layout() {
     return saved === null ? true : saved === 'true';
   });
 
-  const { languageLabel, toggleLanguage } = useLanguage();
+  const { languageLabel, toggleLanguage, t } = useLanguage();
+  const location = useLocation();
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guide = getGuideConfig(t, getGuidePageKey(location.pathname));
 
   useEffect(() => {
     localStorage.setItem('nexpos_desktop_sidebar_open', String(sidebarOpen));
@@ -86,19 +91,33 @@ export default function Layout() {
             />
           </div>
 
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            className="px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-sm font-black"
-          >
-            {languageLabel}
-          </button>
+          <div className="flex items-center gap-2">
+            {guide && (
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
+                className="px-3 py-2 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-sm font-black flex items-center gap-2"
+              >
+                <HelpCircle size={17} />
+                <span className="hidden sm:inline">{t('guide', 'Guide')}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-sm font-black"
+            >
+              {languageLabel}
+            </button>
+          </div>
         </header>
 
         <main data-app-scroll-container="true" className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 pb-20 md:pb-6 overscroll-contain">
           <Outlet />
         </main>
       </div>
+
+      <GuideModal open={guideOpen} onClose={() => setGuideOpen(false)} guide={guide} t={t} />
 
       <div className="md:hidden">
         <BottomNav />

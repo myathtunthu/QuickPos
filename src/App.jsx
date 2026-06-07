@@ -216,10 +216,11 @@ function AppContent() {
             path="reports"
             element={
               <PermissionRoute permission="view_reports" fallback="/entry">
-                <ReportsPage />
+                <ReportsPage records={allRecords} />
               </PermissionRoute>
             }
           />
+
         </Route>
 
         <Route path="*" element={<Navigate to="/entry" replace />} />

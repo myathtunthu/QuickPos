@@ -30,19 +30,48 @@ export const buildVoucherNo = (type = 'Sale', count = 1, dateISO = '') => {
   return `${prefix}-${safeDate}-${serial}`;
 };
 
+
+export const toFiniteNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export const getUnitCostPrice = (unit = {}, product = {}) => {
+  const multiplier = toFiniteNumber(unit.multiplier, 1) || 1;
+  const explicitUnitCost =
+    unit.costPrice ??
+    unit.cost ??
+    unit.purchasePrice ??
+    unit.buyPrice ??
+    unit.avgCostPrice ??
+    unit.averageCost;
+
+  if (explicitUnitCost !== undefined && explicitUnitCost !== null && explicitUnitCost !== '') {
+    return Math.max(0, toFiniteNumber(explicitUnitCost, 0));
+  }
+
+  const baseCost =
+    product.costPrice ??
+    product.cost ??
+    product.purchasePrice ??
+    product.buyPrice ??
+    product.avgCostPrice ??
+    product.averageCost ??
+    0;
+
+  return Math.max(0, toFiniteNumber(baseCost, 0) * multiplier);
+};
+
 export const getItemCostPrice = (cartItem, products = []) => {
   const product = products.find((p) => p.id === cartItem?.productId);
+  const selectedUnit = product?.packageUnits?.find((u) => u.name === cartItem?.unitName);
 
-  return (
-    Number(
-      cartItem?.costPrice ??
-        cartItem?.cost ??
-        product?.costPrice ??
-        product?.packageUnits?.[0]?.costPrice ??
-        product?.packages?.[0]?.costPrice ??
-        0
-    ) || 0
-  );
+  const cost =
+    cartItem?.costPrice ??
+    cartItem?.cost ??
+    getUnitCostPrice(selectedUnit || {}, product || {});
+
+  return Math.max(0, toFiniteNumber(cost, 0));
 };
 
 export const formatMoney = (value) => `${Number(value || 0).toLocaleString()} Ks`;

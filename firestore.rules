@@ -72,6 +72,22 @@ service cloud.firestore {
       return hasPermission('create_sale') || hasPermission('create_purchase');
     }
 
+    function isCustomerPaymentRecord() {
+      return request.resource.data.type == 'Customer Payment'
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.customerId is string
+        && request.resource.data.personName is string;
+    }
+
+    function isSupplierPaymentRecord() {
+      return request.resource.data.type == 'Supplier Payment'
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.supplierId is string
+        && request.resource.data.personName is string;
+    }
+
     function isDebtOnlyUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['totalDebt', 'updatedAt', 'updatedAtServer']);
@@ -112,7 +128,13 @@ service cloud.firestore {
       allow read: if isSuperAdmin()
         || (sameTenant(resource.data.tenantId) && (hasPermission('view_sales') || hasPermission('view_reports')));
       allow create: if sameTenant(request.resource.data.tenantId)
-        && (hasPermission('create_sale') || hasPermission('create_purchase') || hasPermission('create_expense'));
+        && (
+          hasPermission('create_sale')
+          || hasPermission('create_purchase')
+          || hasPermission('create_expense')
+          || (hasPermission('accept_payment') && isCustomerPaymentRecord())
+          || (hasPermission('create_purchase') && isSupplierPaymentRecord())
+        );
       allow update: if sameTenant(resource.data.tenantId) && hasPermission('delete_records');
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }
@@ -125,6 +147,7 @@ service cloud.firestore {
         && (
           hasPermission('manage_customers')
           || (hasPermission('create_sale') && isDebtOnlyUpdate())
+          || (hasPermission('accept_payment') && isDebtOnlyUpdate())
         );
       allow delete: if isAdmin() && resource.data.tenantId == myTenantId();
     }

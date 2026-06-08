@@ -308,14 +308,11 @@ export default function EntryPage({ products = [] }) {
     const total = toFiniteNumber(cartTotals.total, 0);
     const paid = paidAmount === '' ? total : toFiniteNumber(paidAmount, 0);
 
-    if (total <= 0) {
-      showToast(tt('transactionTotalInvalid', 'Transaction total must be greater than zero.'), 'error');
-      return;
-    }
-
-    if (paid < 0) {
-      showToast(tt('paidAmountInvalid', 'Paid amount cannot be negative.'), 'error');
-      return;
+    // Preview data must never show validation toasts.
+    // When Entry page opens with an empty cart, total is 0 by design.
+    // Validation toasts are only shown inside submitTransaction() after the user taps Save.
+    if (cart.length === 0 || total <= 0 || paid < 0) {
+      return null;
     }
 
     const remainingDebt = Math.max(0, total - paid);
@@ -968,9 +965,6 @@ export default function EntryPage({ products = [] }) {
                     <span className="text-white">{shopSettings.shopName || 'POS'}</span>{' '}
                     <span className="text-cyan-400">{tt('posEntry', 'POS Entry')}</span>
                   </h1>
-                  <p className="text-xs sm:text-sm text-slate-400 font-bold mt-1">
-                    {tt('receiptUsesSettings', 'Shop receipt uses Settings logo/name/phone/address')} • {tt('cashierLabel', 'Cashier')}: <span className="text-cyan-300">{cashierName}</span>
-                  </p>
                 </div>
               </div>
 

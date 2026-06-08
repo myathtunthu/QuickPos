@@ -378,50 +378,58 @@ export default function DashboardPage() {
 
   const recentTransactions = useMemo(() => [...records].sort((a, b) => getTimeValue(b) - getTimeValue(a)).slice(0, 6), [records]);
 
-  const kpiCards = [
-    { title: t('todaySales', 'Today Sales'), value: analytics.revenue, suffix: 'Ks', icon: DollarSign, color: 'cyan', note: `${analytics.orders} ${t('orders', 'orders')}`, bad: false },
-    { title: t('todayProfit', 'Today Profit'), value: analytics.netProfit, suffix: 'Ks', icon: TrendingUp, color: analytics.netProfit >= 0 ? 'emerald' : 'rose', note: `${analytics.margin.toFixed(1)}% ${t('margin', 'margin')}`, bad: analytics.netProfit < 0 },
-    { title: t('stockValue', 'Stock Value'), value: inventoryStats.inventoryValue, suffix: 'Ks', icon: Package, color: 'violet', note: `${inventoryStats.totalProducts} ${t('products', 'products')}`, bad: false },
-    { title: t('customerCredit', 'Customer Credit'), value: analytics.customerCredit, suffix: 'Ks', icon: CreditCard, color: analytics.customerCredit > 0 ? 'amber' : 'emerald', note: t('unpaidSaleBalance', 'Unpaid sale balance'), bad: analytics.customerCredit > 0 },
+  const heroMetrics = [
+    { label: t('revenue', 'Revenue'), value: analytics.revenue, tone: 'text-cyan-300', icon: DollarSign },
+    { label: t('grossProfit', 'Gross Profit'), value: analytics.grossProfit, tone: analytics.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-300', icon: TrendingUp },
+    { label: t('expenses', 'Expenses'), value: analytics.expenses, tone: 'text-rose-300', icon: TrendingDown },
+    { label: t('netProfit', 'Net Profit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'text-violet-300' : 'text-rose-300', icon: Wallet },
   ];
 
-  const secondaryCards = [
-    { title: t('expenses', 'Expenses'), value: analytics.expenses, suffix: 'Ks', icon: TrendingDown, color: 'rose', note: t('operationalCosts', 'Operational costs'), bad: analytics.expenses > analytics.revenue && analytics.expenses > 0 },
-    { title: t('cashFlow', 'Cash Flow'), value: analytics.cashFlow, suffix: 'Ks', icon: Wallet, color: analytics.cashFlow >= 0 ? 'blue' : 'rose', note: `${t('cashIn', 'In')} ${fmt(analytics.cashIn)} • ${t('cashOut', 'Out')} ${fmt(analytics.cashOut)}`, bad: analytics.cashFlow < 0 },
-    { title: t('supplierCredit', 'Supplier Credit'), value: supplierDebt, suffix: 'Ks', icon: FileText, color: supplierDebt > 0 ? 'amber' : 'emerald', note: t('unpaidPurchaseBalance', 'Unpaid purchase balance'), bad: supplierDebt > 0 },
-    { title: t('lowStock', 'Low Stock'), value: inventoryStats.lowStockCount, suffix: '', icon: AlertTriangle, color: inventoryStats.lowStockCount > 0 ? 'rose' : 'emerald', note: `${inventoryStats.outOfStock} ${t('outOfStock', 'out of stock')}`, bad: inventoryStats.lowStockCount > 0 },
+  const operations = [
+    { label: t('orders', 'Orders'), value: analytics.orders, note: `${t('averageOrder', 'Average')} ${fmt(analytics.averageOrder)} Ks`, icon: ShoppingCart, tone: 'cyan' },
+    { label: t('stockValue', 'Stock Value'), value: `${fmt(inventoryStats.inventoryValue)} Ks`, note: `${inventoryStats.totalProducts} ${t('products', 'products')}`, icon: Package, tone: 'violet' },
+    { label: t('customerCredit', 'Customer Credit'), value: `${fmt(analytics.customerCredit)} Ks`, note: t('unpaidSaleBalance', 'Unpaid sale balance'), icon: CreditCard, tone: analytics.customerCredit > 0 ? 'amber' : 'emerald' },
+    { label: t('supplierCredit', 'Supplier Credit'), value: `${fmt(supplierDebt)} Ks`, note: t('unpaidPurchaseBalance', 'Unpaid purchase balance'), icon: FileText, tone: supplierDebt > 0 ? 'amber' : 'emerald' },
+    { label: t('lowStock', 'Low Stock'), value: inventoryStats.lowStockCount, note: `${inventoryStats.outOfStock} ${t('outOfStock', 'out of stock')}`, icon: AlertTriangle, tone: inventoryStats.lowStockCount > 0 ? 'rose' : 'emerald' },
+    { label: t('cashFlow', 'Cash Flow'), value: `${fmt(analytics.cashFlow)} Ks`, note: `${t('cashIn', 'In')} ${fmt(analytics.cashIn)} • ${t('cashOut', 'Out')} ${fmt(analytics.cashOut)}`, icon: Wallet, tone: analytics.cashFlow >= 0 ? 'blue' : 'rose' },
   ];
 
-
-  const financialRows = [
+  const moneyMix = [
     { label: t('revenue', 'Revenue'), value: analytics.revenue, text: 'text-cyan-300', bar: 'bg-gradient-to-r from-cyan-600 to-cyan-300' },
-    { label: t('expenses', 'Expenses'), value: analytics.expenses, text: 'text-rose-300', bar: 'bg-gradient-to-r from-rose-600 to-rose-300' },
     { label: t('grossProfit', 'Gross Profit'), value: analytics.grossProfit, text: analytics.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-300', bar: analytics.grossProfit >= 0 ? 'bg-gradient-to-r from-emerald-600 to-emerald-300' : 'bg-gradient-to-r from-rose-600 to-rose-300' },
+    { label: t('expenses', 'Expenses'), value: analytics.expenses, text: 'text-rose-300', bar: 'bg-gradient-to-r from-rose-600 to-rose-300' },
     { label: t('netProfit', 'Net Profit'), value: analytics.netProfit, text: analytics.netProfit >= 0 ? 'text-violet-300' : 'text-rose-300', bar: analytics.netProfit >= 0 ? 'bg-gradient-to-r from-violet-600 to-violet-300' : 'bg-gradient-to-r from-rose-600 to-rose-300' },
   ];
 
-  const todaySnapshot = [
-    { label: t('revenue', 'Revenue'), value: analytics.revenue, tone: 'text-cyan-300' },
-    { label: t('grossProfit', 'Gross Profit'), value: analytics.grossProfit, tone: analytics.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
-    { label: t('expenses', 'Expenses'), value: analytics.expenses, tone: 'text-rose-300' },
-    { label: t('netProfit', 'Net Profit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'text-violet-300' : 'text-rose-300' },
-  ];
-
-  function KpiCard({ card, compact = false }) {
-    const Icon = card.icon;
-    const tone = colors[card.color] || colors.cyan;
+  function MetricTile({ item }) {
+    const Icon = item.icon;
     return (
-      <Panel className={`p-4 sm:p-5 ${tone.border}`}>
-        <div className={`absolute -right-8 -top-8 h-24 w-24 rounded-full blur-3xl ${tone.glow}`} />
-        <div className="relative flex items-start justify-between gap-3">
+      <div className="rounded-3xl border border-white/5 bg-black/25 p-4 min-w-0">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-slate-500">{card.title}</p>
-            <h3 className={`${compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} mt-2 font-black leading-tight ${tone.text}`}>{fmt(card.value)} {card.suffix}</h3>
-            <p className="mt-3 truncate text-xs font-bold text-slate-500">{card.note}</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
+            <p className={`mt-2 text-2xl sm:text-3xl font-black leading-tight ${item.tone}`}>{fmt(item.value)} Ks</p>
           </div>
-          <div className={`rounded-2xl p-3 ${tone.bg} ${tone.text}`}><Icon size={compact ? 20 : 24} /></div>
+          <div className="rounded-2xl bg-white/5 p-3 text-cyan-300 shrink-0"><Icon size={18} /></div>
         </div>
-      </Panel>
+      </div>
+    );
+  }
+
+  function OperationTile({ item }) {
+    const Icon = item.icon;
+    const tone = colors[item.tone] || colors.cyan;
+    return (
+      <div className={`rounded-3xl border ${tone.border} bg-black/25 p-4 min-w-0`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
+            <p className={`mt-2 text-xl sm:text-2xl font-black leading-tight ${tone.text}`}>{item.value}</p>
+            <p className="mt-2 truncate text-xs font-bold text-slate-500">{item.note}</p>
+          </div>
+          <div className={`rounded-2xl p-3 ${tone.bg} ${tone.text} shrink-0`}><Icon size={18} /></div>
+        </div>
+      </div>
     );
   }
 
@@ -439,9 +447,9 @@ export default function DashboardPage() {
       <div className="pointer-events-none absolute -top-32 right-0 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="pointer-events-none absolute top-1/3 -left-32 h-80 w-80 rounded-full bg-violet-500/10 blur-3xl" />
 
-      <motion.div initial="hidden" animate="visible" transition={{ staggerChildren: 0.06 }} className="relative z-10 mx-auto max-w-7xl space-y-5 sm:space-y-6 pb-6">
+      <motion.div initial="hidden" animate="visible" transition={{ staggerChildren: 0.06 }} className="relative z-10 mx-auto max-w-7xl space-y-5 pb-6">
         <Panel className="p-5 sm:p-7 border-cyan-500/15">
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4 min-w-0">
               <div className="rounded-3xl border border-cyan-500/25 bg-cyan-500/10 p-4 text-cyan-300 shrink-0"><Zap size={28} /></div>
               <div className="min-w-0">
@@ -451,7 +459,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 xl:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 lg:w-auto">
               <div className="relative sm:w-72">
                 <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
@@ -472,31 +480,22 @@ export default function DashboardPage() {
           </div>
         </Panel>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {kpiCards.map((card) => <KpiCard key={card.title} card={card} />)}
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Panel className="p-5 xl:col-span-2 border-cyan-500/10">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          <Panel className="p-5 xl:col-span-7 border-cyan-500/10">
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-cyan-300">{t('todayBusinessSnapshot', 'Today Business Snapshot')}</p>
-                <h2 className="mt-1 text-xl sm:text-2xl font-black">{t('ownerSummary', 'Sales, costs and net result')}</h2>
+                <h2 className="mt-1 text-xl sm:text-3xl font-black">{t('ownerSummary', 'Sales, costs and net result')}</h2>
               </div>
               <BarChart3 className="text-cyan-300" size={28} />
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {todaySnapshot.map((item) => (
-                <div key={item.label} className="rounded-2xl bg-black/25 border border-white/5 p-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{item.label}</p>
-                  <p className={`mt-2 text-xl sm:text-2xl font-black ${item.tone}`}>{fmt(item.value)} Ks</p>
-                </div>
-              ))}
+            <div className="grid grid-cols-2 gap-3">
+              {heroMetrics.map((item) => <MetricTile key={item.label} item={item} />)}
             </div>
           </Panel>
 
-          <Panel className="p-5 border-amber-500/10">
-            <h2 className="mb-4 flex items-center gap-2 font-black"><AlertTriangle size={18} className="text-amber-300" /> {t('alertCenter', 'Alert Center')}</h2>
+          <Panel className="p-5 xl:col-span-5 border-amber-500/10">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-black"><AlertTriangle size={18} className="text-amber-300" /> {t('alertCenter', 'Alert Center')}</h2>
             <div className="space-y-3">
               {alerts.map((alert) => {
                 const tone = colors[alert.tone] || colors.cyan;
@@ -506,12 +505,8 @@ export default function DashboardPage() {
           </Panel>
         </div>
 
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          {secondaryCards.map((card) => <KpiCard key={card.title} card={card} compact />)}
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Panel className="xl:col-span-2 p-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <Panel className="lg:col-span-8 p-5">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-black flex items-center gap-2"><TrendingUp size={18} className="text-cyan-300" /> {t('salesProfitTrend', 'Sales & Profit Trend')}</h2>
@@ -523,9 +518,9 @@ export default function DashboardPage() {
                 { label: t('expenses', 'Expenses'), dot: 'bg-rose-400' },
               ]} />
             </div>
-            <div className="h-72">
+            <div className="h-72 w-full overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="salesColor" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.45} /><stop offset="95%" stopColor="#06b6d4" stopOpacity={0} /></linearGradient>
                     <linearGradient id="profitColor" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.35} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
@@ -533,7 +528,7 @@ export default function DashboardPage() {
                   </defs>
                   <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} width={48} tickFormatter={(value) => Number(value) >= 1000000 ? `${Math.round(Number(value) / 1000000)}M` : Number(value) >= 1000 ? `${Math.round(Number(value) / 1000)}K` : value} />
+                  <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} width={42} tickFormatter={(value) => Number(value) >= 1000000 ? `${Math.round(Number(value) / 100000) / 10}M` : Number(value) >= 1000 ? `${Math.round(Number(value) / 1000)}K` : value} />
                   <Tooltip contentStyle={{ background: '#060816', border: '1px solid rgba(6,182,212,0.25)', borderRadius: 14 }} formatter={(value, name) => [`${fmt(value)} Ks`, t(String(name).toLowerCase(), name)]} />
                   <Area type="monotone" dataKey="sales" name="Sales" stroke="#06b6d4" strokeWidth={3} fill="url(#salesColor)" />
                   <Area type="monotone" dataKey="profit" name="Profit" stroke="#10b981" strokeWidth={2} fill="url(#profitColor)" />
@@ -543,17 +538,17 @@ export default function DashboardPage() {
             </div>
           </Panel>
 
-          <Panel className="p-5">
+          <Panel className="lg:col-span-4 p-5">
             <div className="mb-5">
               <h2 className="font-black flex items-center gap-2"><BarChart3 size={18} className="text-violet-300" /> {t('revenueVsExpense', 'Revenue vs Expense')}</h2>
-              <p className="mt-1 text-xs font-bold text-slate-500">{t('financeComparisonHint', 'Compare money in, costs and profit without clipped chart labels.')}</p>
+              <p className="mt-1 text-xs font-bold text-slate-500">{t('financeComparisonHint', 'Money in, costs and profit')}</p>
             </div>
-            <ComparisonBars rows={financialRows} fmt={fmt} />
+            <ComparisonBars rows={moneyMix} fmt={fmt} />
           </Panel>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Panel className="p-5">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+          <Panel className="xl:col-span-7 p-5">
             <h2 className="font-black mb-5">🏆 {t('topSellingProducts', 'Top Selling Products')}</h2>
             {analytics.topProducts.length === 0 ? <EmptyMini text={t('noProductsSold', 'No products sold yet')} /> : (
               <div className="space-y-4">
@@ -563,7 +558,7 @@ export default function DashboardPage() {
                   return (
                     <div key={product.name} className="rounded-2xl border border-white/5 bg-black/20 p-3">
                       <div className="flex justify-between gap-3 text-sm font-black mb-2"><span className="truncate">{index + 1}. {product.name}</span><span className="text-cyan-300">{product.qty}</span></div>
-                      <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold text-slate-500"><span>{t('revenue', 'Revenue')}: {fmt(product.revenue)} Ks</span><span>{t('profit', 'Profit')}: {fmt(product.profit)} Ks</span></div>
+                      <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500"><span>{t('revenue', 'Revenue')}: {fmt(product.revenue)} Ks</span><span>{t('profit', 'Profit')}: {fmt(product.profit)} Ks</span></div>
                       <div className="h-2.5 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-cyan-600 to-cyan-300 rounded-full" style={{ width: `${width}%` }} /></div>
                     </div>
                   );
@@ -572,24 +567,30 @@ export default function DashboardPage() {
             )}
           </Panel>
 
-          <Panel className="p-5 border-rose-500/10">
-            <h2 className="font-black mb-5 flex items-center gap-2"><AlertTriangle size={18} className="text-rose-300" /> {t('lowStockCenter', 'Low Stock Center')}</h2>
-            {inventoryStats.lowStock.length === 0 ? <EmptyMini text={t('allProductsHealthy', 'All products are healthy')} /> : (
-              <div className="space-y-3 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
-                {inventoryStats.lowStock.slice(0, 8).map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-black/25 border border-white/5 p-3"><div className="min-w-0"><p className="font-bold text-sm truncate">{product.name}</p><p className="text-[10px] text-slate-500">{product.category}</p></div><span className={`px-3 py-1 rounded-full text-xs font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}>{product.stock}</span></div>)}
-              </div>
-            )}
-          </Panel>
+          <div className="xl:col-span-5 grid grid-cols-1 gap-5">
+            <Panel className="p-5 border-rose-500/10">
+              <h2 className="font-black mb-5 flex items-center gap-2"><AlertTriangle size={18} className="text-rose-300" /> {t('lowStockCenter', 'Low Stock Center')}</h2>
+              {inventoryStats.lowStock.length === 0 ? <EmptyMini text={t('allProductsHealthy', 'All products are healthy')} /> : (
+                <div className="space-y-3 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                  {inventoryStats.lowStock.slice(0, 8).map((product) => <div key={product.id} className="flex items-center justify-between rounded-2xl bg-black/25 border border-white/5 p-3"><div className="min-w-0"><p className="font-bold text-sm truncate">{product.name}</p><p className="text-[10px] text-slate-500">{product.category}</p></div><span className={`px-3 py-1 rounded-full text-xs font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}>{product.stock}</span></div>)}
+                </div>
+              )}
+            </Panel>
 
-          <Panel className="p-5">
-            <h2 className="font-black mb-5 flex items-center gap-2"><Zap size={18} className="text-cyan-300" /> {t('quickActions', 'Quick Actions')}</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <Link to="/entry" className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center text-cyan-300 font-black hover:bg-cyan-500/20 active:scale-95"><ShoppingCart className="mx-auto mb-2" />{t('newSale', 'New Sale')}</Link>
-              <Link to="/entry" className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center text-emerald-300 font-black hover:bg-emerald-500/20 active:scale-95"><Plus className="mx-auto mb-2" />{t('newPurchase', 'Purchase')}</Link>
-              <Link to="/inventory" className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4 text-center text-violet-300 font-black hover:bg-violet-500/20 active:scale-95"><Package className="mx-auto mb-2" />{t('addProduct', 'Product')}</Link>
-              <Link to="/records" className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-center text-blue-300 font-black hover:bg-blue-500/20 active:scale-95"><FileText className="mx-auto mb-2" />{t('records', 'Records')}</Link>
-            </div>
-          </Panel>
+            <Panel className="p-5">
+              <h2 className="font-black mb-5 flex items-center gap-2"><Zap size={18} className="text-cyan-300" /> {t('quickActions', 'Quick Actions')}</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link to="/entry" className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-center text-cyan-300 font-black hover:bg-cyan-500/20 active:scale-95"><ShoppingCart className="mx-auto mb-2" />{t('newSale', 'New Sale')}</Link>
+                <Link to="/entry" className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center text-emerald-300 font-black hover:bg-emerald-500/20 active:scale-95"><Plus className="mx-auto mb-2" />{t('newPurchase', 'Purchase')}</Link>
+                <Link to="/inventory" className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4 text-center text-violet-300 font-black hover:bg-violet-500/20 active:scale-95"><Package className="mx-auto mb-2" />{t('addProduct', 'Product')}</Link>
+                <Link to="/records" className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-center text-blue-300 font-black hover:bg-blue-500/20 active:scale-95"><FileText className="mx-auto mb-2" />{t('records', 'Records')}</Link>
+              </div>
+            </Panel>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {operations.map((item) => <OperationTile key={item.label} item={item} />)}
         </div>
 
         <Panel className="p-5 overflow-hidden">
@@ -611,5 +612,4 @@ export default function DashboardPage() {
         </Panel>
       </motion.div>
     </div>
-  );
-}
+  );}

@@ -1,50 +1,67 @@
-export const exportToCSV = (data, filename) => {
-  if (!data || data.length === 0) {
-    alert("Export ထုတ်ရန် မှတ်တမ်း မရှိပါ!");
-    return;
+const CSV_INJECTION_PREFIX = /^[=+\-@\t\r]/;
+
+const sanitizeFileName = (filename = 'export') => {
+  const safeName = String(filename || 'export').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return safeName || 'export';
+};
+
+const normaliseCell = (value) => {
+  if (value === null || value === undefined) return '';
+
+  let text;
+  if (value instanceof Date) {
+    text = value.toISOString();
+  } else if (typeof value === 'object') {
+    text = JSON.stringify(value);
+  } else {
+    text = String(value);
   }
 
-  // Header များကို ရယူခြင်း
-  const headers = Object.keys(data[0]);
+  text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // CSV format သို့ ပြောင်းလဲခြင်း
-  const csvRows = [
-    headers.join(','), // Header Row
-    ...data.map(row => 
-      headers.map(header => {
-        let value = row[header];
-        
-        // Value မရှိလျှင် အလွတ်ထားရန်
-        if (value === null || value === undefined) value = '';
-        
-        // Array သို့မဟုတ် Object ဖြစ်နေလျှင် String အဖြစ်ပြောင်းရန် (ဥပမာ - items တွေ)
-        if (typeof value === 'object') {
-          value = JSON.stringify(value).replace(/"/g, '""');
-        } else {
-          value = String(value).replace(/"/g, '""');
-        }
+  // CSV injection protection for Excel/Sheets formula execution.
+  if (CSV_INJECTION_PREFIX.test(text)) text = `'${text}`;
 
-        // ကော်မာ ပါနေလျှင် Quote ဖြင့်အုပ်ရန်
-        if (value.includes(',') || value.includes('\n') || value.includes('"')) {
-          return `"${value}"`;
-        }
-        return value;
-      }).join(',')
-    )
+  const escaped = text.replace(/"/g, '""');
+  return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+};
+
+export const buildCSVContent = (data, explicitHeaders = null) => {
+  if (!Array.isArray(data) || data.length === 0) return '';
+
+  const headers = Array.isArray(explicitHeaders) && explicitHeaders.length > 0
+    ? explicitHeaders
+    : Array.from(data.reduce((set, row) => {
+        Object.keys(row || {}).forEach((key) => set.add(key));
+        return set;
+      }, new Set()));
+
+  const rows = [
+    headers.map(normaliseCell).join(','),
+    ...data.map((row) => headers.map((header) => normaliseCell(row?.[header])).join(',')),
   ];
 
-  const csvContent = csvRows.join('\n');
-  
-  // UTF-8 BOM ထည့်ပေးခြင်း (Excel တွင် မြန်မာစာ မှန်ကန်စွာ ပေါ်စေရန်)
-  const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+  return rows.join('\n');
+};
+
+export const exportToCSV = (data, filename = 'export', headers = null) => {
+  if (!Array.isArray(data) || data.length === 0) {
+    window.alert?.('Export ထုတ်ရန် မှတ်တမ်း မရှိပါ!');
+    return false;
+  }
+
+  const csvContent = buildCSVContent(data, headers);
+  const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
   const url = window.URL.createObjectURL(blob);
-  
-  // Auto Download ချပေးမည့် လင့်ခ် ဖန်တီးခြင်း
   const link = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+
   link.href = url;
-  link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.rel = 'noopener noreferrer';
+  link.setAttribute('download', `${sanitizeFileName(filename)}_${date}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
   window.URL.revokeObjectURL(url);
+  return true;
 };

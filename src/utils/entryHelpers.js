@@ -1,5 +1,25 @@
 // Entry page shared helper functions
 
+export const PAYMENT_METHODS = Object.freeze(['Cash', 'Credit', 'KBZPay', 'WavePay', 'AYAPay', 'Bank']);
+
+export const toFiniteNumber = (value, fallback = 0) => {
+  if (value === '' || value === null || value === undefined) return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+export const toNumber = toFiniteNumber;
+
+export const clampNumber = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+  const number = toFiniteNumber(value, min);
+  return Math.min(Math.max(number, min), max);
+};
+
+export const cleanText = (value, fallback = '') => {
+  const text = String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+  return text || fallback;
+};
+
 export const cleanDisplayName = (profile) => {
   if (!profile) return 'Admin';
 
@@ -11,33 +31,28 @@ export const cleanDisplayName = (profile) => {
     profile.email ||
     'Admin';
 
-  const clean = String(raw).trim();
-  if (!clean) return 'Admin';
-
+  const clean = cleanText(raw, 'Admin');
   return clean.includes('@') ? clean.split('@')[0] : clean;
 };
 
 export const buildVoucherNo = (type = 'Sale', count = 1, dateISO = '') => {
-  const safeType = String(type || 'Sale').toLowerCase();
+  const safeType = cleanText(type, 'Sale').toLowerCase();
   let prefix = 'INV';
 
   if (safeType === 'purchase') prefix = 'PUR';
   if (safeType === 'expense') prefix = 'EXP';
 
-  const safeDate = String(dateISO || new Date().toISOString().split('T')[0]).replaceAll('-', '');
-  const serial = String(Number(count) || 1).padStart(4, '0');
+  const fallbackDate = new Date().toISOString().split('T')[0];
+  const safeDate = String(dateISO || fallbackDate).replace(/[^0-9]/g, '').slice(0, 8) || fallbackDate.replaceAll('-', '');
+  const serial = String(Math.max(1, Math.trunc(toFiniteNumber(count, 1)))).padStart(4, '0');
 
   return `${prefix}-${safeDate}-${serial}`;
 };
 
-
-export const toFiniteNumber = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
+export const getUnitMultiplier = (unit = {}) => Math.max(1, toFiniteNumber(unit.multiplier, 1));
 
 export const getUnitCostPrice = (unit = {}, product = {}) => {
-  const multiplier = toFiniteNumber(unit.multiplier, 1) || 1;
+  const multiplier = getUnitMultiplier(unit);
   const explicitUnitCost =
     unit.costPrice ??
     unit.cost ??
@@ -74,7 +89,15 @@ export const getItemCostPrice = (cartItem, products = []) => {
   return Math.max(0, toFiniteNumber(cost, 0));
 };
 
-export const formatMoney = (value) => `${Number(value || 0).toLocaleString()} Ks`;
+export const formatMoney = (value, options = {}) => {
+  const { maximumFractionDigits = 2, minimumFractionDigits = 0 } = options;
+  const amount = toFiniteNumber(value, 0);
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits, minimumFractionDigits }).format(amount);
+};
 
-export const getProductStock = (product) => Number(product?.stockBase ?? product?.stock ?? 0) || 0;
+export const getProductStock = (product) => Math.max(0, toFiniteNumber(product?.stockBase ?? product?.stock, 0));
 
+export const calculateLineTotal = ({ quantity = 0, price = 0, discount = 0 } = {}) => {
+  const gross = Math.max(0, toFiniteNumber(quantity, 0) * toFiniteNumber(price, 0));
+  return Math.max(0, gross - Math.max(0, toFiniteNumber(discount, 0)));
+};

@@ -1,47 +1,51 @@
 import logger from './logger';
 import { MESSAGES } from '../constants/app';
 
-/**
- * Wraps async functions with error handling (Try-Catch wrapper)
- * @param {Function} fn Async function to execute
- * @param {Function} onError Error callback fallback
- * @returns {Function} Wrapped function
- */
+const getUserMessage = (error) => {
+  if (!error) return MESSAGES.ERROR_OCCURRED;
+  if (typeof error === 'string') return error;
+  return error.userMessage || error.message || MESSAGES.ERROR_OCCURRED;
+};
+
 export const asyncHandler = (fn, onError) => {
+  if (typeof fn !== 'function') {
+    throw new TypeError('asyncHandler requires a function.');
+  }
+
   return async (...args) => {
     try {
       return await fn(...args);
     } catch (error) {
       logger.error('Async Function Error:', error);
-      if (onError) {
-        onError(error);
-      }
+      if (typeof onError === 'function') onError(error);
       throw error;
     }
   };
 };
 
-/**
- * Safe async executor with Loading State and Auto-Toast functionality
- * @param {Function} fn The async operation to perform
- * @param {Function} setLoading State setter for loading (e.g., setIsLoading)
- * @param {Function} showToast Function to show alert/toast
- */
 export const executeAsync = async (fn, setLoading, showToast) => {
-  if (setLoading) setLoading(true);
+  if (typeof fn !== 'function') {
+    const error = new TypeError('executeAsync requires a function.');
+    logger.error('ExecuteAsync Failed:', error);
+    return null;
+  }
+
+  if (typeof setLoading === 'function') setLoading(true);
+
   try {
-    const result = await fn();
-    return result;
+    return await fn();
   } catch (error) {
     logger.error('ExecuteAsync Failed:', error);
-    const message = error.message || MESSAGES.ERROR_OCCURRED;
-    if (showToast) {
-      showToast(message, 'error'); // If you have a toast component
-    } else {
-      alert(`Error: ${message}`); // Fallback to browser alert
+    const message = getUserMessage(error);
+
+    if (typeof showToast === 'function') {
+      showToast(message, 'error');
+    } else if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert(`Error: ${message}`);
     }
+
     return null;
   } finally {
-    if (setLoading) setLoading(false);
+    if (typeof setLoading === 'function') setLoading(false);
   }
 };

@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
@@ -10,112 +10,173 @@ import logger from '../utils/logger';
 
 const AuthContext = createContext(null);
 
+const ADMIN_ROLES = new Set(['admin', 'owner']);
+const SUPER_ADMIN_ROLES = new Set(['superadmin', 'super_admin']);
+const SESSION_STORAGE_KEYS = [
+  'pos_staff_session',
+  'pos_remembered_user',
+  'pos_remember_username',
+];
+
+const safeLocalStorage = {
+  removeItem: (key) => {
+    try {
+      window.localStorage?.removeItem(key);
+    } catch (error) {
+      logger.warn('Unable to remove local storage key:', { key, error });
+    }
+  },
+};
+
+const normalizeText = (value) => String(value ?? '').trim();
+
+const normalizeEmail = (email) => normalizeText(email).toLowerCase();
+
+const normalizeRole = (role) => normalizeText(role).toLowerCase();
+
+const isPrivilegedAdminRole = (role) => ADMIN_ROLES.has(normalizeRole(role));
+
+const isSuperAdminRole = (role) => SUPER_ADMIN_ROLES.has(normalizeRole(role));
+
+const isActiveProfile = (profile = {}) => {
+  if (profile.active === false || profile.disabled === true) return false;
+  if (typeof profile.status === 'string' && normalizeRole(profile.status) !== 'active') return false;
+  return true;
+};
+
+const clearSessionStorage = () => {
+  SESSION_STORAGE_KEYS.forEach((key) => safeLocalStorage.removeItem(key));
+};
+
+const buildProfile = (snapshot) => {
+  if (!snapshot?.exists?.()) return null;
+
+  const data = snapshot.data() || {};
+  const role = normalizeRole(data.role);
+
+  return {
+    id: snapshot.id,
+    ...data,
+    role,
+    tenantId: normalizeText(data.tenantId),
+    permissions: Array.isArray(data.permissions) ? data.permissions : [],
+  };
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const clearAuthState = () => {
+  const clearAuthState = useCallback(() => {
     setUser(null);
     setProfile(null);
-    localStorage.removeItem('pos_staff_session');
-    localStorage.removeItem('pos_remembered_user');
-    localStorage.removeItem('pos_remember_username');
-  };
+    clearSessionStorage();
+  }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!isMounted) return;
       setLoading(true);
 
       try {
         if (!firebaseUser) {
           clearAuthState();
-          setLoading(false);
           return;
         }
 
-        await firebaseUser.getIdToken(true);
-
         const userSnap = await getDoc(doc(db, 'pos_users', firebaseUser.uid));
+        const userProfile = buildProfile(userSnap);
 
-        if (!userSnap.exists()) {
+        if (!userProfile) {
           logger.warn('Login blocked: profile not found', firebaseUser.uid);
           await signOut(auth);
           clearAuthState();
           return;
         }
 
-        const userData = {
-          id: userSnap.id,
-          ...userSnap.data(),
-        };
+        const isSuperAdmin = isSuperAdminRole(userProfile.role);
 
-        if (userData.active === false || !userData.role || !userData.tenantId) {
-          logger.warn('Login blocked: invalid profile', firebaseUser.email);
+        if (!isActiveProfile(userProfile) || !userProfile.role || (!isSuperAdmin && !userProfile.tenantId)) {
+          logger.warn('Login blocked: invalid or inactive profile', {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: userProfile.role,
+            hasTenantId: Boolean(userProfile.tenantId),
+          });
           await signOut(auth);
           clearAuthState();
           return;
         }
 
+        if (!isMounted) return;
         setUser(firebaseUser);
-        setProfile(userData);
+        setProfile(userProfile);
       } catch (error) {
         logger.error('Auth error:', error);
         await signOut(auth).catch(() => {});
         clearAuthState();
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     });
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [clearAuthState]);
 
-  const login = async (email, password) => {
-    const cleanEmail = String(email || '').trim().toLowerCase();
+  const login = useCallback(async (email, password) => {
+    const cleanEmail = normalizeEmail(email);
 
     if (!cleanEmail || !password) {
       throw new Error('Email and password are required');
     }
 
     return signInWithEmailAndPassword(auth, cleanEmail, password);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     clearAuthState();
-    await signOut(auth).catch(() => {});
-    window.location.replace('/login');
-  };
+    await signOut(auth).catch((error) => {
+      logger.warn('Sign out failed:', error);
+    });
 
-  const hasPermission = (permission) => {
-    if (!profile) return false;
-    if (profile.role === 'admin' || profile.role === 'owner') return true;
-    return Array.isArray(profile.permissions)
-      ? profile.permissions.includes(permission)
-      : false;
-  };
+    if (typeof window !== 'undefined') {
+      window.location.replace('/login');
+    }
+  }, [clearAuthState]);
 
-  const isAdmin = () => {
-    return profile?.role === 'admin' || profile?.role === 'owner';
-  };
+  const hasPermission = useCallback((permission) => {
+    if (!profile || !permission) return false;
+    if (isPrivilegedAdminRole(profile.role) || isSuperAdminRole(profile.role)) return true;
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        userData: profile,
-        loading,
-        login,
-        logout,
-        hasPermission,
-        isAdmin,
-        tenantId: profile?.tenantId || null,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+    return Array.isArray(profile.permissions) && profile.permissions.includes(permission);
+  }, [profile]);
+
+  const isAdmin = useCallback(() => {
+    return Boolean(profile && (isPrivilegedAdminRole(profile.role) || isSuperAdminRole(profile.role)));
+  }, [profile]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      profile,
+      userData: profile,
+      loading,
+      login,
+      logout,
+      hasPermission,
+      isAdmin,
+      tenantId: profile?.tenantId || null,
+    }),
+    [user, profile, loading, login, logout, hasPermission, isAdmin]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {

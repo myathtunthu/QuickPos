@@ -1,103 +1,136 @@
-import { useState, useEffect } from 'react';
-import { PlusCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { PlusCircle, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import {
+  calculateBaseQuantity,
+  formatMoney,
+  formatQuantity,
+  getAvailableBaseStock,
+  getBaseUnitName,
+  getDefaultUnit,
+  getQuantityStep,
+  getUnitMultiplier,
+  getUnitName,
+  getUnitPrice,
+  roundQuantity,
+  toSafeNumber,
+} from './entryUomHelpers';
 
-export default function ProductUnitSelector({
-  product,
-  entryTab,
-  onAddToCart,
-  stockBase,
-  playBeep
-}) {
+export default function ProductUnitSelector({ product, entryTab, onAddToCart, stockBase, playBeep }) {
   const { t } = useLanguage();
-  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [selectedUnitName, setSelectedUnitName] = useState('');
   const [priceType, setPriceType] = useState('retail');
   const [unitPrice, setUnitPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [warning, setWarning] = useState('');
 
+  const units = useMemo(() => (Array.isArray(product?.packageUnits) ? product.packageUnits : []), [product]);
+  const selectedUnit = useMemo(
+    () => units.find((unit) => getUnitName(unit) === selectedUnitName) || getDefaultUnit(product),
+    [product, selectedUnitName, units]
+  );
+  const availableStockBase = toSafeNumber(stockBase ?? getAvailableBaseStock(product), 0);
+  const baseUnitName = getBaseUnitName(product);
+  const qtyNumber = roundQuantity(quantity, 4);
+  const needBase = calculateBaseQuantity(qtyNumber, selectedUnit);
+  const remainingBase = Math.max(availableStockBase - needBase, 0);
+  const canSell = entryTab !== 'Sale' || needBase <= availableStockBase;
+
   useEffect(() => {
-    if (product && product.packageUnits?.length) {
-      const defaultUnit = product.packageUnits[0];
-      setSelectedUnit(defaultUnit);
-      if (entryTab === 'Sale') {
-        setPriceType('retail');
-        setUnitPrice(String(defaultUnit.prices?.retail || ''));
-      } else {
-        setUnitPrice(String(defaultUnit.costPrice || ''));
-      }
-      setQuantity('1');
-      setWarning('');
-    }
+    if (!product) return;
+    const defaultUnit = getDefaultUnit(product);
+    setSelectedUnitName(getUnitName(defaultUnit));
+    setPriceType('retail');
+    setUnitPrice(String(getUnitPrice(defaultUnit, 'retail', entryTab) || ''));
+    setQuantity('1');
+    setWarning('');
   }, [product, entryTab]);
 
   const handleUnitChange = (unitName) => {
-    const unit = product.packageUnits.find(u => u.name === unitName);
-    setSelectedUnit(unit);
-    if (unit) {
-      if (entryTab === 'Sale') {
-        setUnitPrice(String(unit.prices?.[priceType] || ''));
-      } else {
-        setUnitPrice(String(unit.costPrice || ''));
-      }
-    }
+    const nextUnit = units.find((unit) => getUnitName(unit) === unitName) || getDefaultUnit(product);
+    setSelectedUnitName(getUnitName(nextUnit));
+    setUnitPrice(String(getUnitPrice(nextUnit, priceType, entryTab) || ''));
+    setWarning('');
   };
 
   const handlePriceTypeChange = (type) => {
     setPriceType(type);
-    if (selectedUnit) {
-      setUnitPrice(String(selectedUnit.prices?.[type] || ''));
-    }
+    setUnitPrice(String(getUnitPrice(selectedUnit, type, entryTab) || ''));
   };
 
   const handleAdd = () => {
-    if (!selectedUnit || !unitPrice || !quantity) return;
-    const qty = Number(quantity);
-    if (qty <= 0) return;
-    if (entryTab === 'Sale') {
-      const needBase = qty * (selectedUnit.multiplier || 1);
-      if (needBase > (Number(stockBase) || 0)) {
-        setWarning(t('stockNotEnough', 'Insufficient stock'));
-        playBeep('error');
-        return;
-      }
+    const price = toSafeNumber(unitPrice, 0);
+    const qty = roundQuantity(quantity, 4);
+
+    if (!product || !selectedUnit || price < 0 || qty <= 0) {
+      setWarning(t('invalidQtyOrPrice', 'Quantity and price must be valid.'));
+      playBeep?.('error');
+      return;
     }
+
+    const baseQuantity = calculateBaseQuantity(qty, selectedUnit);
+    if (entryTab === 'Sale' && baseQuantity > availableStockBase) {
+      setWarning(t('stockNotEnough', 'Insufficient stock'));
+      playBeep?.('error');
+      return;
+    }
+
     const item = {
       productId: product.id,
       name: product.name,
-      unitName: selectedUnit.name,
-      multiplier: selectedUnit.multiplier || 1,
+      unitName: getUnitName(selectedUnit),
+      multiplier: getUnitMultiplier(selectedUnit),
+      baseQuantity,
+      baseUnitName,
       priceType: entryTab === 'Sale' ? priceType : 'cost',
-      unitPrice: Number(unitPrice),
+      unitPrice: price,
       quantity: qty,
-      costPrice: entryTab === 'Purchase' ? Number(unitPrice) : (selectedUnit.costPrice || 0),
+      costPrice: entryTab === 'Purchase' ? price : toSafeNumber(selectedUnit.costPrice, 0),
       itemDiscountAmt: 0,
-      notes: ''
+      notes: '',
     };
-    onAddToCart(item);
-    playBeep('success');
+
+    onAddToCart?.(item);
+    setWarning('');
+    playBeep?.('success');
   };
 
   if (!product || !selectedUnit) return null;
 
   return (
-    <div className="bg-[#0d1120] border border-cyan-500/20 rounded-lg p-2 space-y-1.5">
-      <p className="text-[11px] font-black text-cyan-400">{product.name}</p>
-      <div className="flex gap-1.5">
+    <div className="bg-[#0d1120] border border-cyan-500/20 rounded-lg p-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-black text-cyan-400 leading-tight">{product.name}</p>
+          <p className="text-[9px] text-slate-500 mt-0.5">
+            {t('baseUnit', 'Base Unit')}: {baseUnitName} · {t('stockLabel', 'Stock')}: {formatQuantity(availableStockBase)}
+          </p>
+        </div>
+        {entryTab === 'Sale' && !canSell && <AlertTriangle size={16} className="text-rose-400 flex-shrink-0" />}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         <select
-          value={selectedUnit.name}
-          onChange={e => handleUnitChange(e.target.value)}
-          className="flex-1 bg-black border border-cyan-500/20 rounded-md px-2 py-1.5 text-[11px] text-white outline-none"
+          value={getUnitName(selectedUnit)}
+          onChange={(event) => handleUnitChange(event.target.value)}
+          className="bg-black border border-cyan-500/20 rounded-md px-2 py-2 text-[12px] text-white outline-none focus:border-cyan-400"
         >
-          {product.packageUnits.map(u => (
-            <option key={u.name} value={u.name}>{u.name} (×{u.multiplier})</option>
-          ))}
+          {units.length > 0 ? (
+            units.map((unit) => (
+              <option key={getUnitName(unit)} value={getUnitName(unit)}>
+                {getUnitName(unit)} × {formatQuantity(getUnitMultiplier(unit))}
+              </option>
+            ))
+          ) : (
+            <option value={getUnitName(selectedUnit)}>{getUnitName(selectedUnit)}</option>
+          )}
         </select>
+
         {entryTab === 'Sale' && (
           <select
             value={priceType}
-            onChange={e => handlePriceTypeChange(e.target.value)}
-            className="flex-1 bg-black border border-cyan-500/20 rounded-md px-2 py-1.5 text-[11px] text-white outline-none"
+            onChange={(event) => handlePriceTypeChange(event.target.value)}
+            className="bg-black border border-cyan-500/20 rounded-md px-2 py-2 text-[12px] text-white outline-none focus:border-cyan-400"
           >
             <option value="retail">{t('retailPrice', 'Retail Price')}</option>
             <option value="wholesaleA">{t('wholesaleA', 'Wholesale A')}</option>
@@ -106,30 +139,56 @@ export default function ProductUnitSelector({
           </select>
         )}
       </div>
-      <div className="flex gap-1.5 items-center">
+
+      <div className="grid grid-cols-[1fr_88px_auto] gap-1.5 items-center">
         <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="1"
           value={unitPrice}
-          onChange={e => setUnitPrice(e.target.value)}
+          onChange={(event) => setUnitPrice(event.target.value)}
           placeholder={t('price', 'Price')}
-          className="w-16 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[16px] sm:text-xs text-white text-center"
+          className="bg-black/40 border border-cyan-500/20 rounded-md px-2 py-2 text-[16px] sm:text-xs text-white text-right outline-none focus:border-cyan-400"
         />
-        <span className="text-slate-500 text-[10px]">×</span>
         <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step={getQuantityStep(getUnitName(selectedUnit))}
           value={quantity}
-          onChange={e => setQuantity(e.target.value)}
+          onChange={(event) => setQuantity(event.target.value)}
           placeholder="1"
-          className="w-10 bg-black/40 border border-cyan-500/20 rounded-md px-2 py-1.5 text-[16px] sm:text-xs text-white text-center"
+          className="bg-black/40 border border-cyan-500/20 rounded-md px-2 py-2 text-[16px] sm:text-xs text-white text-center outline-none focus:border-cyan-400"
         />
         <button
+          type="button"
           onClick={handleAdd}
-          className="flex-1 py-1.5 bg-cyan-600 rounded-md font-bold text-[11px] flex items-center justify-center gap-1 active:scale-95"
+          disabled={entryTab === 'Sale' && !canSell}
+          className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-md font-bold text-[11px] flex items-center justify-center gap-1 active:scale-95 transition-all"
         >
           <PlusCircle size={12} /> {t('addToCart', 'Add')}
         </button>
       </div>
-      {warning && (
-        <p className="text-rose-400 text-[10px]">{warning}</p>
+
+      <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400">
+        <div className="bg-black/30 rounded-lg px-2 py-1.5 border border-white/5">
+          {t('baseQty', 'Base Qty')}: <span className="text-cyan-300 font-bold">{formatQuantity(needBase)} {baseUnitName}</span>
+        </div>
+        <div className="bg-black/30 rounded-lg px-2 py-1.5 border border-white/5 text-right">
+          {t('lineTotal', 'Line Total')}: <span className="text-emerald-300 font-bold">{formatMoney(toSafeNumber(unitPrice) * qtyNumber)}</span>
+        </div>
+      </div>
+
+      {entryTab === 'Sale' && (
+        <p className={`text-[10px] font-bold ${canSell ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {canSell
+            ? `${t('remainingStock', 'Remaining')}: ${formatQuantity(remainingBase)} ${baseUnitName}`
+            : warning || t('stockNotEnough', 'Insufficient stock')}
+        </p>
       )}
+
+      {warning && canSell && <p className="text-rose-400 text-[10px] font-bold">{warning}</p>}
     </div>
   );
 }

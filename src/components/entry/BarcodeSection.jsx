@@ -1,102 +1,102 @@
-import { useState } from 'react';
-import { ScanBarcode, X } from 'lucide-react';
-import BarcodeScannerModal from './BarcodeScannerModal';
-import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
+import { useMemo, useState } from 'react';
+import { ScanBarcode } from 'lucide-react';
+import ScannerModal from './ScannerModal';
+import { findProductByBarcode, normalizeBarcode } from './entryUomHelpers';
+import { useLanguage } from '../../context/LanguageContext';
 
-export default function BarcodeSection({ products, onBarcodeScanned, entryTab }) {
+export default function BarcodeSection({ products = [], onBarcodeScanned, entryTab }) {
+  const { t } = useLanguage();
   const [manualInput, setManualInput] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [lastError, setLastError] = useState('');
 
-  const handleScan = (code) => {
+  const productCount = useMemo(() => (Array.isArray(products) ? products.length : 0), [products]);
+
+  const handleScan = (rawCode) => {
+    const code = normalizeBarcode(rawCode);
     if (!code) return;
-    // Search in all product's packageUnits barcodes
-    for (const prod of products) {
-      if (prod.packageUnits && Array.isArray(prod.packageUnits)) {
-        for (const unit of prod.packageUnits) {
-          const barcodes = unit.barcodes || {};
-          for (const [priceType, barcodeVal] of Object.entries(barcodes)) {
-            if (barcodeVal === code) {
-              // Found product, unit, priceType
-              onBarcodeScanned({
-                product: prod,
-                unit,
-                priceType,
-                tab: entryTab
-              });
-              return;
-            }
-          }
-        }
-      }
+
+    const match = findProductByBarcode(products, code);
+    if (!match) {
+      setLastError(t('barcodeNotFound', 'Barcode not found'));
+      playBeep('error');
+      return;
     }
-    // Fallback: try product primary barcode (if any)
-    const prod = products.find(p => p.barcode === code);
-    if (prod) {
-      const defaultUnit = prod.packageUnits?.[0];
-      if (defaultUnit) {
-        onBarcodeScanned({
-          product: prod,
-          unit: defaultUnit,
-          priceType: entryTab === 'Sale' ? 'retail' : undefined,
-          tab: entryTab
-        });
-        return;
-      }
-    }
-    // Error beep
-    playBeep('error');
+
+    setLastError('');
+    playBeep('success');
+    onBarcodeScanned?.({
+      product: match.product,
+      unit: match.unit,
+      priceType: entryTab === 'Sale' ? match.priceType || 'retail' : undefined,
+      tab: entryTab,
+      barcode: code,
+    });
   };
 
-  const { showScanner, startScanner, stopScanner, initScanner } = useBarcodeScanner(handleScan);
-
-  const handleManualSubmit = (e) => {
-    e.preventDefault();
+  const handleManualSubmit = (event) => {
+    event.preventDefault();
     handleScan(manualInput);
     setManualInput('');
   };
 
   return (
     <>
-      <div className="flex gap-1.5">
-        <div className="relative flex-1">
-          <ScanBarcode className="absolute left-2.5 top-2 text-blue-500" size={14} />
-          <input
-            value={manualInput}
-            onChange={e => setManualInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleManualSubmit(e); }}
-            placeholder="Scan barcode or type"
-            className="w-full bg-black/40 border border-blue-500/20 rounded-lg pl-8 pr-2 py-2 text-xs text-white outline-none"
-          />
+      <form onSubmit={handleManualSubmit} className="space-y-1.5">
+        <div className="flex gap-1.5">
+          <div className="relative flex-1">
+            <ScanBarcode className="absolute left-2.5 top-2.5 text-blue-500" size={14} />
+            <input
+              value={manualInput}
+              onChange={(event) => setManualInput(event.target.value)}
+              placeholder={t('scanBarcodePlaceholder', 'Scan barcode or type')}
+              autoComplete="off"
+              className="w-full bg-black/40 border border-blue-500/20 rounded-lg pl-8 pr-2 py-2 text-[16px] sm:text-xs text-white outline-none focus:border-blue-400"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowScanner(true)}
+            className="px-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center transition-colors"
+            aria-label={t('scanBarcode', 'Scan Barcode')}
+            disabled={productCount === 0}
+          >
+            <ScanBarcode size={16} />
+          </button>
         </div>
-        <button
-          onClick={startScanner}
-          className="px-2.5 bg-blue-600 rounded-lg flex items-center"
-        >
-          <ScanBarcode size={16} />
-        </button>
-      </div>
+        {lastError && <p className="text-[10px] text-rose-400 font-bold">{lastError}</p>}
+      </form>
+
       {showScanner && (
-        <BarcodeScannerModal
-          onClose={stopScanner}
-          initScanner={initScanner}
+        <ScannerModal
+          onClose={() => setShowScanner(false)}
+          onScan={(code) => {
+            handleScan(code);
+            setShowScanner(false);
+          }}
         />
       )}
     </>
   );
 }
 
-// Helper beep
 function playBeep(type = 'success') {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.type = type === 'success' ? 'sine' : 'square';
     osc.frequency.value = type === 'success' ? 900 : 180;
-    gain.gain.value = 0.15;
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
     osc.start();
-    osc.stop(ctx.currentTime + 0.3);
-  } catch {}
+    osc.stop(ctx.currentTime + 0.25);
+    setTimeout(() => ctx.close?.(), 300);
+  } catch {
+    // Audio is optional.
+  }
 }

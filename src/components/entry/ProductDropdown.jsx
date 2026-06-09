@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import { Package } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { formatMoney, formatQuantity, getAvailableBaseStock, getBaseUnitName, getDefaultUnit, getUnitName, getUnitPrice } from './entryUomHelpers';
 
 const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
   const { t } = useLanguage();
@@ -24,6 +25,9 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
 
     const handleKeyDown = (event) => {
       if (!products.length) return;
+      const target = event.target;
+      const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (isTyping && event.key !== 'Enter') return;
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -33,7 +37,14 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
         setSelectedIndex((prev) => (prev - 1 + products.length) % products.length);
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        if (products[selectedIndex]) onSelect(products[selectedIndex], { scrollPosition: { x: window.scrollX || window.pageXOffset || 0, y: window.scrollY || window.pageYOffset || 0 } });
+        if (products[selectedIndex]) {
+          onSelect(products[selectedIndex], {
+            scrollPosition: {
+              x: window.scrollX || window.pageXOffset || 0,
+              y: window.scrollY || window.pageYOffset || 0,
+            },
+          });
+        }
       }
     };
 
@@ -47,12 +58,15 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
     const product = products[index];
     if (!product) return null;
     const isSelected = index === selectedIndex;
-    const defaultPrice = product.packageUnits?.[0]?.prices?.retail || 0;
+    const defaultUnit = getDefaultUnit(product);
+    const defaultPrice = getUnitPrice(defaultUnit, 'retail', 'Sale');
     const name = product.name || t('unknownItem', 'Unknown Item');
+    const stockBase = getAvailableBaseStock(product);
+    const baseUnitName = getBaseUnitName(product);
 
     return (
-      <div 
-        style={style} 
+      <div
+        style={style}
         onPointerDown={rememberScroll}
         onTouchStart={rememberScroll}
         onMouseDown={(event) => {
@@ -65,17 +79,19 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
           isSelected ? 'bg-cyan-900/40 border-l-2 border-l-cyan-400' : 'hover:bg-cyan-900/20'
         }`}
       >
-        <div className="flex items-center gap-2 overflow-hidden">
+        <div className="flex items-center gap-2 overflow-hidden min-w-0">
           <div className="w-6 h-6 bg-cyan-500/10 rounded flex items-center justify-center flex-shrink-0">
-            <Package size={12} className="text-cyan-400"/>
+            <Package size={12} className="text-cyan-400" />
           </div>
           <div className="truncate">
             <p className="text-[11px] font-bold text-white truncate">{name}</p>
-            <p className="text-[9px] text-slate-500">{t('stockLabel', 'Stock')}: {product.stockBase || 0} {product.baseUnit || ''}</p>
+            <p className="text-[9px] text-slate-500 truncate">
+              {t('stockLabel', 'Stock')}: {formatQuantity(stockBase)} {baseUnitName} · {getUnitName(defaultUnit)}
+            </p>
           </div>
         </div>
         <div className="text-right flex-shrink-0">
-          <p className="text-[11px] text-cyan-400 font-bold">{Number(defaultPrice).toLocaleString()} Ks</p>
+          <p className="text-[11px] text-cyan-400 font-bold">{formatMoney(defaultPrice)} Ks</p>
         </div>
       </div>
     );
@@ -83,7 +99,7 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
 
   return (
     <div className="absolute z-50 w-full mt-1 bg-[#0d1120] border border-cyan-500/20 rounded-lg shadow-xl shadow-black/50 overflow-hidden">
-      <List height={Math.min(products.length * 45, 225)} itemCount={products.length} itemSize={45} width="100%">
+      <List height={Math.min(products.length * 52, 260)} itemCount={products.length} itemSize={52} width="100%">
         {Row}
       </List>
       <div className="bg-black/40 text-[9px] text-slate-500 text-center py-1 border-t border-cyan-500/10">
@@ -92,5 +108,7 @@ const ProductDropdown = React.memo(({ products = [], onSelect, isOpen }) => {
     </div>
   );
 });
+
+ProductDropdown.displayName = 'ProductDropdown';
 
 export default ProductDropdown;

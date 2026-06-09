@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
-export function useBarcodeScanner() {
-  const [showScanner, setShowScanner] = useState(false);
+export function useBarcodeScanner(initialOpen = false) {
+  const [showScanner, setShowScanner] = useState(Boolean(initialOpen));
 
-  const openScanner = () => setShowScanner(true);
-  const closeScanner = () => setShowScanner(false);
+  const openScanner = useCallback(() => setShowScanner(true), []);
+  const closeScanner = useCallback(() => setShowScanner(false), []);
+  const toggleScanner = useCallback(() => setShowScanner((value) => !value), []);
 
-  return { showScanner, openScanner, closeScanner };
+  return { showScanner, setShowScanner, openScanner, closeScanner, toggleScanner };
 }
+
+export default useBarcodeScanner;

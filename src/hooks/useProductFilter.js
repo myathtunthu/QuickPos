@@ -1,25 +1,65 @@
-import { useState, useMemo } from 'react';
-import { useDebounce } from './useDebounce';
+import { useMemo, useState } from 'react';
+import useDebounce from './useDebounce';
 
-export function useProductFilter(products) {
+const normalizeText = (value) => String(value ?? '').trim().toLowerCase();
+const ALL_CATEGORY = 'All';
+
+const productMatchesSearch = (product, query) => {
+  if (!query) return true;
+
+  const searchableValues = [
+    product?.name,
+    product?.barcode,
+    product?.sku,
+    product?.category,
+    ...(Array.isArray(product?.packageUnits)
+      ? product.packageUnits.flatMap((unit) => [
+          unit?.name,
+          unit?.barcode,
+          unit?.barcodes?.retail,
+          unit?.barcodes?.wholesale,
+        ])
+      : []),
+  ];
+
+  return searchableValues.some((value) => normalizeText(value).includes(query));
+};
+
+export function useProductFilter(products = [], options = {}) {
+  const safeProducts = Array.isArray(products) ? products : [];
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('All');
-  const debouncedSearch = useDebounce(search, 300);
+  const [category, setCategory] = useState(ALL_CATEGORY);
+  const debouncedSearch = useDebounce(search, options.delay ?? 300);
+  const limit = Number.isFinite(Number(options.limit)) ? Math.max(1, Number(options.limit)) : null;
 
-  const categories = useMemo(() => ['All', ...new Set(products.map(p => p.category).filter(Boolean))], [products]);
+  const categories = useMemo(() => {
+    const uniqueCategories = new Set(
+      safeProducts
+        .map((product) => String(product?.category || '').trim())
+        .filter(Boolean)
+    );
+    return [ALL_CATEGORY, ...Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b))];
+  }, [safeProducts]);
 
   const filtered = useMemo(() => {
-    let result = products;
-    if (category !== 'All') result = result.filter(p => p.category === category);
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      result = result.filter(p =>
-        (p.name || '').toLowerCase().includes(q) ||
-        (p.barcode || '').toLowerCase().includes(q)
-      );
+    const query = normalizeText(debouncedSearch);
+    let result = safeProducts;
+
+    if (category !== ALL_CATEGORY) {
+      result = result.filter((product) => String(product?.category || '').trim() === category);
     }
-    return result;
-  }, [products, debouncedSearch, category]);
+
+    if (query) {
+      result = result.filter((product) => productMatchesSearch(product, query));
+    }
+
+    return limit ? result.slice(0, limit) : result;
+  }, [safeProducts, debouncedSearch, category, limit]);
+
+  const resetFilters = () => {
+    setSearch('');
+    setCategory(ALL_CATEGORY);
+  };
 
   return {
     search,
@@ -27,6 +67,9 @@ export function useProductFilter(products) {
     category,
     setCategory,
     filtered,
-    categories
+    categories,
+    resetFilters,
   };
 }
+
+export default useProductFilter;

@@ -7,7 +7,6 @@ import {
   doc,
   getDocs,
   limit,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -160,45 +159,38 @@ export default function CustomersPage() {
     setLoading(true);
 
     try {
+      // Firestore composite index မရှိသေးတဲ့ project တွေမှာ
+      // where + orderBy + multiple where query တွေကြောင့် Customer page load error ဖြစ်နိုင်ပါတယ်။
+      // ဒါကြောင့် tenantId တစ်ခုတည်းနဲ့ fetch လုပ်ပြီး client-side မှာ sort/filter လုပ်ထားပါတယ်။
       const customerQuery = query(
         collection(db, 'pos_customers'),
         where('tenantId', '==', tenantId),
-        orderBy('name'),
         limit(CUSTOMER_FETCH_LIMIT),
       );
 
-      const paymentQuery = query(
+      const recordQuery = query(
         collection(db, 'pos_records'),
         where('tenantId', '==', tenantId),
-        where('type', '==', 'Customer Payment'),
-        orderBy('createdAt', 'desc'),
         limit(RECORD_FETCH_LIMIT),
       );
 
-      const saleQuery = query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', tenantId),
-        where('type', '==', 'Sale'),
-        orderBy('createdAt', 'desc'),
-        limit(RECORD_FETCH_LIMIT),
-      );
-
-      const [customerSnap, paymentSnap, saleSnap] = await Promise.all([
+      const [customerSnap, recordSnap] = await Promise.all([
         getDocs(customerQuery),
-        getDocs(paymentQuery),
-        getDocs(saleQuery),
+        getDocs(recordQuery),
       ]);
 
       const customerData = customerSnap.docs
         .map((snap) => ({ id: snap.id, ...snap.data() }))
         .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name)));
 
+      const tenantRecords = recordSnap.docs
+        .map((snap) => ({ id: snap.id, ...snap.data() }))
+        .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+
       setCustomers(customerData);
-      setPaymentRecords(paymentSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() })));
+      setPaymentRecords(tenantRecords.filter((record) => record.type === 'Customer Payment'));
       setCreditSaleRecords(
-        saleSnap.docs
-          .map((snap) => ({ id: snap.id, ...snap.data() }))
-          .filter((record) => toMoney(record.remainingDebt) > 0),
+        tenantRecords.filter((record) => record.type === 'Sale' && toMoney(record.remainingDebt) > 0),
       );
     } catch (error) {
       console.error('Error fetching customer data:', error);

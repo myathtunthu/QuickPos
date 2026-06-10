@@ -167,3 +167,13 @@ Sale history ရှိပြီးသား Product ကို delete မလု�
 - pcs / ခု / လုံး များတွင် decimal quantity မသုံးသင့်ပါ။
 - Product name မရှင်းလင်းလျှင် cashier ရှာရခက်မည်။
 - Cost Price မဖြည့်ထားလျှင် Profit report မမှန်နိုင်သည်။
+
+
+## ၁၆။ အကောင်းဆုံးအသုံးပြုနည်း
+
+- Cost Price ကိုအမြဲမှန်အောင်ထားပါ။ Profit Report သည် Cost Price ပေါ်မူတည်သည်။
+- Transaction history ရှိသော Product ကို Delete မလုပ်ဘဲ Inactive လုပ်ပါ။
+- Barcode တစ်ခုကို Product တစ်ခုတည်းအတွက်သာသုံးပါ။
+- Stock Adjustment လုပ်တိုင်း reason ရေးပါ။
+- ဆိုင်သုံး Unit Conversion rule များကို Admin ကပဲပြင်သင့်သည်။
+- POS မဖွင့်မီ Low Stock နှင့် Duplicate Barcode ကိုနေ့စဉ်စစ်ပါ။

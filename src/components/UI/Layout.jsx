@@ -16,8 +16,8 @@ export default function Layout() {
     return saved === null ? true : saved === 'true';
   });
 
-  const { languageLabel, toggleLanguage, t } = useLanguage();
-  const currentGuide = getPageGuide(location.pathname, t);
+  const { language, languageLabel, toggleLanguage, t } = useLanguage();
+  const currentGuide = getPageGuide(location.pathname, t, language);
 
   useEffect(() => {
     localStorage.setItem('nexpos_desktop_sidebar_open', String(sidebarOpen));

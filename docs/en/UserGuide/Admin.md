@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Admin / Staff Management User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Admin to create staff accounts, assign permissions, disable users, and protect access to sensitive features.
 
 ## Main workflow
 

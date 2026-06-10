@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Suppliers User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Suppliers to manage supplier profiles, purchases on credit, payable balances, and supplier payment history.
 
 ## Main workflow
 

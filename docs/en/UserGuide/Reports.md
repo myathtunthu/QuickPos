@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Reports User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Reports to analyze profit, sales trends, expenses, top products, stock value, and business performance.
 
 ## Main workflow
 

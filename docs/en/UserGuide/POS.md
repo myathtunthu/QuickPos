@@ -1,33 +1,30 @@
-# POS User Guide
+# POS / Sale Entry User Guide
 
-Use the POS page to sell products, scan barcodes, manage cart items, accept payments, and print receipts.
+Use POS / Sale Entry to scan products, select units, apply discounts, receive payment, hold orders, and complete checkout.
 
-## 1. Start a sale
+## Main workflow
 
-1. Search or scan a product.
-2. Choose the correct unit when the product has multiple units.
-3. Enter quantity.
-4. Review the cart.
-5. Tap checkout.
+1. Open the page from the sidebar or bottom navigation.
+2. Review the visible filters, search boxes, tables, and action buttons.
+3. Enter accurate information before saving or confirming.
+4. Re-check totals, dates, customer/supplier names, units, and payment method.
+5. Use Records or Reports to verify the result after important actions.
 
-## 2. Selling by Myanmar units
+## Important notes
 
-Products can be sold by units such as viss, tical, pyi, tin, carton, pack, or pcs depending on product setup.
+- Use one account per staff member.
+- Do not share admin passwords.
+- Product cost, unit conversion, and payment data must be accurate because they affect reports.
+- If a number looks wrong, check the original voucher in Records first.
 
-## 3. Cart validation
+## Troubleshooting
 
-The system checks quantity, stock, discount, and payment amount before saving the sale.
+- If data is missing, check internet connection and user permission.
+- If a button is hidden or disabled, ask an admin to review your role.
+- If stock or debt is wrong, review related sale, purchase, payment, or adjustment records.
 
-## 4. Credit sale
+## Best practices
 
-Choose a customer before saving a credit sale. Credit sales increase customer debt.
-
-## 5. Receipt
-
-After checkout, print or share the receipt.
-
-## 6. Best practices
-
-- Confirm unit and quantity before checkout.
-- Do not use credit sale without customer information.
-- Recheck cash amount before closing the transaction.
+- Review daily transactions before closing the shift.
+- Keep customer phone numbers and supplier invoice references.
+- Avoid deleting records unless your business policy allows it.

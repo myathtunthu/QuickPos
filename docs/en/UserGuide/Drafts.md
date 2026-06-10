@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Drafts / Held Orders User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Drafts to restore held orders or remove unfinished carts that should not become sales.
 
 ## Main workflow
 

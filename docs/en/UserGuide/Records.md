@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Records / Vouchers User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Records to search vouchers, review transaction details, reprint receipts, and audit mistakes.
 
 ## Main workflow
 

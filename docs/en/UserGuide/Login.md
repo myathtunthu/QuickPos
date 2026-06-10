@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Login User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Login to securely access the POS with your assigned account.
 
 ## Main workflow
 

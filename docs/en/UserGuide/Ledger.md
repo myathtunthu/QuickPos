@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Ledger User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Ledger to review money movement, receivables, payables, and person-based transaction history.
 
 ## Main workflow
 

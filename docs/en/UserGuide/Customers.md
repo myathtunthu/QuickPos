@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Customers User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Customers to manage customer profiles, credit sales, received payments, balances, and payment history.
 
 ## Main workflow
 

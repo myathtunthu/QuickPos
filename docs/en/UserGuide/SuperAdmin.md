@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Super Admin User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Super Admin to manage tenants, system-level accounts, subscriptions, and support actions.
 
 ## Main workflow
 

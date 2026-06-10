@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Settings User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use Settings to configure shop profile, receipt information, language, backup, Telegram alerts, and account security.
 
 ## Main workflow
 

@@ -1,6 +1,6 @@
-# Inventory / Stock User Guide
+# Dashboard User Guide
 
-Use Inventory to create products, configure barcodes, set cost/sale prices, manage Myanmar UOM conversions, and monitor stock.
+Use this page to monitor daily sales, profit, stock value, alerts, and quick actions.
 
 ## Main workflow
 

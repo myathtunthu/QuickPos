@@ -1,44 +1,51 @@
-# POS / Entry Page အသုံးပြုသူလမ်းညွှန်
+# အရောင်း POS / Entry အသုံးပြုနည်း
 
-## ရည်ရွယ်ချက်
-POS / Entry Page သည် နေ့စဉ်ရောင်းချခြင်း၊ ဝယ်ယူထည့်သွင်းခြင်း၊ Barcode Scan လုပ်ခြင်း၊ Cart စီမံခြင်း၊ Discount ထည့်ခြင်း၊ ငွေပေးချေခြင်းများအတွက် အဓိကအသုံးပြုသော စာမျက်နှာဖြစ်သည်။
+ဤလမ်းညွှန်သည် **အရောင်း POS / Entry** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
 
-## ပစ္စည်းရှာခြင်း
-1. Product Search box ထဲတွင် ပစ္စည်းအမည်၊ barcode၊ SKU တို့ဖြင့်ရှာပါ။
-2. Search result တွင် ပစ္စည်းအမည်၊ လက်ရှိ stock၊ base unit နှင့် default retail price ကိုကြည့်နိုင်သည်။
-3. ပစ္စည်းကိုနှိပ်လျှင် default unit ဖြင့် Cart ထဲသို့ထည့်မည်။
+## 1. အရောင်းလုပ်နည်း
 
-## Barcode အသုံးပြုနည်း
-1. Barcode icon ကိုနှိပ်ပါ။
-2. Camera permission ခွင့်ပြုပါ။
-3. Barcode ဖတ်ပြီးပါက ကိုက်ညီသော product/unit/price type ကိုရှာပြီး cart ထဲထည့်မည်။
-4. Barcode မတွေ့လျှင် error message နှင့် beep ပြမည်။
+Product ရှာရန် barcode scan သို့မဟုတ် search ကိုသုံးပါ။ Product ကို cart ထဲထည့်ပြီး quantity/unit/discount/payment method ကိုရွေးကာ checkout လုပ်ပါ။
 
-## Myanmar UOM ဖြင့်ရောင်းနည်း
-Inventory ထဲတွင် product unit conversion ကိုမှန်အောင်ထားရမည်။ ဥပမာ ဆန် base unit ကို kg ထားပြီး unit များကို အောက်ပါအတိုင်းသတ်မှတ်နိုင်သည်။
+### လုပ်ဆောင်ရမည့်အဆင့်များ
 
-- 1 ပိဿာ = 1.633 kg
-- 1 ကျပ်သား = 0.01633 kg
-- 1 တင်း = 40.96 kg ခန့်
-- 1 ပြည် = 2.56 kg/L ခန့်၊ ဆိုင်စနစ်အလိုက် ပြန်သတ်မှတ်နိုင်သည်
+1. Page ကိုဖွင့်ပါ။
+2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
+3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-ရောင်းချရာတွင် quantity ကို decimal ထည့်နိုင်သည်။ ဥပမာ 0.5 ပိဿာ၊ 1.25 kg၊ 2.5 ပြည် စသည်ဖြင့်သုံးနိုင်သည်။
+## 2. Myanmar UOM အသုံးပြုနည်း
 
-## Cart ထဲတွင်ပြင်ဆင်ခြင်း
-Cart row တစ်ခုချင်းစီတွင်—
+ဆန်၊ ပဲ၊ အလေးချိန်ပစ္စည်းများတွင် ပိဿာ၊ ကျပ်သား၊ ပြည်၊ တင်း စသည့် unit ကိုရွေးပြီး decimal quantity ဖြင့်ရောင်းနိုင်သည်။
 
-- Quantity ပြင်နိုင်သည်။
-- Unit ပြောင်းနိုင်သည်။
-- Retail / Wholesale A / Wholesale B / Wholesale C price type ပြောင်းနိုင်သည်။
-- Unit price ပြင်နိုင်သည်။
-- Item discount ထည့်နိုင်သည်။
+### လုပ်ဆောင်ရမည့်အဆင့်များ
 
-Cart သည် base quantity ကိုလည်းပြပေးသည်။ ဥပမာ 2 ပိဿာ ရောင်းလျှင် base quantity ကို 3.266 kg အဖြစ်တွက်ပြနိုင်သည်။
+1. Page ကိုဖွင့်ပါ။
+2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
+3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## Stock မလုံလောက်ခြင်း
-Sale mode တွင် ရောင်းမည့် base quantity သည် လက်ကျန် stock ထက်ကျော်သွားလျှင် warning ပြမည်။ Stock မလုံလောက်သော်လည်း server-side validation/checkout logic ဖြင့်ထပ်စစ်ရန် လိုအပ်သည်။
+## 3. Credit Sale
+
+Customer ရွေးပြီး credit payment ဖြင့်သိမ်းပါ။ အကြွေးစာရင်း Customers/Ledger တွင်တက်မည်။
+
+### လုပ်ဆောင်ရမည့်အဆင့်များ
+
+1. Page ကိုဖွင့်ပါ။
+2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
+3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
 ## သတိထားရန်
-- Unit multiplier မှားလျှင် stock deduction မှားနိုင်သည်။
-- ဆန်၊ ဆီ၊ အလေးချိန်၊ အရည် unit များအတွက် decimal quantity သုံးပါ။
-- pcs/ခု စနစ်များအတွက် quantity ကို integer သုံးခြင်းကောင်းသည်။
+
+- မှားယွင်းသော data သည် reports နှင့် stock balance ကိုထိခိုက်နိုင်သည်။
+- Permission မရှိသော action များကို admin ထံတောင်းဆိုပါ။
+- နေ့ကုန်ချိန်တွင် records/reports များကိုပြန်စစ်ပါ။
+
+## အဖြစ်များသောပြဿနာများ
+
+- Data မပေါ်ပါက internet connection နှင့် login account permission ကိုစစ်ပါ။
+- စာရင်းမကိုက်ပါက Records ထဲမှ voucher များကို date range ဖြင့်ပြန်ရှာပါ။
+- Amount/stock မမှန်ပါက original transaction ကိုရှာပြီး admin ထံ report လုပ်ပါ။
+
+## Best Practices
+
+- အရေးကြီးသော action မလုပ်မီ backup ရှိမရှိစစ်ပါ။
+- Barcode, customer phone, supplier invoice number တို့ကို duplicate မဖြစ်အောင်သေချာထည့်ပါ။
+- Cashier နှင့် Admin account ကို မမျှဝေပါနှင့်။

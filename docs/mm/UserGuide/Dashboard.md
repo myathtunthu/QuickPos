@@ -1,20 +1,10 @@
-# ကုန်ပစ္စည်း / စတော့ အသုံးပြုနည်း
+# ဒက်ရှ်ဘုတ် အသုံးပြုနည်း
 
-ဤလမ်းညွှန်သည် **ကုန်ပစ္စည်း / စတော့** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
+ဤလမ်းညွှန်သည် **ဒက်ရှ်ဘုတ်** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
 
-## 1. Product ထည့်ခြင်း
+## 1. အသုံးပြုရသည့်ရည်ရွယ်ချက်
 
-Product name, category, barcode, cost price, sale price, opening stock, base unit များကို ဖြည့်ပါ။ Base unit သည် stock သိမ်းမည့် အခြေခံယူနစ်ဖြစ်သည်။
-
-### လုပ်ဆောင်ရမည့်အဆင့်များ
-
-1. Page ကိုဖွင့်ပါ။
-2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
-3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
-
-## 2. Unit Conversion
-
-ပိဿာ/ကျပ်သား၊ kg/g၊ ပြည်/တင်း၊ ဖာ/ဘူး/ကဒ် စသည့် conversion ကို product အလိုက်သတ်မှတ်ပါ။
+ဆိုင်၏ ယနေ့အခြေအနေ၊ အရောင်းစုစုပေါင်း၊ အမြတ်၊ လက်ကျန်စတော့တန်ဖိုး၊ အကြွေးစာရင်းအခြေအနေတို့ကို ချက်ချင်းကြည့်ရန် အသုံးပြုသည်။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -22,9 +12,9 @@ Product name, category, barcode, cost price, sale price, opening stock, base uni
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 3. Stock စီမံခန့်ခွဲမှု
+## 2. နေ့စဉ်စစ်ဆေးရန်
 
-Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Opening stock မှားပါက sale/report အကုန်ထိခိုက်နိုင်သည်။
+အရောင်းစတင်မီ dashboard တွင် အချက်အလက်များ ပုံမှန်ပေါ်နေသလား စစ်ပါ။ Low stock, cash balance, customer debt, recent sales များကို အရင်ကြည့်ပါ။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -32,9 +22,9 @@ Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Ope
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 4. Barcode
+## 3. သတိထားရန်
 
-Barcode တစ်ခုကို product တစ်ခုတည်းနှင့်သာချိတ်ပါ။ Duplicate barcode မထားပါနှင့်။
+Dashboard သည် summary ဖြစ်သောကြောင့် နံပါတ်တစ်ခုမှားနေပါက Records နှင့် Reports မှာ voucher/date range ကို ပြန်စစ်ပါ။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 

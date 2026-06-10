@@ -1,20 +1,10 @@
-# ကုန်ပစ္စည်း / စတော့ အသုံးပြုနည်း
+# ပေးသွင်းသူများ အသုံးပြုနည်း
 
-ဤလမ်းညွှန်သည် **ကုန်ပစ္စည်း / စတော့** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
+ဤလမ်းညွှန်သည် **ပေးသွင်းသူများ** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
 
-## 1. Product ထည့်ခြင်း
+## 1. Supplier ထည့်ခြင်း
 
-Product name, category, barcode, cost price, sale price, opening stock, base unit များကို ဖြည့်ပါ။ Base unit သည် stock သိမ်းမည့် အခြေခံယူနစ်ဖြစ်သည်။
-
-### လုပ်ဆောင်ရမည့်အဆင့်များ
-
-1. Page ကိုဖွင့်ပါ။
-2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
-3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
-
-## 2. Unit Conversion
-
-ပိဿာ/ကျပ်သား၊ kg/g၊ ပြည်/တင်း၊ ဖာ/ဘူး/ကဒ် စသည့် conversion ကို product အလိုက်သတ်မှတ်ပါ။
+ကုန်ဝယ်ယူရာ supplier အမည်၊ ဖုန်း၊ လိပ်စာ၊ opening payable များကို ထည့်ပါ။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -22,9 +12,9 @@ Product name, category, barcode, cost price, sale price, opening stock, base uni
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 3. Stock စီမံခန့်ခွဲမှု
+## 2. ပေးရန်ရှိငွေ
 
-Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Opening stock မှားပါက sale/report အကုန်ထိခိုက်နိုင်သည်။
+Purchase ကို full paid မလုပ်ပါက supplier payable တက်မည်။ Payment လုပ်ပါက လျော့မည်။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -32,9 +22,9 @@ Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Ope
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 4. Barcode
+## 3. Best Practice
 
-Barcode တစ်ခုကို product တစ်ခုတည်းနှင့်သာချိတ်ပါ။ Duplicate barcode မထားပါနှင့်။
+Supplier statement ကို လစဉ်ပြန်ညှိပြီး purchase invoice များနှင့်နှိုင်းယှဉ်ပါ။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 

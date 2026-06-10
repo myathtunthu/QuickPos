@@ -1,20 +1,10 @@
-# ကုန်ပစ္စည်း / စတော့ အသုံးပြုနည်း
+# ဆက်တင်များ အသုံးပြုနည်း
 
-ဤလမ်းညွှန်သည် **ကုန်ပစ္စည်း / စတော့** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
+ဤလမ်းညွှန်သည် **ဆက်တင်များ** page ကို ဆိုင်ရှင်၊ မန်နေဂျာ၊ ဝန်ထမ်းများ နေ့စဉ်အသုံးပြုနိုင်ရန် ရေးထားသည်။
 
-## 1. Product ထည့်ခြင်း
+## 1. ဆိုင်အချက်အလက်
 
-Product name, category, barcode, cost price, sale price, opening stock, base unit များကို ဖြည့်ပါ။ Base unit သည် stock သိမ်းမည့် အခြေခံယူနစ်ဖြစ်သည်။
-
-### လုပ်ဆောင်ရမည့်အဆင့်များ
-
-1. Page ကိုဖွင့်ပါ။
-2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
-3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
-
-## 2. Unit Conversion
-
-ပိဿာ/ကျပ်သား၊ kg/g၊ ပြည်/တင်း၊ ဖာ/ဘူး/ကဒ် စသည့် conversion ကို product အလိုက်သတ်မှတ်ပါ။
+Shop name, phone, address, receipt info များကိုထည့်ပါ။ Receipt တွင်ပေါ်မည့်အချက်များဖြစ်သည်။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -22,9 +12,9 @@ Product name, category, barcode, cost price, sale price, opening stock, base uni
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 3. Stock စီမံခန့်ခွဲမှု
+## 2. Language နှင့် Theme
 
-Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Opening stock မှားပါက sale/report အကုန်ထိခိုက်နိုင်သည်။
+အသုံးပြုသူနှင့်ကိုက်ညီသော ဘာသာစကား/အရောင်စနစ်ကိုရွေးနိုင်သည်။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 
@@ -32,9 +22,9 @@ Stock adjustment လုပ်တိုင်း reason ထည့်ပါ။ Ope
 2. လိုအပ်သော filter/search/form field များကိုဖြည့်ပါ။
 3. Save/Confirm မနှိပ်မီ နံပါတ်၊ ရက်စွဲ၊ customer/supplier နှင့် amount များကိုပြန်စစ်ပါ။
 
-## 4. Barcode
+## 3. Backup / Telegram
 
-Barcode တစ်ခုကို product တစ်ခုတည်းနှင့်သာချိတ်ပါ။ Duplicate barcode မထားပါနှင့်။
+Backup နှင့် Telegram alert များကို admin သာစီမံသင့်သည်။ Token များကို မမျှဝေပါနှင့်။
 
 ### လုပ်ဆောင်ရမည့်အဆင့်များ
 

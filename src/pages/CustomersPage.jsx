@@ -1,30 +1,137 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
-import { Users, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  Download,
+  DollarSign,
+  Edit3,
+  History,
+  Plus,
+  Receipt,
+  Search,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 
 import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 
 const CUSTOMER_FETCH_LIMIT = 500;
+const RECORD_FETCH_LIMIT = 1000;
 const CUSTOMER_RENDER_PAGE_SIZE = 50;
-const CUSTOMER_HISTORY_LIMIT = 800;
+const MAX_CUSTOMER_DEBT = 999_999_999;
+const MAX_PAYMENT_AMOUNT = 999_999_999;
+
+const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin']);
+
+const emptyCustomerForm = {
+  name: '',
+  phone: '',
+  address: '',
+  creditLimit: '',
+  note: '',
+};
+
+const emptyPaymentForm = {
+  amount: '',
+  note: '',
+};
+
+const normalizeText = (value) => String(value ?? '').trim();
+const normalizeLower = (value) => normalizeText(value).toLowerCase();
+const toMoney = (value) => {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return 0;
+  return Math.max(0, Math.round(numberValue * 100) / 100);
+};
+const formatMoney = (value) => `${toMoney(value).toLocaleString()} Ks`;
+const todayIsoDate = () => new Date().toISOString().split('T')[0];
+
+const customerDuplicateKey = (customer) => [
+  normalizeLower(customer?.name),
+  normalizeText(customer?.phone),
+].join('__');
+
+const sanitizeCsvCell = (value) => {
+  const raw = String(value ?? '').replace(/\r?\n|\r/g, ' ').trim();
+  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
+const parseCsvLine = (line) => {
+  const cells = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+};
+
+const getRecordTimestamp = (record) => {
+  if (record?.createdAt?.toMillis) return record.createdAt.toMillis();
+  const fallback = new Date(`${record?.date || ''} ${record?.time || ''}`).getTime();
+  return Number.isFinite(fallback) ? fallback : 0;
+};
+
+const getPaymentPersonKey = (record) => record.customerId || normalizeLower(record.personName);
 
 export default function CustomersPage() {
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = ADMIN_ROLES.has(profile?.role);
 
   const [activeTab, setActiveTab] = useState('book');
   const [customers, setCustomers] = useState([]);
-  const [allRecords, setAllRecords] = useState([]); 
+  const [paymentRecords, setPaymentRecords] = useState([]);
+  const [creditSaleRecords, setCreditSaleRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [visibleLimit, setVisibleLimit] = useState(CUSTOMER_RENDER_PAGE_SIZE);
   const [historyVisibleLimit, setHistoryVisibleLimit] = useState(CUSTOMER_RENDER_PAGE_SIZE);
-
-  const [autoMergeDone, setAutoMergeDone] = useState(false);
 
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -34,174 +141,301 @@ export default function CustomersPage() {
 
   const [expandedCust, setExpandedCust] = useState({});
   const [expandedHist, setExpandedHist] = useState({});
-  const toggleCust = (id) => setExpandedCust(p => ({ ...p, [id]: !p[id] }));
-  const toggleHist = (name) => setExpandedHist(p => ({ ...p, [name]: !p[name] }));
-
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '' });
-  const [paymentForm, setPaymentForm] = useState({ amount: '', note: '' });
+  const [customerForm, setCustomerForm] = useState(emptyCustomerForm);
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
 
-  const fileRef = useRef(null); 
+  const fileRef = useRef(null);
+
+  const toggleCust = (id) => setExpandedCust((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleHist = (key) => setExpandedHist((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const canManageCustomers = hasPermission('manage_customers');
+  const canAcceptPayment = hasPermission('accept_payment');
 
   const fetchData = async () => {
     if (!tenantId) return;
     setLoading(true);
-    try {
-      const custQ = query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId), orderBy('name'), limit(CUSTOMER_FETCH_LIMIT));
-      const custSnap = await getDocs(custQ);
-      const custData = custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      custData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setCustomers(custData);
 
-      const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), where('type', '==', 'Customer Payment'), orderBy('createdAt', 'desc'), limit(CUSTOMER_HISTORY_LIMIT));
-      const recSnap = await getDocs(recQ);
-      setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) { console.error("Error fetching data:", error); }
-    setLoading(false);
+    try {
+      const customerQuery = query(
+        collection(db, 'pos_customers'),
+        where('tenantId', '==', tenantId),
+        orderBy('name'),
+        limit(CUSTOMER_FETCH_LIMIT),
+      );
+
+      const paymentQuery = query(
+        collection(db, 'pos_records'),
+        where('tenantId', '==', tenantId),
+        where('type', '==', 'Customer Payment'),
+        orderBy('createdAt', 'desc'),
+        limit(RECORD_FETCH_LIMIT),
+      );
+
+      const saleQuery = query(
+        collection(db, 'pos_records'),
+        where('tenantId', '==', tenantId),
+        where('type', '==', 'Sale'),
+        orderBy('createdAt', 'desc'),
+        limit(RECORD_FETCH_LIMIT),
+      );
+
+      const [customerSnap, paymentSnap, saleSnap] = await Promise.all([
+        getDocs(customerQuery),
+        getDocs(paymentQuery),
+        getDocs(saleQuery),
+      ]);
+
+      const customerData = customerSnap.docs
+        .map((snap) => ({ id: snap.id, ...snap.data() }))
+        .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name)));
+
+      setCustomers(customerData);
+      setPaymentRecords(paymentSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() })));
+      setCreditSaleRecords(
+        saleSnap.docs
+          .map((snap) => ({ id: snap.id, ...snap.data() }))
+          .filter((record) => toMoney(record.remainingDebt) > 0),
+      );
+    } catch (error) {
+      console.error('Error fetching customer data:', error);
+      showToast('Customer data ဖတ်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchData(); }, [tenantId]);
-
   useEffect(() => {
-    if (customers.length > 0 && allRecords.length > 0 && !autoMergeDone && customers.length < CUSTOMER_FETCH_LIMIT) checkAndMergeDuplicates();
-  }, [customers, allRecords, autoMergeDone]);
+    fetchData();
+  }, [tenantId]);
 
   useEffect(() => {
     setVisibleLimit(CUSTOMER_RENDER_PAGE_SIZE);
     setHistoryVisibleLimit(CUSTOMER_RENDER_PAGE_SIZE);
   }, [searchTerm, activeTab]);
 
-  const checkAndMergeDuplicates = async () => {
-    const groups = {};
-    let hasDuplicates = false;
-    customers.forEach(c => {
-      const key = `${(c.name || '').trim().toLowerCase()}_${(c.phone || '').trim()}_${(c.address || '').trim().toLowerCase()}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(c);
-      if (groups[key].length > 1) hasDuplicates = true;
+  const duplicateCustomerWarnings = useMemo(() => {
+    const groups = new Map();
+    customers.forEach((customer) => {
+      const key = customerDuplicateKey(customer);
+      if (!normalizeText(customer.name)) return;
+      groups.set(key, [...(groups.get(key) || []), customer]);
     });
-
-    if (!hasDuplicates) return setAutoMergeDone(true);
-
-    try {
-      const batch = writeBatch(db);
-      let mergedCount = 0;
-      for (const key in groups) {
-        const group = groups[key];
-        if (group.length > 1) {
-          group.sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0));
-          const primary = group[0];
-          let additionalDebt = 0;
-          for (let i = 1; i < group.length; i++) {
-            const duplicate = group[i];
-            additionalDebt += (Number(duplicate.totalDebt) || 0);
-            const dupRecords = allRecords.filter(r => r.customerId === duplicate.id);
-            dupRecords.forEach(rec => batch.update(doc(db, 'pos_records', rec.id), { customerId: primary.id }));
-            batch.delete(doc(db, 'pos_customers', duplicate.id));
-            mergedCount++;
-          }
-          if (additionalDebt > 0) batch.update(doc(db, 'pos_customers', primary.id), { totalDebt: increment(additionalDebt) });
-        }
-      }
-      if (mergedCount > 0) { await batch.commit(); fetchData(); }
-    } catch (error) { console.error("Auto merge error:", error); } 
-    finally { setAutoMergeDone(true); }
-  };
+    return Array.from(groups.values()).filter((group) => group.length > 1);
+  }, [customers]);
 
   const filteredCustomers = useMemo(() => {
-    if (!searchTerm.trim()) return customers;
-    const lowerSearch = searchTerm.toLowerCase();
-    return customers.filter(c => (c.name || '').toLowerCase().includes(lowerSearch) || (c.phone || '').includes(lowerSearch));
+    const search = normalizeLower(searchTerm);
+    if (!search) return customers;
+    return customers.filter((customer) => [
+      customer.name,
+      customer.phone,
+      customer.address,
+      customer.note,
+    ].some((field) => normalizeLower(field).includes(search)));
   }, [customers, searchTerm]);
 
-  const visibleCustomers = useMemo(() => filteredCustomers.slice(0, visibleLimit), [filteredCustomers, visibleLimit]);
+  const visibleCustomers = useMemo(
+    () => filteredCustomers.slice(0, visibleLimit),
+    [filteredCustomers, visibleLimit],
+  );
 
   const mergedHistory = useMemo(() => {
-    const payments = allRecords.filter(r => r.type === 'Customer Payment');
-    const merged = {};
-    payments.forEach(p => {
-      const cId = p.customerId || p.personName;
-      if (!merged[cId]) merged[cId] = { customerId: p.customerId, personName: p.personName, totalPaid: 0, paymentCount: 0, lastPaymentDate: p.date, details: [] };
-      merged[cId].totalPaid += Number(p.amount) || 0;
-      merged[cId].paymentCount += 1;
-      merged[cId].details.push(p);
-      if (new Date(p.date) > new Date(merged[cId].lastPaymentDate)) merged[cId].lastPaymentDate = p.date;
+    const merged = new Map();
+
+    paymentRecords.forEach((payment) => {
+      const key = getPaymentPersonKey(payment);
+      if (!key) return;
+      const existing = merged.get(key) || {
+        key,
+        customerId: payment.customerId,
+        personName: payment.personName || 'Unknown Customer',
+        totalPaid: 0,
+        paymentCount: 0,
+        lastPaymentDate: payment.date,
+        details: [],
+      };
+      existing.totalPaid += toMoney(payment.amount);
+      existing.paymentCount += 1;
+      existing.details.push(payment);
+      if (getRecordTimestamp(payment) > getRecordTimestamp({ date: existing.lastPaymentDate })) {
+        existing.lastPaymentDate = payment.date;
+      }
+      merged.set(key, existing);
     });
-    let historyArr = Object.values(merged).sort((a, b) => new Date(b.lastPaymentDate) - new Date(a.lastPaymentDate));
-    if (searchTerm.trim()) historyArr = historyArr.filter(h => (h.personName || '').toLowerCase().includes(searchTerm.toLowerCase()));
-    return historyArr;
-  }, [allRecords, searchTerm]);
 
-  const visibleHistory = useMemo(() => mergedHistory.slice(0, historyVisibleLimit), [mergedHistory, historyVisibleLimit]);
+    let history = Array.from(merged.values()).sort((a, b) => {
+      const aLast = Math.max(...a.details.map(getRecordTimestamp));
+      const bLast = Math.max(...b.details.map(getRecordTimestamp));
+      return bLast - aLast;
+    });
 
-  const handleSaveCustomer = async (e) => {
-    e.preventDefault();
-    if (!hasPermission('manage_customers')) return showToast("လုပ်ပိုင်ခွင့် မရှိပါ။", "error");
+    const search = normalizeLower(searchTerm);
+    if (search) history = history.filter((item) => normalizeLower(item.personName).includes(search));
+    return history;
+  }, [paymentRecords, searchTerm]);
 
-    const nName = customerForm.name.trim();
-    if (!nName) return showToast("Customer အမည် ထည့်ပါ", "error");
+  const visibleHistory = useMemo(
+    () => mergedHistory.slice(0, historyVisibleLimit),
+    [mergedHistory, historyVisibleLimit],
+  );
+
+  const currentLedger = useMemo(() => {
+    if (!selectedCustomer) return [];
+    const customerName = normalizeLower(selectedCustomer.name);
+    const relevantSales = creditSaleRecords.filter((record) => (
+      record.customerId === selectedCustomer.id || normalizeLower(record.personName) === customerName
+    ));
+    const relevantPayments = paymentRecords.filter((record) => (
+      record.customerId === selectedCustomer.id || normalizeLower(record.personName) === customerName
+    ));
+
+    const records = [...relevantSales, ...relevantPayments]
+      .sort((a, b) => getRecordTimestamp(a) - getRecordTimestamp(b));
+
+    let runningBalance = 0;
+    return records.map((record) => {
+      if (record.type === 'Sale') runningBalance += toMoney(record.remainingDebt);
+      if (record.type === 'Customer Payment') runningBalance -= toMoney(record.amount);
+      return { ...record, runningBalance: Math.max(0, runningBalance) };
+    }).reverse();
+  }, [creditSaleRecords, paymentRecords, selectedCustomer]);
+
+  const resetCustomerModal = () => {
+    setEditingCustomer(null);
+    setCustomerForm(emptyCustomerForm);
+    setCustomerModalOpen(true);
+  };
+
+  const openEditCustomer = (customer) => {
+    setEditingCustomer(customer);
+    setCustomerForm({
+      name: customer.name || '',
+      phone: customer.phone || '',
+      address: customer.address || '',
+      creditLimit: customer.creditLimit ?? '',
+      note: customer.note || '',
+    });
+    setCustomerModalOpen(true);
+  };
+
+  const handleSaveCustomer = async (event) => {
+    event.preventDefault();
+    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+
+    const name = normalizeText(customerForm.name);
+    const phone = normalizeText(customerForm.phone);
+    const address = normalizeText(customerForm.address);
+    const note = normalizeText(customerForm.note);
+    const creditLimit = customerForm.creditLimit === '' ? 0 : toMoney(customerForm.creditLimit);
+
+    if (!name) return showToast('Customer အမည် ထည့်ပါ။', 'error');
+    if (name.length > 120) return showToast('Customer အမည်သည် အလွန်ရှည်နေပါသည်။', 'error');
+    if (phone.length > 40) return showToast('ဖုန်းနံပါတ် အလွန်ရှည်နေပါသည်။', 'error');
+    if (creditLimit > MAX_CUSTOMER_DEBT) return showToast('Credit limit အလွန်များနေပါသည်။', 'error');
+
     setLoading(true);
-
     try {
-      if (!editingCustomer) {
-        const key = `${nName.toLowerCase()}_${customerForm.phone.trim()}_${customerForm.address.trim().toLowerCase()}`;
-        const existing = customers.find(c => `${(c.name||'').trim().toLowerCase()}_${(c.phone||'').trim()}_${(c.address||'').trim().toLowerCase()}` === key);
-        if (existing) {
-           setCustomerModalOpen(false); setLoading(false);
-           return showToast("စာရင်းရှိပြီးသား ဖြစ်ပါသည်။", "warning"); 
-        }
+      const duplicate = customers.find((customer) => (
+        customer.id !== editingCustomer?.id && customerDuplicateKey(customer) === customerDuplicateKey({ name, phone })
+      ));
+
+      if (duplicate) {
+        setLoading(false);
+        return showToast('အမည်နှင့်ဖုန်း တူသော Customer ရှိပြီးသား ဖြစ်ပါသည်။', 'warning');
       }
 
-      const payload = { name: nName, phone: customerForm.phone.trim(), address: customerForm.address.trim(), tenantId: tenantId, updatedAt: serverTimestamp() };
-      if (editingCustomer) await setDoc(doc(db, 'pos_customers', editingCustomer.id), payload, { merge: true });
-      else await addDoc(collection(db, 'pos_customers'), { ...payload, totalDebt: 0, createdAt: serverTimestamp() });
-      
-      setCustomerModalOpen(false); showToast("သိမ်းဆည်းပြီးပါပြီ", "success"); fetchData();
-    } catch (error) { console.error(error); showToast("Error saving", "error"); }
-    setLoading(false);
+      const payload = {
+        tenantId,
+        name,
+        phone,
+        address,
+        note,
+        creditLimit,
+        updatedAt: serverTimestamp(),
+      };
+
+      if (editingCustomer?.id) {
+        await setDoc(doc(db, 'pos_customers', editingCustomer.id), payload, { merge: true });
+      } else {
+        await addDoc(collection(db, 'pos_customers'), {
+          ...payload,
+          totalDebt: 0,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      setCustomerModalOpen(false);
+      showToast('Customer စာရင်း သိမ်းပြီးပါပြီ။', 'success');
+      await fetchData();
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      showToast('Customer သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDeleteCustomer = (id, name, debt) => {
-    if (!hasPermission('manage_customers')) return;
-    if (debt > 0) return showToast(`${name} တွင် ပေးရန်ကျန်ငွေ ရှိနေသဖြင့် ဖျက်၍မရပါ။`, "error");
+  const handleDeleteCustomer = (customer) => {
+    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
+    if (toMoney(customer.totalDebt) > 0) {
+      return showToast(`${customer.name} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။`, 'error');
+    }
+
     setConfirmDialog({
-      isOpen: true, title: "Customer ဖျက်သိမ်းခြင်း", message: `"${name}" ကို ဖျက်ရန် သေချာပါသလား?`,
+      isOpen: true,
+      title: 'Customer ဖျက်သိမ်းခြင်း',
+      message: `"${customer.name}" ကို ဖျက်ရန် သေချာပါသလား?`,
       onConfirm: async () => {
-        setConfirmDialog({ isOpen: false });
-        try { await deleteDoc(doc(db, 'pos_customers', id)); showToast("ဖျက်သိမ်းပြီးပါပြီ", "success"); fetchData(); } 
-        catch (error) { console.error(error); showToast("Error deleting", "error"); }
-      }
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await deleteDoc(doc(db, 'pos_customers', customer.id));
+          showToast('ဖျက်သိမ်းပြီးပါပြီ။', 'success');
+          await fetchData();
+        } catch (error) {
+          console.error('Error deleting customer:', error);
+          showToast('Customer ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+        }
+      },
     });
   };
 
-  const handlePayment = async (e) => {
-    e.preventDefault();
+  const handlePayment = async (event) => {
+    event.preventDefault();
     if (paymentSaving) return;
-    if (!hasPermission('accept_payment')) return showToast("ငွေချေခွင့် မရှိပါ။", "error");
-    if (!selectedCustomer?.id) return showToast("Customer မရွေးရသေးပါ။", "error");
+    if (!canAcceptPayment) return showToast('ငွေချေခွင့် မရှိပါ။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+    if (!selectedCustomer?.id) return showToast('Customer မရွေးရသေးပါ။', 'error');
 
-    const payAmount = Number(paymentForm.amount);
-    if (!Number.isFinite(payAmount) || payAmount <= 0) return showToast("ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။", "error");
+    const payAmount = toMoney(paymentForm.amount);
+    const note = normalizeText(paymentForm.note) || 'အကြွေးလာဆပ်သည်';
+
+    if (payAmount <= 0) return showToast('ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', 'error');
+    if (payAmount > MAX_PAYMENT_AMOUNT) return showToast('ငွေပမာဏ အလွန်များနေပါသည်။', 'error');
 
     setPaymentSaving(true);
     setLoading(true);
+
     try {
       const customerRef = doc(db, 'pos_customers', selectedCustomer.id);
       const recordRef = doc(collection(db, 'pos_records'));
-      const today = new Date();
+      const now = new Date();
+
       const paymentRecord = await runTransaction(db, async (transaction) => {
         const customerSnap = await transaction.get(customerRef);
         if (!customerSnap.exists()) throw new Error('CUSTOMER_NOT_FOUND');
         const liveCustomer = customerSnap.data();
         if (liveCustomer.tenantId !== tenantId) throw new Error('CUSTOMER_TENANT_MISMATCH');
 
-        const liveDebt = Math.max(0, Number(liveCustomer.totalDebt) || 0);
+        const liveDebt = toMoney(liveCustomer.totalDebt);
         if (liveDebt <= 0) throw new Error('NO_DEBT');
         if (payAmount > liveDebt) throw new Error('PAYMENT_EXCEEDS_DEBT');
 
-        const nextDebt = Math.max(0, liveDebt - payAmount);
+        const nextDebt = toMoney(liveDebt - payAmount);
         const payload = {
           type: 'Customer Payment',
           tenantId,
@@ -210,32 +444,36 @@ export default function CustomersPage() {
           amount: payAmount,
           beforeDebt: liveDebt,
           afterDebt: nextDebt,
-          note: paymentForm.note || 'အကြွေးလာဆပ်သည်',
-          date: today.toISOString().split('T')[0],
-          time: today.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-          cashier: profile?.username || profile?.name || 'Admin',
-          createdAt: serverTimestamp()
+          note,
+          date: todayIsoDate(),
+          time: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          cashier: profile?.username || profile?.name || profile?.email || 'Admin',
+          createdAt: serverTimestamp(),
         };
 
         transaction.update(customerRef, { totalDebt: nextDebt, updatedAt: serverTimestamp() });
         transaction.set(recordRef, payload);
-        return payload;
+        return { id: recordRef.id, ...payload };
       });
 
-      setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, totalDebt: paymentRecord.afterDebt } : c));
-      setSelectedCustomer(prev => prev ? { ...prev, totalDebt: paymentRecord.afterDebt } : prev);
+      setCustomers((prev) => prev.map((customer) => (
+        customer.id === selectedCustomer.id ? { ...customer, totalDebt: paymentRecord.afterDebt } : customer
+      )));
+      setPaymentRecords((prev) => [paymentRecord, ...prev]);
+      setSelectedCustomer((prev) => (prev ? { ...prev, totalDebt: paymentRecord.afterDebt } : prev));
       setPaymentModalOpen(false);
-      setPaymentForm({ amount: '', note: '' });
-      showToast("ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ", "success");
-      fetchData();
+      setPaymentForm(emptyPaymentForm);
+      showToast('ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ။', 'success');
+      await fetchData();
     } catch (error) {
-      console.error(error);
-      const message = error?.message === 'PAYMENT_EXCEEDS_DEBT'
-        ? "ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။"
-        : error?.message === 'NO_DEBT'
-          ? "လက်ရှိအကြွေး မရှိတော့ပါ။"
-          : "Error saving payment";
-      showToast(message, "error");
+      console.error('Error saving payment:', error);
+      const messageMap = {
+        CUSTOMER_NOT_FOUND: 'Customer မတွေ့ပါ။',
+        CUSTOMER_TENANT_MISMATCH: 'Customer tenant မကိုက်ညီပါ။',
+        PAYMENT_EXCEEDS_DEBT: 'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။',
+        NO_DEBT: 'လက်ရှိအကြွေး မရှိတော့ပါ။',
+      };
+      showToast(messageMap[error?.message] || 'ငွေသွင်းမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
     } finally {
       setPaymentSaving(false);
       setLoading(false);
@@ -243,174 +481,252 @@ export default function CustomersPage() {
   };
 
   const handleExportCSV = () => {
-    if (!isAdmin) return;
-    if (customers.length === 0) return showToast("Export ထုတ်ရန် Customer မရှိပါ။", "warning");
-    let csv = "Name,Phone,Address,Total Debt\n";
-    customers.forEach(c => { csv += `"${c.name || ''}","${c.phone || ''}","${c.address || ''}","${c.totalDebt || 0}"\n`; });
+    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
+    if (customers.length === 0) return showToast('Export ထုတ်ရန် Customer မရှိပါ။', 'warning');
+
+    const header = ['Name', 'Phone', 'Address', 'Credit Limit', 'Total Debt', 'Note'];
+    const rows = customers.map((customer) => [
+      customer.name || '',
+      customer.phone || '',
+      customer.address || '',
+      customer.creditLimit || 0,
+      customer.totalDebt || 0,
+      customer.note || '',
+    ]);
+    const csv = [header, ...rows].map((row) => row.map(sanitizeCsvCell).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `Customers_${new Date().toISOString().split('T')[0]}.csv`; a.click();
-    showToast("CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ", "success");
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Customers_${todayIsoDate()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', 'success');
   };
 
-  const handleImportCSV = (e) => {
-    if (!isAdmin) return;
-    const file = e.target.files[0];
+  const handleImportCSV = (event) => {
+    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+
+    const file = event.target.files?.[0];
     if (!file) return;
+
     setConfirmDialog({
-      isOpen: true, title: "Customer CSV သွင်းခြင်း", message: "Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?",
+      isOpen: true,
+      title: 'Customer CSV သွင်းခြင်း',
+      message: 'Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?',
       onConfirm: async () => {
-        setConfirmDialog({ isOpen: false }); setLoading(true);
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        setLoading(true);
+
         try {
           const text = await file.text();
-          const rows = text.split('\n').filter(r => r.trim() !== '');
-          if (rows.length <= 1) { setLoading(false); return showToast("ဖိုင်ထဲတွင် ဒေတာမရှိပါ။", "warning"); }
-
-          let batch = writeBatch(db); let count = 0;
-          for (let i = 1; i < rows.length; i++) {
-            const cols = rows[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
-            if (!cols[0]) continue; 
-            batch.set(doc(collection(db, 'pos_customers')), {
-              tenantId: tenantId, name: cols[0], phone: cols[1] || '', address: cols[2] || '', totalDebt: Number(cols[3]) || 0,
-              createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-            });
-            count++;
-            if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); }
+          const rows = text.split(/\r?\n/).filter((row) => row.trim());
+          if (rows.length <= 1) {
+            showToast('ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', 'warning');
+            return;
           }
-          if (count % 400 !== 0) await batch.commit();
-          showToast(`${count} ဦး အောင်မြင်စွာ ထည့်သွင်းပြီးပါပြီ။`, "success"); fetchData();
-        } catch (error) { console.error(error); showToast("Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။", "error"); }
-        setLoading(false); if (fileRef.current) fileRef.current.value = '';
-      }
+
+          const existingKeys = new Set(customers.map(customerDuplicateKey));
+          let batch = writeBatch(db);
+          let imported = 0;
+          let skipped = 0;
+
+          for (let index = 1; index < rows.length; index += 1) {
+            const [nameRaw, phoneRaw, addressRaw, creditLimitRaw, totalDebtRaw, noteRaw] = parseCsvLine(rows[index]);
+            const name = normalizeText(nameRaw);
+            const phone = normalizeText(phoneRaw);
+            if (!name) {
+              skipped += 1;
+              continue;
+            }
+
+            const key = customerDuplicateKey({ name, phone });
+            if (existingKeys.has(key)) {
+              skipped += 1;
+              continue;
+            }
+            existingKeys.add(key);
+
+            const totalDebt = Math.min(toMoney(totalDebtRaw), MAX_CUSTOMER_DEBT);
+            const creditLimit = Math.min(toMoney(creditLimitRaw), MAX_CUSTOMER_DEBT);
+            const newRef = doc(collection(db, 'pos_customers'));
+            batch.set(newRef, {
+              tenantId,
+              name,
+              phone,
+              address: normalizeText(addressRaw),
+              note: normalizeText(noteRaw),
+              creditLimit,
+              totalDebt,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+            imported += 1;
+
+            if (imported % 400 === 0) {
+              await batch.commit();
+              batch = writeBatch(db);
+            }
+          }
+
+          if (imported % 400 !== 0) await batch.commit();
+          showToast(`${imported} ဦး ထည့်ပြီး၊ ${skipped} ဦး ကျော်ထားပါသည်။`, 'success');
+          await fetchData();
+        } catch (error) {
+          console.error('Customer import error:', error);
+          showToast('Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+        } finally {
+          setLoading(false);
+          if (fileRef.current) fileRef.current.value = '';
+        }
+      },
     });
   };
 
-  const currentLedger = useMemo(() => {
-    if (!selectedCustomer) return [];
-    const relevant = allRecords.filter(r => (r.customerId === selectedCustomer.id || r.personName === selectedCustomer.name) && (r.type === 'Customer Payment' || (r.type === 'Sale' && Number(r.remainingDebt) > 0)));
-    relevant.sort((a, b) => (a.createdAt?.toMillis ? a.createdAt.toMillis() : 0) - (b.createdAt?.toMillis ? b.createdAt.toMillis() : 0));
-    let runningBalance = 0;
-    return relevant.map(r => {
-      if (r.type === 'Sale') runningBalance += Number(r.remainingDebt);
-      if (r.type === 'Customer Payment') runningBalance -= Number(r.amount);
-      return { ...r, runningBalance };
-    }).reverse();
-  }, [allRecords, selectedCustomer]);
-
-  // 🌟 View Permission Guard - if no access to see customers at all
   if (!hasPermission('view_customers')) {
     return (
-      <div className="flex flex-col items-center justify-center h-[80vh] text-slate-500">
+      <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
         <h2 className="text-xl font-bold">Access Denied</h2>
-        <p className="text-sm mt-2">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
+        <p className="mt-2 text-sm">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 text-white max-w-6xl mx-auto space-y-6 pb-20">
-      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} />
+    <div className="mx-auto max-w-6xl space-y-6 p-4 pb-20 text-white sm:p-6">
+      <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))} />
 
-      <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-cyan-500/15 shadow-xl gap-5 animate-in fade-in">
-        <div className="flex items-center gap-4 bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto">
-          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Users size={18}/> Customer Book</button>
-          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> Payment History</button>
+      <div className="flex flex-col items-center justify-between gap-5 rounded-3xl border border-cyan-500/15 bg-[#0d1120] p-4 shadow-xl sm:p-6 md:flex-row">
+        <div className="flex w-full items-center gap-4 rounded-2xl border border-white/5 bg-black/40 p-1.5 md:w-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('book')}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
+          >
+            <Users size={18} /> Customer Book
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
+          >
+            <History size={18} /> Payment History
+          </button>
         </div>
-        
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <div className="relative flex-1 sm:min-w-[200px]">
-            <Search size={18} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-cyan-500/20 rounded-xl outline-none focus:border-cyan-400 text-sm"/>
+
+        <div className="flex w-full flex-col gap-3 md:w-auto sm:flex-row">
+          <div className="relative flex-1 sm:min-w-[220px]">
+            <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Customer ရှာရန်..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
+            />
           </div>
+
           {activeTab === 'book' && (
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
-                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title="Import CSV"><Upload size={20}/></button>
-                  <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
+                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title="Export CSV"><Download size={20} /></button>
+                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title="Import CSV"><Upload size={20} /></button>
+                  <input type="file" accept=".csv,text/csv" ref={fileRef} onChange={handleImportCSV} className="hidden" />
                 </>
               )}
-              {hasPermission('manage_customers') && (
-                <button onClick={() => { setEditingCustomer(null); setCustomerForm({ name: '', phone: '', address: '' }); setCustomerModalOpen(true); }} className="bg-cyan-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-cyan-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> Add</button>
+              {canManageCustomers && (
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> Add</button>
               )}
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-[#0d1120] rounded-3xl border border-white/5 overflow-hidden shadow-xl">
-        {activeTab === 'book' && (
+      {duplicateCustomerWarnings.length > 0 && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
+          Customer duplicate ဖြစ်နိုင်သော စာရင်း {duplicateCustomerWarnings.length} ခုရှိသည်။ Auto-merge မလုပ်တော့ပါ။ Admin မှ စစ်ပြီး manual ပြင်ပါ။
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-3xl border border-white/5 bg-[#0d1120] shadow-xl">
+        {activeTab === 'book' ? (
           <>
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-left text-sm">
-                <thead className="bg-black/40 text-slate-400 border-b border-white/5">
+                <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">Customer Info</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">Contact</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Credit Balance</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-center w-40">Actions</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer Info</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Limit</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
+                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {filteredCustomers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">No Customers</td></tr> : 
-                  visibleCustomers.map(c => (
-                    <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="p-4 font-bold text-white text-base">{c.name}</td>
-                      <td className="p-4 text-slate-400"><p>{c.phone || '-'}</p><p className="text-xs text-slate-500 truncate max-w-[200px]">{c.address || '-'}</p></td>
-                      <td className="p-4 text-right">{Number(c.totalDebt) > 0 ? <span className="font-black text-amber-400 text-base">{Number(c.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">ရှင်းပြီး</span>}</td>
-                      <td className="p-4 text-center">
-                        <div className="flex justify-center gap-2">
-                          <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16}/></button>
-                          {hasPermission('accept_payment') && (
-                            <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16}/></button>
-                          )}
-                          {hasPermission('manage_customers') && (
-                            <>
-                              <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title="ပြင်မည်"><Edit3 size={16}/></button>
-                              <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title="ဖျက်မည်"><Trash2 size={16}/></button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredCustomers.length === 0 ? (
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">Customer မရှိသေးပါ။</td></tr>
+                  ) : visibleCustomers.map((customer) => {
+                    const debt = toMoney(customer.totalDebt);
+                    const limitAmount = toMoney(customer.creditLimit);
+                    const isOverLimit = limitAmount > 0 && debt > limitAmount;
+                    return (
+                      <tr key={customer.id} className="transition-colors hover:bg-white/[0.02]">
+                        <td className="p-4">
+                          <p className="text-base font-bold text-white">{customer.name}</p>
+                          {customer.note && <p className="mt-1 max-w-[260px] truncate text-xs text-slate-500">{customer.note}</p>}
+                        </td>
+                        <td className="p-4 text-slate-400"><p>{customer.phone || '-'}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
+                        <td className="p-4 text-right text-slate-300">{limitAmount > 0 ? formatMoney(limitAmount) : '-'}</td>
+                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">ရှင်းပြီး</span>}</td>
+                        <td className="p-4 text-center">
+                          <div className="flex justify-center gap-2">
+                            <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16} /></button>
+                            {canAcceptPayment && (
+                              <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} disabled={debt <= 0} className={`rounded-lg p-2 transition-colors ${debt > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40' : 'cursor-not-allowed bg-gray-800 text-gray-600'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16} /></button>
+                            )}
+                            {canManageCustomers && (
+                              <>
+                                <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 p-2 text-indigo-400 transition-colors hover:bg-indigo-600/40" title="ပြင်မည်"><Edit3 size={16} /></button>
+                                <button type="button" onClick={() => handleDeleteCustomer(customer)} className="rounded-lg bg-rose-600/20 p-2 text-rose-400 transition-colors hover:bg-rose-600/40" title="ဖျက်မည်"><Trash2 size={16} /></button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            <div className="block sm:hidden divide-y divide-white/5">
-              {visibleCustomers.map(c => {
-                const isExpanded = expandedCust[c.id];
+            <div className="block divide-y divide-white/5 sm:hidden">
+              {filteredCustomers.length === 0 ? (
+                <div className="p-8 text-center text-slate-500">Customer မရှိသေးပါ။</div>
+              ) : visibleCustomers.map((customer) => {
+                const debt = toMoney(customer.totalDebt);
+                const isExpanded = Boolean(expandedCust[customer.id]);
                 return (
-                  <div key={c.id} className="bg-[#0d1120] transition-colors">
-                    <div onClick={() => toggleCust(c.id)} className="p-4 flex justify-between items-center cursor-pointer">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-white text-base">{c.name}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">{c.phone || 'No phone'}</p>
+                  <div key={customer.id} className="p-4">
+                    <button type="button" onClick={() => toggleCust(customer.id)} className="flex w-full items-start justify-between gap-3 text-left">
+                      <div>
+                        <p className="font-black text-white">{customer.name}</p>
+                        <p className="mt-1 text-xs text-slate-400">{customer.phone || '-'}</p>
+                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : 'ရှင်းပြီး'}</p>
                       </div>
-                      <div className="text-right flex flex-col items-end">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Balance</p>
-                        {Number(c.totalDebt) > 0 ? <p className="font-black text-amber-400 text-lg leading-none">{Number(c.totalDebt).toLocaleString()} Ks</p> : <p className="font-bold text-green-500 text-sm leading-none">ရှင်းပြီး</p>}
-                      </div>
-                      <div className="ml-4 pl-4 border-l border-white/10">{isExpanded ? <ChevronUp size={20} className="text-cyan-400"/> : <ChevronDown size={20} className="text-slate-500"/>}</div>
-                    </div>
-
+                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
                     {isExpanded && (
-                      <div className="p-4 bg-black/40 border-t border-cyan-500/10 space-y-4">
-                        {c.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">Address:</span> {c.address}</p>}
-                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/5">
-                          <button onClick={() => { setSelectedCustomer(c); setLedgerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all"><ClipboardList size={20}/></button>
-                          {hasPermission('accept_payment') && (
-                            <button onClick={() => { setSelectedCustomer(c); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(c.totalDebt) <= 0} className={`py-2.5 flex justify-center items-center rounded-xl transition-all ${Number(c.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 active:bg-amber-600/40' : 'bg-gray-800 text-gray-600'}`}><DollarSign size={20}/></button>
-                          )}
-                          {hasPermission('manage_customers') && (
-                            <>
-                              <button onClick={() => { setEditingCustomer(c); setCustomerForm({ name: c.name, phone: c.phone || '', address: c.address || '' }); setCustomerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-indigo-600/20 text-indigo-400 rounded-xl active:bg-indigo-600/40 transition-all"><Edit3 size={20}/></button>
-                              <button onClick={() => handleDeleteCustomer(c.id, c.name, Number(c.totalDebt))} className="py-2.5 flex justify-center items-center bg-rose-600/20 text-rose-400 rounded-xl active:bg-rose-600/40 transition-all"><Trash2 size={20}/></button>
-                            </>
-                          )}
+                      <div className="mt-4 space-y-3 rounded-2xl bg-black/30 p-3 text-sm">
+                        <p className="text-slate-400">လိပ်စာ: {customer.address || '-'}</p>
+                        <p className="text-slate-400">Credit Limit: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
+                        {customer.note && <p className="text-slate-400">မှတ်ချက်: {customer.note}</p>}
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">Ledger</button>
+                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">Payment</button>}
+                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">Edit</button>}
                         </div>
                       </div>
                     )}
@@ -419,18 +735,38 @@ export default function CustomersPage() {
               })}
             </div>
           </>
-        )}
-
-        {activeTab === 'history' && (
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-black/40 text-slate-400 border-b border-white/5">
-                <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">Customer Name</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th></tr>
+              <thead className="border-b border-white/5 bg-black/40 text-slate-400">
+                <tr>
+                  <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer</th>
+                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">Times</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Last Payment</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr> :
-                visibleHistory.map((h, i) => (
-                  <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-cyan-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
+                {mergedHistory.length === 0 ? (
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr>
+                ) : visibleHistory.map((history) => (
+                  <React.Fragment key={history.key}>
+                    <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
+                      <td className="p-4 text-base font-bold text-white">{history.personName}</td>
+                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} ကြိမ်</td>
+                      <td className="p-4 text-right text-base font-black text-green-400">+{formatMoney(history.totalPaid)}</td>
+                      <td className="p-4 text-right text-slate-400">{history.lastPaymentDate || '-'}</td>
+                    </tr>
+                    {expandedHist[history.key] && (
+                      <tr>
+                        <td colSpan="4" className="bg-black/20 p-4">
+                          <div className="space-y-2">
+                            {history.details.map((detail) => <div key={detail.id} className="flex justify-between rounded-xl bg-white/5 px-3 py-2 text-xs"><span>{detail.date} {detail.time}</span><span className="font-bold text-green-300">{formatMoney(detail.amount)}</span></div>)}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
@@ -439,118 +775,124 @@ export default function CustomersPage() {
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center">
-          <button onClick={() => setVisibleLimit(v => v + CUSTOMER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-cyan-600/20 text-cyan-300 border border-cyan-500/20 font-bold hover:bg-cyan-600/30">
-            Load More ({visibleCustomers.length}/{filteredCustomers.length})
-          </button>
-        </div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">Load More ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center">
-          <button onClick={() => setHistoryVisibleLimit(v => v + CUSTOMER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/20 font-bold hover:bg-purple-600/30">
-            Load More ({visibleHistory.length}/{mergedHistory.length})
-          </button>
-        </div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">Load More ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
-      {(customers.length >= CUSTOMER_FETCH_LIMIT || allRecords.length >= CUSTOMER_HISTORY_LIMIT) && (
+      {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့ပဲ ဖော်ပြထားပါတယ်။ Search/Filter မတွေ့ပါက date/filter pagination phase ဆက်လိုပါမယ်။
+          Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့သာ ဖော်ပြထားပါသည်။ နောက်အဆင့်တွင် server-side pagination/date filter ထည့်သင့်ပါသည်။
         </div>
       )}
 
       {isCustomerModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handleSaveCustomer} className="bg-[#0d1120] border border-cyan-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-cyan-400 tracking-wide">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3><button type="button" onClick={() => setCustomerModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">အမည် *</label><input required value={customerForm.name} onChange={e=>setCustomerForm({...customerForm, name: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm, phone: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">လိပ်စာ</label><textarea value={customerForm.address} onChange={e=>setCustomerForm({...customerForm, address: e.target.value})} className="w-full bg-black/50 border border-cyan-500/20 rounded-xl p-3.5 text-white outline-none focus:border-cyan-400 text-sm custom-scrollbar" rows="2"></textarea></div>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <form onSubmit={handleSaveCustomer} className="w-full max-w-md rounded-3xl border border-cyan-500/30 bg-[#0d1120] p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3>
+              <button type="button" onClick={() => setCustomerModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-cyan-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">သိမ်းမည်</button>
+            <div className="space-y-4">
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">အမည် *</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">Credit Limit</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">လိပ်စာ</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+            </div>
+            <button type="submit" disabled={loading} className="mt-8 w-full rounded-xl bg-cyan-600 py-3.5 font-black text-white transition-transform active:scale-95 disabled:opacity-50">သိမ်းမည်</button>
           </form>
         </div>
       )}
 
       {isPaymentModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေသွင်းမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Credit Balance</p><p className="text-3xl font-black text-amber-400 mt-2">{Number(selectedCustomer.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
-            <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedCustomer.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <form onSubmit={handlePayment} className="w-full max-w-sm rounded-3xl border border-amber-500/30 bg-[#0d1120] p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-black tracking-wide text-amber-400">ငွေသွင်းမှတ်တမ်း</h3>
+              <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
-            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေသွင်းမည်</button>
+            <div className="mb-6 rounded-2xl border border-white/5 bg-black/40 p-5 text-center shadow-inner">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Credit Balance</p>
+              <p className="mt-2 text-3xl font-black text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</p>
+            </div>
+            <div className="space-y-4">
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={toMoney(selectedCustomer.totalDebt)} value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} inputMode="decimal" className="w-full rounded-xl border border-amber-500/30 bg-black/50 p-4 text-center text-[16px] font-black tracking-wider text-amber-400 outline-none focus:border-amber-400 sm:text-xl" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><input value={paymentForm.note} onChange={(event) => setPaymentForm((prev) => ({ ...prev, note: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-amber-400" /></div>
+            </div>
+            <button type="submit" disabled={loading || paymentSaving} className="mt-8 w-full rounded-xl bg-amber-600 py-4 font-black text-white transition-transform active:scale-95 disabled:opacity-50">ငွေသွင်းမည်</button>
           </form>
         </div>
       )}
 
       {isLedgerModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20 rounded-t-3xl">
-              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedCustomer.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-amber-400 text-sm">{Number(selectedCustomer.totalDebt).toLocaleString()} Ks</span></p></div>
-              <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-3xl border border-blue-500/30 bg-[#0d1120] shadow-2xl">
+            <div className="flex items-center justify-between rounded-t-3xl border-b border-white/5 bg-black/20 p-6 pb-4">
+              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">Current Debt: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
+              <button type="button" onClick={() => setLedgerModalOpen(false)} className="rounded-full bg-white/5 p-2 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
-            <div className="overflow-y-auto custom-scrollbar flex-1 p-4 sm:p-6 bg-black/10">
-              {currentLedger.length === 0 ? <div className="text-center py-10 opacity-50"><p className="text-slate-400 font-bold">မှတ်တမ်း မရှိသေးပါ။</p></div> : 
-               <div className="space-y-3">
-                  {currentLedger.map(record => {
+            <div className="custom-scrollbar flex-1 overflow-y-auto bg-black/10 p-4 sm:p-6">
+              {currentLedger.length === 0 ? (
+                <div className="py-10 text-center opacity-50"><p className="font-bold text-slate-400">မှတ်တမ်း မရှိသေးပါ။</p></div>
+              ) : (
+                <div className="space-y-3">
+                  {currentLedger.map((record) => {
                     const isSale = record.type === 'Sale';
                     return (
-                      <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`bg-[#12182b] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
+                      <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`flex flex-col justify-between gap-3 rounded-2xl border border-white/5 bg-[#12182b] p-4 transition-colors sm:flex-row sm:items-center ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isSale ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-amber-500/20 text-amber-400 border border-amber-500/20'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
-                          {isSale ? <div><p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p></div> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
-                          {isSale && <p className="text-[11px] font-bold text-slate-500 mt-1">Total Bill: {Number(record.amount).toLocaleString()} • Paid: {Number(record.paidAmount).toLocaleString()}</p>}
+                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> Invoice: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
+                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">Total Bill: {formatMoney(record.amount)} • Paid: {formatMoney(record.paidAmount)}</p>}
                         </div>
-                        <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-white/5 sm:border-0 mt-2 sm:mt-0">
-                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
-                          <p className={`text-lg font-black mt-0.5 ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>
-                            {!isSale ? '-' : '+'}{Number(!isSale ? record.amount : record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span>
-                          </p>
-                          <p className="text-[10px] text-slate-500 mt-1">Bal: {Number(record.runningBalance).toLocaleString()}</p>
+                        <div className="mt-2 border-t border-white/5 pt-2 text-left sm:mt-0 sm:border-0 sm:pt-0 sm:text-right">
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
+                          <p className={`mt-0.5 text-lg font-black ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>{!isSale ? '-' : '+'}{formatMoney(!isSale ? record.amount : record.remainingDebt)}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Bal: {formatMoney(record.runningBalance)}</p>
                         </div>
                       </div>
                     );
                   })}
-               </div>
-              }
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {receiptModal.show && receiptModal.record && (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
-          <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans relative animate-in zoom-in-95">
-            <button onClick={() => setReceiptModal({show:false, record:null})} className="absolute top-4 right-4 p-1 bg-gray-200 rounded-full text-gray-600 hover:bg-gray-300"><X size={20}/></button>
-            <div className="text-center mb-4 mt-2"><h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">RECEIPT</h2></div>
-            <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
-              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
-              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date}</span></div>
-              <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm print:hidden">
+          <div className="custom-scrollbar relative max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl bg-white p-6 font-sans text-black shadow-2xl">
+            <button type="button" onClick={() => setReceiptModal({ show: false, record: null })} className="absolute right-4 top-4 rounded-full bg-gray-200 p-1 text-gray-600 hover:bg-gray-300"><X size={20} /></button>
+            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">RECEIPT</h2></div>
+            <div className="mb-4 space-y-1.5 border-y border-dashed border-gray-300 py-3 text-[11px] font-semibold text-gray-600">
+              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
+              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
+              <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
             </div>
-            <div className="mb-4">
-              <table className="w-full text-xs">
-                <thead><tr className="border-b border-gray-300 text-gray-500"><th className="text-left py-2">Item</th><th className="text-right py-2">Amount</th></tr></thead>
-                <tbody>
-                  {(receiptModal.record.itemsDetail || []).map((item,i) => (
-                    <tr key={i} className="border-b border-gray-100 last:border-0">
-                      <td className="py-2.5"><div className="font-bold text-gray-800">{item.name}</div><div className="text-gray-500 text-[10px] mt-0.5">{item.quantity} x {Number(item.unitPrice).toLocaleString()}</div></td>
-                      <td className="py-2.5 text-right font-bold text-gray-800 align-top">{Number((item.unitPrice * item.quantity) - (item.itemDiscountAmt||0)).toLocaleString()}</td>
+            <table className="w-full text-xs">
+              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">Item</th><th className="py-2 text-right">Amount</th></tr></thead>
+              <tbody>
+                {(receiptModal.record.itemsDetail || []).map((item, index) => {
+                  const quantity = toMoney(item.quantity);
+                  const unitPrice = toMoney(item.unitPrice || item.price);
+                  const itemDiscount = toMoney(item.itemDiscountAmt);
+                  return (
+                    <tr key={`${item.name}-${index}`} className="border-b border-gray-100 last:border-0">
+                      <td className="py-2.5"><div className="font-bold text-gray-800">{item.name || '-'}</div><div className="mt-0.5 text-[10px] text-gray-500">{quantity} x {formatMoney(unitPrice)}</div></td>
+                      <td className="py-2.5 text-right align-top font-bold text-gray-800">{formatMoney((unitPrice * quantity) - itemDiscount)}</td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="border-t border-gray-300 pt-3 mt-3 space-y-1 text-xs">
-               <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-red-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>Credit:</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="mt-3 space-y-1 border-t border-gray-300 pt-3 text-xs">
+              <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
+              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>Credit:</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
             </div>
           </div>
         </div>

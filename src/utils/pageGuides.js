@@ -1,52 +1,71 @@
-import inventoryGuideMm from '../../docs/mm/UserGuide/Inventory.md?raw';
-import inventoryGuideEn from '../../docs/en/UserGuide/Inventory.md?raw';
-import inventoryGuideZh from '../../docs/zh/UserGuide/Inventory.md?raw';
-import posGuideMm from '../../docs/mm/UserGuide/POS.md?raw';
-import posGuideEn from '../../docs/en/UserGuide/POS.md?raw';
-import posGuideZh from '../../docs/zh/UserGuide/POS.md?raw';
+import adminMm from '../../docs/mm/UserGuide/Admin.md?raw';
+import adminEn from '../../docs/en/UserGuide/Admin.md?raw';
+import adminZh from '../../docs/zh/UserGuide/Admin.md?raw';
+import customersMm from '../../docs/mm/UserGuide/Customers.md?raw';
+import customersEn from '../../docs/en/UserGuide/Customers.md?raw';
+import customersZh from '../../docs/zh/UserGuide/Customers.md?raw';
+import dashboardMm from '../../docs/mm/UserGuide/Dashboard.md?raw';
+import dashboardEn from '../../docs/en/UserGuide/Dashboard.md?raw';
+import dashboardZh from '../../docs/zh/UserGuide/Dashboard.md?raw';
+import draftsMm from '../../docs/mm/UserGuide/Drafts.md?raw';
+import draftsEn from '../../docs/en/UserGuide/Drafts.md?raw';
+import draftsZh from '../../docs/zh/UserGuide/Drafts.md?raw';
+import inventoryMm from '../../docs/mm/UserGuide/Inventory.md?raw';
+import inventoryEn from '../../docs/en/UserGuide/Inventory.md?raw';
+import inventoryZh from '../../docs/zh/UserGuide/Inventory.md?raw';
+import ledgerMm from '../../docs/mm/UserGuide/Ledger.md?raw';
+import ledgerEn from '../../docs/en/UserGuide/Ledger.md?raw';
+import ledgerZh from '../../docs/zh/UserGuide/Ledger.md?raw';
+import loginMm from '../../docs/mm/UserGuide/Login.md?raw';
+import loginEn from '../../docs/en/UserGuide/Login.md?raw';
+import loginZh from '../../docs/zh/UserGuide/Login.md?raw';
+import pOSMm from '../../docs/mm/UserGuide/POS.md?raw';
+import pOSEn from '../../docs/en/UserGuide/POS.md?raw';
+import pOSZh from '../../docs/zh/UserGuide/POS.md?raw';
+import recordsMm from '../../docs/mm/UserGuide/Records.md?raw';
+import recordsEn from '../../docs/en/UserGuide/Records.md?raw';
+import recordsZh from '../../docs/zh/UserGuide/Records.md?raw';
+import reportsMm from '../../docs/mm/UserGuide/Reports.md?raw';
+import reportsEn from '../../docs/en/UserGuide/Reports.md?raw';
+import reportsZh from '../../docs/zh/UserGuide/Reports.md?raw';
+import settingsMm from '../../docs/mm/UserGuide/Settings.md?raw';
+import settingsEn from '../../docs/en/UserGuide/Settings.md?raw';
+import settingsZh from '../../docs/zh/UserGuide/Settings.md?raw';
+import superAdminMm from '../../docs/mm/UserGuide/SuperAdmin.md?raw';
+import superAdminEn from '../../docs/en/UserGuide/SuperAdmin.md?raw';
+import superAdminZh from '../../docs/zh/UserGuide/SuperAdmin.md?raw';
+import suppliersMm from '../../docs/mm/UserGuide/Suppliers.md?raw';
+import suppliersEn from '../../docs/en/UserGuide/Suppliers.md?raw';
+import suppliersZh from '../../docs/zh/UserGuide/Suppliers.md?raw';
 
 const SUPPORTED_GUIDE_LANGUAGES = ['mm', 'en', 'zh'];
 const DEFAULT_GUIDE_LANGUAGE = 'mm';
-const GUIDE_VERSION = '1.1';
-const GUIDE_LAST_UPDATED = '2026-06-10';
-
-const tr = (t, key, fallback) => t(key, fallback);
 
 const MARKDOWN_GUIDES = {
-  inventory: {
-    mm: {
-      markdown: inventoryGuideMm,
-      sourcePath: 'docs/mm/UserGuide/Inventory.md',
-    },
-    en: {
-      markdown: inventoryGuideEn,
-      sourcePath: 'docs/en/UserGuide/Inventory.md',
-    },
-    zh: {
-      markdown: inventoryGuideZh,
-      sourcePath: 'docs/zh/UserGuide/Inventory.md',
-    },
-  },
-  entry: {
-    mm: {
-      markdown: posGuideMm,
-      sourcePath: 'docs/mm/UserGuide/POS.md',
-    },
-    en: {
-      markdown: posGuideEn,
-      sourcePath: 'docs/en/UserGuide/POS.md',
-    },
-    zh: {
-      markdown: posGuideZh,
-      sourcePath: 'docs/zh/UserGuide/POS.md',
-    },
-  },
+  dashboard: { mm: { markdown: dashboardMm }, en: { markdown: dashboardEn }, zh: { markdown: dashboardZh } },
+  entry: { mm: { markdown: pOSMm }, en: { markdown: pOSEn }, zh: { markdown: pOSZh } },
+  inventory: { mm: { markdown: inventoryMm }, en: { markdown: inventoryEn }, zh: { markdown: inventoryZh } },
+  customers: { mm: { markdown: customersMm }, en: { markdown: customersEn }, zh: { markdown: customersZh } },
+  suppliers: { mm: { markdown: suppliersMm }, en: { markdown: suppliersEn }, zh: { markdown: suppliersZh } },
+  drafts: { mm: { markdown: draftsMm }, en: { markdown: draftsEn }, zh: { markdown: draftsZh } },
+  ledger: { mm: { markdown: ledgerMm }, en: { markdown: ledgerEn }, zh: { markdown: ledgerZh } },
+  records: { mm: { markdown: recordsMm }, en: { markdown: recordsEn }, zh: { markdown: recordsZh } },
+  reports: { mm: { markdown: reportsMm }, en: { markdown: reportsEn }, zh: { markdown: reportsZh } },
+  settings: { mm: { markdown: settingsMm }, en: { markdown: settingsEn }, zh: { markdown: settingsZh } },
+  admin: { mm: { markdown: adminMm }, en: { markdown: adminEn }, zh: { markdown: adminZh } },
+  login: { mm: { markdown: loginMm }, en: { markdown: loginEn }, zh: { markdown: loginZh } },
+  mttadminacc: { mm: { markdown: superAdminMm }, en: { markdown: superAdminEn }, zh: { markdown: superAdminZh } },
+  superadmin: { mm: { markdown: superAdminMm }, en: { markdown: superAdminEn }, zh: { markdown: superAdminZh } },
 };
 
-function normalisePage(pathname) {
-  const path = pathname || '/dashboard';
-  const page = path.split('/').filter(Boolean)[0] || 'dashboard';
-  if (page === 'suppliers') return 'customers';
+const PAGE_ALIASES = {
+  '/': 'dashboard',
+};
+
+function normalisePage(pathname = '') {
+  const cleanPath = String(pathname || '/').split('?')[0].split('#')[0];
+  if (PAGE_ALIASES[cleanPath]) return PAGE_ALIASES[cleanPath];
+  const page = cleanPath.split('/').filter(Boolean)[0] || 'dashboard';
   return page;
 }
 
@@ -55,9 +74,7 @@ function normaliseLanguage(language) {
 }
 
 function getMarkdownDoc(page, language) {
-  const pageDocs = MARKDOWN_GUIDES[page];
-  if (!pageDocs) return null;
-
+  const pageDocs = MARKDOWN_GUIDES[page] || MARKDOWN_GUIDES.dashboard;
   const safeLanguage = normaliseLanguage(language);
   return pageDocs[safeLanguage] || pageDocs[DEFAULT_GUIDE_LANGUAGE] || pageDocs.en || null;
 }
@@ -81,97 +98,20 @@ function extractMarkdownDescription(markdown, fallback = '') {
   return fallback;
 }
 
-function buildMarkdownGuide(page, t, language) {
+export function getPageGuide(pathname, t = (_key, fallback) => fallback, language = DEFAULT_GUIDE_LANGUAGE) {
+  const page = normalisePage(pathname);
   const doc = getMarkdownDoc(page, language);
-  if (!doc?.markdown) return null;
-
-  const title = extractMarkdownTitle(doc.markdown, tr(t, `guide${page}Title`, 'Page guide'));
-  const description = extractMarkdownDescription(doc.markdown, tr(t, `guide${page}Desc`, ''));
+  const markdown = doc?.markdown || '';
+  const title = extractMarkdownTitle(markdown, t('guide', 'Guide'));
+  const description = extractMarkdownDescription(markdown, '');
 
   return {
     title,
     description,
-    markdown: doc.markdown,
-    sourcePath: doc.sourcePath,
-    version: GUIDE_VERSION,
-    lastUpdated: GUIDE_LAST_UPDATED,
+    markdown,
     language: normaliseLanguage(language),
     isMarkdownGuide: true,
+    version: 'Guide Pack 1.0',
+    updatedAt: '2026-06-10',
   };
-}
-
-function buildFallbackGuide(page, t, language) {
-  const guides = {
-    dashboard: {
-      title: tr(t, 'guideDashboardTitle', 'Dashboard guide'),
-      description: tr(t, 'guideDashboardDesc', 'Use this page to understand today’s business health quickly.'),
-      steps: [
-        { title: tr(t, 'guideDashboardKpiTitle', 'Read the 4 main numbers first'), body: tr(t, 'guideDashboardKpiBody', 'Today sales, profit, stock value, and customer credit show the current health of the shop. Check these before opening reports.') },
-        { title: tr(t, 'guideDashboardAlertTitle', 'Check alerts'), body: tr(t, 'guideDashboardAlertBody', 'Low stock, unpaid credit, negative cash flow, and slow sales are shown as action items. Fix warning cards before they become serious problems.') },
-        { title: tr(t, 'guideDashboardChartTitle', 'Use the trend chart'), body: tr(t, 'guideDashboardChartBody', 'The 7-day chart compares sales, profit, and expenses. If expenses go above sales or profit keeps falling, review pricing and costs.') },
-        { title: tr(t, 'guideDashboardActionsTitle', 'Use quick actions'), body: tr(t, 'guideDashboardActionsBody', 'Start a sale, add stock, create a product, or review records directly from the dashboard.') },
-      ],
-      tips: [tr(t, 'guideDashboardTip1', 'Dashboard is for quick decisions; Reports is for deep analysis.'), tr(t, 'guideDashboardTip2', 'If numbers look wrong, check Records first for incorrect vouchers.')],
-    },
-    records: {
-      title: tr(t, 'guideRecordsTitle', 'Records guide'),
-      description: tr(t, 'guideRecordsDesc', 'Use Records to find vouchers, print receipts, and audit daily transactions.'),
-      steps: [
-        { title: tr(t, 'guideRecordsSearchTitle', 'Search vouchers'), body: tr(t, 'guideRecordsSearchBody', 'Search by voucher number, customer, supplier, product, or payment type. Use date range to narrow results.') },
-        { title: tr(t, 'guideRecordsFilterTitle', 'Filter transaction type'), body: tr(t, 'guideRecordsFilterBody', 'Use All, Sale, Purchase, and Expense tabs to view only the records you need.') },
-        { title: tr(t, 'guideRecordsPrintTitle', 'Open and print'), body: tr(t, 'guideRecordsPrintBody', 'Tap a voucher to view details. Use print when the customer needs another receipt.') },
-        { title: tr(t, 'guideRecordsAuditTitle', 'Audit mistakes'), body: tr(t, 'guideRecordsAuditBody', 'If dashboard numbers look wrong, check Records for duplicate or incorrect transactions first.') },
-      ],
-      tips: [tr(t, 'guideRecordsTip1', 'Records is for transaction history, not analytics.'), tr(t, 'guideRecordsTip2', 'Use Reports for profit, cash flow, and top product analysis.')],
-    },
-    reports: {
-      title: tr(t, 'guideReportsTitle', 'Reports guide'),
-      description: tr(t, 'guideReportsDesc', 'Use Reports for profit, cash flow, product ranking, and business decisions.'),
-      steps: [
-        { title: tr(t, 'guideReportsDateTitle', 'Choose date range'), body: tr(t, 'guideReportsDateBody', 'Select start and end dates before exporting or comparing performance.') },
-        { title: tr(t, 'guideReportsProfitTitle', 'Read profit'), body: tr(t, 'guideReportsProfitBody', 'Revenue minus product cost and expenses becomes net profit. If profit is low, check discounts, cost prices, and expenses.') },
-        { title: tr(t, 'guideReportsProductTitle', 'Top products'), body: tr(t, 'guideReportsProductBody', 'Top products show what sells best. Use this to decide what to restock or promote.') },
-        { title: tr(t, 'guideReportsExportTitle', 'Export CSV'), body: tr(t, 'guideReportsExportBody', 'Use CSV export for Excel, accountant review, or monthly backup.') },
-      ],
-      tips: [tr(t, 'guideReportsTip1', 'Reports is for analysis; Records is for voucher lookup.'), tr(t, 'guideReportsTip2', 'Profit accuracy depends on correct product cost prices.')],
-    },
-    customers: {
-      title: tr(t, 'guidePeopleTitle', 'People guide'),
-      description: tr(t, 'guidePeopleDesc', 'Use Customers and Suppliers to manage credit and payments.'),
-      steps: [
-        { title: tr(t, 'guidePeopleCustomerTitle', 'Customer credit'), body: tr(t, 'guidePeopleCustomerBody', 'Customer debt increases when a sale is saved as credit. Record payments when the customer pays back.') },
-        { title: tr(t, 'guidePeopleSupplierTitle', 'Supplier payable'), body: tr(t, 'guidePeopleSupplierBody', 'Supplier payable increases when a purchase is not fully paid. Record payments when you pay the supplier.') },
-        { title: tr(t, 'guidePeopleHistoryTitle', 'Ledger history'), body: tr(t, 'guidePeopleHistoryBody', 'Open a person to review payment history and remaining balance.') },
-      ],
-      tips: [tr(t, 'guidePeopleTip1', 'Do not delete people with active credit balance.'), tr(t, 'guidePeopleTip2', 'Always enter phone number for credit customers.')],
-    },
-    settings: {
-      title: tr(t, 'guideSettingsTitle', 'Settings guide'),
-      description: tr(t, 'guideSettingsDesc', 'Use Settings to configure shop profile, language, backup, and account options.'),
-      steps: [
-        { title: tr(t, 'guideSettingsProfileTitle', 'Business profile'), body: tr(t, 'guideSettingsProfileBody', 'Set shop name, logo, phone, and address. These details appear on receipts.') },
-        { title: tr(t, 'guideSettingsBackupTitle', 'Backup'), body: tr(t, 'guideSettingsBackupBody', 'Configure backup settings and Telegram alerts if available. Test backup after changing settings.') },
-        { title: tr(t, 'guideSettingsPasswordTitle', 'Password'), body: tr(t, 'guideSettingsPasswordBody', 'Change passwords regularly and use strong passwords for admin accounts.') },
-      ],
-      tips: [tr(t, 'guideSettingsTip1', 'Only admins should access Settings.'), tr(t, 'guideSettingsTip2', 'Keep receipt information short and accurate.')],
-    },
-    admin: {
-      title: tr(t, 'guideAdminTitle', 'Admin guide'),
-      description: tr(t, 'guideAdminDesc', 'Use Admin to create staff accounts and control permissions.'),
-      steps: [
-        { title: tr(t, 'guideAdminUserTitle', 'Create staff'), body: tr(t, 'guideAdminUserBody', 'Create one account per staff member. Do not share admin accounts.') },
-        { title: tr(t, 'guideAdminPermissionTitle', 'Set permissions'), body: tr(t, 'guideAdminPermissionBody', 'Give only the permissions each staff member needs: sales, stock, records, reports, or payments.') },
-        { title: tr(t, 'guideAdminDisableTitle', 'Disable access'), body: tr(t, 'guideAdminDisableBody', 'Disable accounts immediately when a staff member leaves.') },
-      ],
-      tips: [tr(t, 'guideAdminTip1', 'Keep owner/admin accounts limited.'), tr(t, 'guideAdminTip2', 'Review permissions regularly.')],
-    },
-  };
-
-  const guide = guides[page] || guides.dashboard;
-  return { ...guide, version: GUIDE_VERSION, lastUpdated: GUIDE_LAST_UPDATED, language: normaliseLanguage(language) };
-}
-
-export function getPageGuide(pathname, t, language = DEFAULT_GUIDE_LANGUAGE) {
-  const page = normalisePage(pathname);
-  return buildMarkdownGuide(page, t, language) || buildFallbackGuide(page, t, language);
 }

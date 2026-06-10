@@ -1,16 +1,43 @@
-import inventoryUserGuide from '../../docs/UserGuide/Inventory.md?raw';
-import posUserGuide from '../../docs/UserGuide/POS.md?raw';
+import inventoryGuideMm from '../../docs/mm/UserGuide/Inventory.md?raw';
+import inventoryGuideEn from '../../docs/en/UserGuide/Inventory.md?raw';
+import inventoryGuideZh from '../../docs/zh/UserGuide/Inventory.md?raw';
+import posGuideMm from '../../docs/mm/UserGuide/POS.md?raw';
+import posGuideEn from '../../docs/en/UserGuide/POS.md?raw';
+import posGuideZh from '../../docs/zh/UserGuide/POS.md?raw';
+
+const SUPPORTED_GUIDE_LANGUAGES = ['mm', 'en', 'zh'];
+const DEFAULT_GUIDE_LANGUAGE = 'mm';
 
 const tr = (t, key, fallback) => t(key, fallback);
 
 const MARKDOWN_GUIDES = {
   inventory: {
-    markdown: inventoryUserGuide,
-    sourcePath: 'docs/UserGuide/Inventory.md',
+    mm: {
+      markdown: inventoryGuideMm,
+      sourcePath: 'docs/mm/UserGuide/Inventory.md',
+    },
+    en: {
+      markdown: inventoryGuideEn,
+      sourcePath: 'docs/en/UserGuide/Inventory.md',
+    },
+    zh: {
+      markdown: inventoryGuideZh,
+      sourcePath: 'docs/zh/UserGuide/Inventory.md',
+    },
   },
   entry: {
-    markdown: posUserGuide,
-    sourcePath: 'docs/UserGuide/POS.md',
+    mm: {
+      markdown: posGuideMm,
+      sourcePath: 'docs/mm/UserGuide/POS.md',
+    },
+    en: {
+      markdown: posGuideEn,
+      sourcePath: 'docs/en/UserGuide/POS.md',
+    },
+    zh: {
+      markdown: posGuideZh,
+      sourcePath: 'docs/zh/UserGuide/POS.md',
+    },
   },
 };
 
@@ -19,6 +46,18 @@ function normalisePage(pathname) {
   const page = path.split('/').filter(Boolean)[0] || 'dashboard';
   if (page === 'suppliers') return 'customers';
   return page;
+}
+
+function normaliseLanguage(language) {
+  return SUPPORTED_GUIDE_LANGUAGES.includes(language) ? language : DEFAULT_GUIDE_LANGUAGE;
+}
+
+function getMarkdownDoc(page, language) {
+  const pageDocs = MARKDOWN_GUIDES[page];
+  if (!pageDocs) return null;
+
+  const safeLanguage = normaliseLanguage(language);
+  return pageDocs[safeLanguage] || pageDocs[DEFAULT_GUIDE_LANGUAGE] || pageDocs.en || null;
 }
 
 function extractMarkdownTitle(markdown, fallback) {
@@ -40,8 +79,8 @@ function extractMarkdownDescription(markdown, fallback = '') {
   return fallback;
 }
 
-function buildMarkdownGuide(page, t) {
-  const doc = MARKDOWN_GUIDES[page];
+function buildMarkdownGuide(page, t, language) {
+  const doc = getMarkdownDoc(page, language);
   if (!doc?.markdown) return null;
 
   const title = extractMarkdownTitle(doc.markdown, tr(t, `guide${page}Title`, 'Page guide'));
@@ -52,11 +91,12 @@ function buildMarkdownGuide(page, t) {
     description,
     markdown: doc.markdown,
     sourcePath: doc.sourcePath,
+    language: normaliseLanguage(language),
     isMarkdownGuide: true,
   };
 }
 
-function buildFallbackGuide(page, t) {
+function buildFallbackGuide(page, t, language) {
   const guides = {
     dashboard: {
       title: tr(t, 'guideDashboardTitle', 'Dashboard guide'),
@@ -123,10 +163,11 @@ function buildFallbackGuide(page, t) {
     },
   };
 
-  return guides[page] || guides.dashboard;
+  const guide = guides[page] || guides.dashboard;
+  return { ...guide, language: normaliseLanguage(language) };
 }
 
-export function getPageGuide(pathname, t) {
+export function getPageGuide(pathname, t, language = DEFAULT_GUIDE_LANGUAGE) {
   const page = normalisePage(pathname);
-  return buildMarkdownGuide(page, t) || buildFallbackGuide(page, t);
+  return buildMarkdownGuide(page, t, language) || buildFallbackGuide(page, t, language);
 }

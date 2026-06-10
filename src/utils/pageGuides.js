@@ -7,6 +7,8 @@ import posGuideZh from '../../docs/zh/UserGuide/POS.md?raw';
 
 const SUPPORTED_GUIDE_LANGUAGES = ['mm', 'en', 'zh'];
 const DEFAULT_GUIDE_LANGUAGE = 'mm';
+const GUIDE_VERSION = '1.1';
+const GUIDE_LAST_UPDATED = '2026-06-10';
 
 const tr = (t, key, fallback) => t(key, fallback);
 
@@ -91,6 +93,8 @@ function buildMarkdownGuide(page, t, language) {
     description,
     markdown: doc.markdown,
     sourcePath: doc.sourcePath,
+    version: GUIDE_VERSION,
+    lastUpdated: GUIDE_LAST_UPDATED,
     language: normaliseLanguage(language),
     isMarkdownGuide: true,
   };
@@ -164,7 +168,7 @@ function buildFallbackGuide(page, t, language) {
   };
 
   const guide = guides[page] || guides.dashboard;
-  return { ...guide, language: normaliseLanguage(language) };
+  return { ...guide, version: GUIDE_VERSION, lastUpdated: GUIDE_LAST_UPDATED, language: normaliseLanguage(language) };
 }
 
 export function getPageGuide(pathname, t, language = DEFAULT_GUIDE_LANGUAGE) {

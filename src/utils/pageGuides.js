@@ -1,9 +1,62 @@
+import inventoryUserGuide from '../../docs/UserGuide/Inventory.md?raw';
+import posUserGuide from '../../docs/UserGuide/POS.md?raw';
+
 const tr = (t, key, fallback) => t(key, fallback);
 
-export function getPageGuide(pathname, t) {
-  const path = pathname || '/dashboard';
-  const page = path.split('/')[1] || 'dashboard';
+const MARKDOWN_GUIDES = {
+  inventory: {
+    markdown: inventoryUserGuide,
+    sourcePath: 'docs/UserGuide/Inventory.md',
+  },
+  entry: {
+    markdown: posUserGuide,
+    sourcePath: 'docs/UserGuide/POS.md',
+  },
+};
 
+function normalisePage(pathname) {
+  const path = pathname || '/dashboard';
+  const page = path.split('/').filter(Boolean)[0] || 'dashboard';
+  if (page === 'suppliers') return 'customers';
+  return page;
+}
+
+function extractMarkdownTitle(markdown, fallback) {
+  const titleLine = String(markdown || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('# '));
+
+  return titleLine ? titleLine.replace(/^#\s+/, '').trim() : fallback;
+}
+
+function extractMarkdownDescription(markdown, fallback = '') {
+  const lines = String(markdown || '').split('\n');
+  for (const line of lines) {
+    const clean = line.trim();
+    if (!clean || clean.startsWith('#') || clean.startsWith('- ') || /^\d+\./.test(clean)) continue;
+    return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
+  }
+  return fallback;
+}
+
+function buildMarkdownGuide(page, t) {
+  const doc = MARKDOWN_GUIDES[page];
+  if (!doc?.markdown) return null;
+
+  const title = extractMarkdownTitle(doc.markdown, tr(t, `guide${page}Title`, 'Page guide'));
+  const description = extractMarkdownDescription(doc.markdown, tr(t, `guide${page}Desc`, ''));
+
+  return {
+    title,
+    description,
+    markdown: doc.markdown,
+    sourcePath: doc.sourcePath,
+    isMarkdownGuide: true,
+  };
+}
+
+function buildFallbackGuide(page, t) {
   const guides = {
     dashboard: {
       title: tr(t, 'guideDashboardTitle', 'Dashboard guide'),
@@ -15,27 +68,6 @@ export function getPageGuide(pathname, t) {
         { title: tr(t, 'guideDashboardActionsTitle', 'Use quick actions'), body: tr(t, 'guideDashboardActionsBody', 'Start a sale, add stock, create a product, or review records directly from the dashboard.') },
       ],
       tips: [tr(t, 'guideDashboardTip1', 'Dashboard is for quick decisions; Reports is for deep analysis.'), tr(t, 'guideDashboardTip2', 'If numbers look wrong, check Records first for incorrect vouchers.')],
-    },
-    entry: {
-      title: tr(t, 'guideEntryTitle', 'Entry guide'),
-      description: tr(t, 'guideEntryDesc', 'Use Entry for sales, purchases, expenses, hold orders, and barcode scanning.'),
-      steps: [
-        { title: tr(t, 'guideEntrySaleTitle', 'Sale mode'), body: tr(t, 'guideEntrySaleBody', 'Choose Sale, select customer if needed, tap products once, adjust quantity/unit/discount, then choose payment and save.') },
-        { title: tr(t, 'guideEntryPurchaseTitle', 'Purchase mode'), body: tr(t, 'guideEntryPurchaseBody', 'Choose Purchase, select supplier, add products with purchase cost, enter paid amount, and save. Stock will increase after saving.') },
-        { title: tr(t, 'guideEntryHoldTitle', 'Hold and drafts'), body: tr(t, 'guideEntryHoldBody', 'Use Hold when the customer pauses. Restore the hold order later and continue without losing cart items.') },
-        { title: tr(t, 'guideEntryBarcodeTitle', 'Barcode'), body: tr(t, 'guideEntryBarcodeBody', 'Use the barcode button to find products faster. If a barcode is missing, add it from Stock/Product edit.') },
-      ],
-      tips: [tr(t, 'guideEntryTip1', 'Do not press save many times. Wait for the success message.'), tr(t, 'guideEntryTip2', 'For credit sales, check customer balance after saving.')],
-    },
-    inventory: {
-      title: tr(t, 'guideInventoryTitle', 'Stock guide'),
-      description: tr(t, 'guideInventoryDesc', 'Use Stock to add, edit, search, and monitor products.'),
-      steps: [
-        { title: tr(t, 'guideInventoryAddTitle', 'Add product'), body: tr(t, 'guideInventoryAddBody', 'Enter product name, category, cost, sale price, unit, stock, and barcode. Keep barcode unique.') },
-        { title: tr(t, 'guideInventoryEditTitle', 'Edit product'), body: tr(t, 'guideInventoryEditBody', 'Use edit when price, stock alert, barcode, or package units change. Avoid deleting products that already have sales history.') },
-        { title: tr(t, 'guideInventoryLowTitle', 'Low stock'), body: tr(t, 'guideInventoryLowBody', 'Products below minimum stock appear as warnings. Reorder before stock reaches zero.') },
-      ],
-      tips: [tr(t, 'guideInventoryTip1', 'Cost price is important for profit reports.'), tr(t, 'guideInventoryTip2', 'Use clear product names so cashiers can search quickly.')],
     },
     records: {
       title: tr(t, 'guideRecordsTitle', 'Records guide'),
@@ -69,7 +101,6 @@ export function getPageGuide(pathname, t) {
       ],
       tips: [tr(t, 'guidePeopleTip1', 'Do not delete people with active credit balance.'), tr(t, 'guidePeopleTip2', 'Always enter phone number for credit customers.')],
     },
-    suppliers: null,
     settings: {
       title: tr(t, 'guideSettingsTitle', 'Settings guide'),
       description: tr(t, 'guideSettingsDesc', 'Use Settings to configure shop profile, language, backup, and account options.'),
@@ -92,6 +123,10 @@ export function getPageGuide(pathname, t) {
     },
   };
 
-  if (page === 'suppliers') return guides.customers;
   return guides[page] || guides.dashboard;
+}
+
+export function getPageGuide(pathname, t) {
+  const page = normalisePage(pathname);
+  return buildMarkdownGuide(page, t) || buildFallbackGuide(page, t);
 }

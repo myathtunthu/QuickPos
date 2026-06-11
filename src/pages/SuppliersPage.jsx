@@ -324,7 +324,7 @@ const { profile, hasPermission } = useAuth();
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 sm:min-w-[200px]">
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
+            <input type="text" placeholder={t('searchSuppliers')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
@@ -336,7 +336,7 @@ const { profile, hasPermission } = useAuth();
                 </>
               )}
               {hasPermission('manage_suppliers') && (
-                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> Add</button>
+                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/>{t('add')}</button>
               )}
             </div>
           )}

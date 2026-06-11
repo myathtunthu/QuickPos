@@ -641,7 +641,7 @@ const { profile, hasPermission } = useAuth();
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> Add</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{t('add')}</button>
               )}
             </div>
           )}
@@ -670,7 +670,7 @@ const { profile, hasPermission } = useAuth();
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filteredCustomers.length === 0 ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">Customer မရှိသေးပါ။</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{t('noCustomersFound')}</td></tr>
                   ) : visibleCustomers.map((customer) => {
                     const debt = toMoney(customer.totalDebt);
                     const limitAmount = toMoney(customer.creditLimit);
@@ -707,7 +707,7 @@ const { profile, hasPermission } = useAuth();
 
             <div className="block divide-y divide-white/5 sm:hidden">
               {filteredCustomers.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">Customer မရှိသေးပါ။</div>
+                <div className="p-8 text-center text-slate-500">{t('noCustomersFound')}</div>
               ) : visibleCustomers.map((customer) => {
                 const debt = toMoney(customer.totalDebt);
                 const isExpanded = Boolean(expandedCust[customer.id]);

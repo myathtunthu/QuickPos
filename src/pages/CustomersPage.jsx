@@ -7,7 +7,6 @@ import {
   doc,
   getDocs,
   limit,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -16,6 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   ChevronDown,
   ChevronUp,
@@ -121,6 +121,7 @@ const getPaymentPersonKey = (record) => record.customerId || normalizeLower(reco
 
 export default function CustomersPage() {
   const { profile, hasPermission } = useAuth();
+  const { t } = useLanguage();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
 
@@ -160,45 +161,37 @@ export default function CustomersPage() {
     setLoading(true);
 
     try {
+      // Keep Firestore queries index-free: tenantId equality only.
+      // Payment/sale type filtering and date/name sorting are done client-side.
       const customerQuery = query(
         collection(db, 'pos_customers'),
         where('tenantId', '==', tenantId),
-        orderBy('name'),
         limit(CUSTOMER_FETCH_LIMIT),
       );
 
-      const paymentQuery = query(
+      const recordQuery = query(
         collection(db, 'pos_records'),
         where('tenantId', '==', tenantId),
-        where('type', '==', 'Customer Payment'),
-        orderBy('createdAt', 'desc'),
         limit(RECORD_FETCH_LIMIT),
       );
 
-      const saleQuery = query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', tenantId),
-        where('type', '==', 'Sale'),
-        orderBy('createdAt', 'desc'),
-        limit(RECORD_FETCH_LIMIT),
-      );
-
-      const [customerSnap, paymentSnap, saleSnap] = await Promise.all([
+      const [customerSnap, recordSnap] = await Promise.all([
         getDocs(customerQuery),
-        getDocs(paymentQuery),
-        getDocs(saleQuery),
+        getDocs(recordQuery),
       ]);
 
       const customerData = customerSnap.docs
         .map((snap) => ({ id: snap.id, ...snap.data() }))
         .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name)));
 
+      const tenantRecords = recordSnap.docs
+        .map((snap) => ({ id: snap.id, ...snap.data() }))
+        .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+
       setCustomers(customerData);
-      setPaymentRecords(paymentSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() })));
+      setPaymentRecords(tenantRecords.filter((record) => record.type === 'Customer Payment'));
       setCreditSaleRecords(
-        saleSnap.docs
-          .map((snap) => ({ id: snap.id, ...snap.data() }))
-          .filter((record) => toMoney(record.remainingDebt) > 0),
+        tenantRecords.filter((record) => record.type === 'Sale' && toMoney(record.remainingDebt) > 0),
       );
     } catch (error) {
       console.error('Error fetching customer data:', error);
@@ -588,7 +581,7 @@ export default function CustomersPage() {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">Access Denied</h2>
+        <h2 className="text-xl font-bold">{t('accessDenied') || 'Access Denied'}</h2>
         <p className="mt-2 text-sm">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
       </div>
     );
@@ -605,14 +598,14 @@ export default function CustomersPage() {
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} /> Customer Book
+            <Users size={18} /> {t('customerBook')}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} /> Payment History
+            <History size={18} /> {t('paymentHistory')}
           </button>
         </div>
 
@@ -621,7 +614,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="Customer ရှာရန်..."
+              placeholder={t('searchCustomer') || 'Customer ရှာရန်...'}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -638,7 +631,7 @@ export default function CustomersPage() {
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> Add</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> {t('add')}</button>
               )}
             </div>
           )}
@@ -658,11 +651,11 @@ export default function CustomersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer Info</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Limit</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
-                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{t('customerInfo')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{t('contact')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('creditLimit') || 'Credit Limit'}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('creditBalance')}</th>
+                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -724,9 +717,9 @@ export default function CustomersPage() {
                         <p className="text-slate-400">Credit Limit: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
                         {customer.note && <p className="text-slate-400">မှတ်ချက်: {customer.note}</p>}
                         <div className="flex flex-wrap gap-2 pt-2">
-                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">Ledger</button>
-                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">Payment</button>}
-                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">Edit</button>}
+                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">{t('ledger')}</button>
+                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">{t('payment')}</button>}
+                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">{t('edit')}</button>}
                         </div>
                       </div>
                     )}
@@ -740,10 +733,10 @@ export default function CustomersPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                 <tr>
-                  <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer</th>
-                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">Times</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Last Payment</th>
+                  <th className="p-4 text-xs font-bold uppercase tracking-wider">{t('customer')}</th>
+                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">{t('times') || 'Times'}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('totalPaidMerged')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('lastPayment')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -775,11 +768,11 @@ export default function CustomersPage() {
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">Load More ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{t('loadMore') || 'Load More'} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">Load More ({visibleHistory.length}/{mergedHistory.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{t('loadMore') || 'Load More'} ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
       {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (
@@ -798,7 +791,7 @@ export default function CustomersPage() {
             <div className="space-y-4">
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">အမည် *</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">Credit Limit</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{t('creditLimit') || 'Credit Limit'}</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">လိပ်စာ</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
             </div>
@@ -815,7 +808,7 @@ export default function CustomersPage() {
               <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="mb-6 rounded-2xl border border-white/5 bg-black/40 p-5 text-center shadow-inner">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Credit Balance</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t('creditBalance')}</p>
               <p className="mt-2 text-3xl font-black text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</p>
             </div>
             <div className="space-y-4">
@@ -867,14 +860,14 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm print:hidden">
           <div className="custom-scrollbar relative max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl bg-white p-6 font-sans text-black shadow-2xl">
             <button type="button" onClick={() => setReceiptModal({ show: false, record: null })} className="absolute right-4 top-4 rounded-full bg-gray-200 p-1 text-gray-600 hover:bg-gray-300"><X size={20} /></button>
-            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">RECEIPT</h2></div>
+            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">{t('receipt')}</h2></div>
             <div className="mb-4 space-y-1.5 border-y border-dashed border-gray-300 py-3 text-[11px] font-semibold text-gray-600">
-              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
-              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
-              <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
+              <div className="flex justify-between"><span>{t('voucherNo')}</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
+              <div className="flex justify-between"><span>{t('date')}</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
+              <div className="flex justify-between"><span>{t('customer')}</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
             </div>
             <table className="w-full text-xs">
-              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">Item</th><th className="py-2 text-right">Amount</th></tr></thead>
+              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">{t('itemLabel')}</th><th className="py-2 text-right">{t('amountLabel')}</th></tr></thead>
               <tbody>
                 {(receiptModal.record.itemsDetail || []).map((item, index) => {
                   const quantity = toMoney(item.quantity);
@@ -890,9 +883,9 @@ export default function CustomersPage() {
               </tbody>
             </table>
             <div className="mt-3 space-y-1 border-t border-gray-300 pt-3 text-xs">
-              <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
-              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>Credit:</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{t('totalBill')}</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{t('paidLabel')}</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
+              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>{t('creditStatus')}</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
             </div>
           </div>
         </div>

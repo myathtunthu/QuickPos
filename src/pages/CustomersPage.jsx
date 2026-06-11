@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 import {
   addDoc,
   collection,
@@ -120,7 +121,9 @@ const getRecordTimestamp = (record) => {
 const getPaymentPersonKey = (record) => record.customerId || normalizeLower(record.personName);
 
 export default function CustomersPage() {
-  const { profile, hasPermission } = useAuth();
+  
+  const { t } = useLanguage();
+const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
 
@@ -621,7 +624,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="Customer ရှာရန်..."
+              placeholder={t('searchCustomers')}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"

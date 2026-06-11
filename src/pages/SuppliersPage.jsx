@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
 import { Truck, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
@@ -12,7 +13,9 @@ const SUPPLIER_RENDER_PAGE_SIZE = 50;
 const SUPPLIER_HISTORY_LIMIT = 800;
 
 export default function SuppliersPage() {
-  const { profile, hasPermission } = useAuth();
+  
+  const { t } = useLanguage();
+const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = profile?.role === 'admin';
 

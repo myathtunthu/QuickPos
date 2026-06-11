@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
 import { Truck, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
@@ -12,6 +13,7 @@ const SUPPLIER_RENDER_PAGE_SIZE = 50;
 const SUPPLIER_HISTORY_LIMIT = 800;
 
 export default function SuppliersPage() {
+  const { t } = useLanguage();
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = profile?.role === 'admin';
@@ -243,6 +245,7 @@ export default function SuppliersPage() {
   };
 
   const handleExportCSV = () => {
+  const { t } = useLanguage();
     if (!isAdmin) return;
     if (suppliers.length === 0) return showToast("Export ထုတ်ရန် Supplier မရှိပါ။", "warning");
     let csv = "Name,Phone,Address,Total Debt\n";
@@ -347,9 +350,9 @@ export default function SuppliersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-black/40 text-slate-400 border-b border-white/5">
                   <tr>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">Supplier Info</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">Contact</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Payable Balance</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{t('supplierInfo')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{t('contact')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{t('payableBalance')}</th>
                     <th className="p-4 font-bold uppercase tracking-wider text-xs text-center w-40">Actions</th>
                   </tr>
                 </thead>
@@ -479,7 +482,7 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေပေးချေမှုမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payable Balance</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
+            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('payableBalance')}</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးချေမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>

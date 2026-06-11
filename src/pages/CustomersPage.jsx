@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 import {
   addDoc,
   collection,
@@ -119,6 +120,7 @@ const getRecordTimestamp = (record) => {
 const getPaymentPersonKey = (record) => record.customerId || normalizeLower(record.personName);
 
 export default function CustomersPage() {
+  const { t } = useLanguage();
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
@@ -297,6 +299,7 @@ export default function CustomersPage() {
   }, [creditSaleRecords, paymentRecords, selectedCustomer]);
 
   const resetCustomerModal = () => {
+  const { t } = useLanguage();
     setEditingCustomer(null);
     setCustomerForm(emptyCustomerForm);
     setCustomerModalOpen(true);
@@ -650,9 +653,9 @@ export default function CustomersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer Info</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Limit</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{t('customerInfo')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{t('contact')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('creditLimit')}</th>
                     <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
                     <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
                   </tr>
@@ -790,7 +793,7 @@ export default function CustomersPage() {
             <div className="space-y-4">
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">အမည် *</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">Credit Limit</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{t('creditLimit')}</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">လိပ်စာ</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
               <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
             </div>

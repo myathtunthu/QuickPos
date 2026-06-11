@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase/config';
-import { useLanguage } from '../context/LanguageContext';
 import {
   addDoc,
   collection,
@@ -8,7 +7,6 @@ import {
   doc,
   getDocs,
   limit,
-  
   query,
   runTransaction,
   serverTimestamp,
@@ -17,6 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   ChevronDown,
   ChevronUp,
@@ -61,7 +60,6 @@ const emptyPaymentForm = {
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 const toMoney = (value) => {
-  const { t } = useLanguage();
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return 0;
   return Math.max(0, Math.round(numberValue * 100) / 100);
@@ -77,7 +75,7 @@ const customerDuplicateKey = (customer) => [
 const sanitizeCsvCell = (value) => {
   const raw = String(value ?? '').replace(/\r?\n|\r/g, ' ').trim();
   const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${safe.replace(/"/g, '""')}`;
+  return `"${safe.replace(/"/g, '""')}"`;
 };
 
 const parseCsvLine = (line) => {
@@ -122,7 +120,9 @@ const getRecordTimestamp = (record) => {
 const getPaymentPersonKey = (record) => record.customerId || normalizeLower(record.personName);
 
 export default function CustomersPage() {
-  const { profile, hasPermission } = useAuth();
+  
+  const { t } = useLanguage();
+const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
 
@@ -168,34 +168,31 @@ export default function CustomersPage() {
         limit(CUSTOMER_FETCH_LIMIT),
       );
 
-      const paymentQuery = query(
+      // Fetch tenant records without orderBy/type filters to avoid Firestore composite index requirements.
+      // Customer payments and credit sales are filtered and sorted safely on the client.
+      const recordsQuery = query(
         collection(db, 'pos_records'),
         where('tenantId', '==', tenantId),
         limit(RECORD_FETCH_LIMIT),
       );
 
-      const saleQuery = query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', tenantId),
-        limit(RECORD_FETCH_LIMIT),
-      );
-
-      const [customerSnap, paymentSnap, saleSnap] = await Promise.all([
+      const [customerSnap, recordsSnap] = await Promise.all([
         getDocs(customerQuery),
-        getDocs(paymentQuery),
-        getDocs(saleQuery),
+        getDocs(recordsQuery),
       ]);
 
       const customerData = customerSnap.docs
         .map((snap) => ({ id: snap.id, ...snap.data() }))
         .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name)));
 
+      const tenantRecords = recordsSnap.docs
+        .map((snap) => ({ id: snap.id, ...snap.data() }))
+        .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+
       setCustomers(customerData);
-      setPaymentRecords(paymentSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() })));
+      setPaymentRecords(tenantRecords.filter((record) => record.type === 'Customer Payment'));
       setCreditSaleRecords(
-        saleSnap.docs
-          .map((snap) => ({ id: snap.id, ...snap.data() }))
-          .filter((record) => toMoney(record.remainingDebt) > 0),
+        tenantRecords.filter((record) => record.type === 'Sale' && toMoney(record.remainingDebt) > 0),
       );
     } catch (error) {
       console.error('Error fetching customer data:', error);
@@ -585,8 +582,8 @@ export default function CustomersPage() {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">Access Denied</h2>
-        <p className="mt-2 text-sm">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
+        <h2 className="text-xl font-bold">{t('accessDenied', 'Access Denied')}</h2>
+        <p className="mt-2 text-sm">{t('customerAccessDenied', 'သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။')}</p>
       </div>
     );
   }
@@ -602,13 +599,15 @@ export default function CustomersPage() {
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} />{t('customerBook')}</button>
+            <Users size={18} /> {t('customerBook', 'Customer Book')}
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} />{t('paymentHistory')}</button>
+            <History size={18} /> {t('paymentHistory', 'Payment History')}
+          </button>
         </div>
 
         <div className="flex w-full flex-col gap-3 md:w-auto sm:flex-row">
@@ -616,7 +615,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder={t('searchCustomers')}
+              placeholder="Customer ရှာရန်..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -627,13 +626,13 @@ export default function CustomersPage() {
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title="Export CSV"><Download size={20} /></button>
-                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title="Import CSV"><Upload size={20} /></button>
+                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title={t('exportCSV', 'Export CSV')}><Download size={20} /></button>
+                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title={t('importCSV', 'Import CSV')}><Upload size={20} /></button>
                   <input type="file" accept=".csv,text/csv" ref={fileRef} onChange={handleImportCSV} className="hidden" />
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{t('add')}</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> {t('add', 'Add')}</button>
               )}
             </div>
           )}
@@ -737,13 +736,13 @@ export default function CustomersPage() {
                 <tr>
                   <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer</th>
                   <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">Times</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Last Payment</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('totalPaidMerged', 'Total Paid')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{t('lastPayment', 'Last Payment')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {mergedHistory.length === 0 ? (
-                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{t('noRecords', 'No records.')}</td></tr>
                 ) : visibleHistory.map((history) => (
                   <React.Fragment key={history.key}>
                     <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
@@ -787,7 +786,7 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={handleSaveCustomer} className="w-full max-w-md rounded-3xl border border-cyan-500/30 bg-[#0d1120] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3>
+              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? t('editCustomer', 'Edit Customer') : t('addCustomer', 'Add Customer')}</h3>
               <button type="button" onClick={() => setCustomerModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-4">
@@ -826,7 +825,7 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-3xl border border-blue-500/30 bg-[#0d1120] shadow-2xl">
             <div className="flex items-center justify-between rounded-t-3xl border-b border-white/5 bg-black/20 p-6 pb-4">
-              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">Current Debt: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
+              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">{t('currentDebt', 'Current Debt:')} <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
               <button type="button" onClick={() => setLedgerModalOpen(false)} className="rounded-full bg-white/5 p-2 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="custom-scrollbar flex-1 overflow-y-auto bg-black/10 p-4 sm:p-6">
@@ -839,12 +838,12 @@ export default function CustomersPage() {
                     return (
                       <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`flex flex-col justify-between gap-3 rounded-2xl border border-white/5 bg-[#12182b] p-4 transition-colors sm:flex-row sm:items-center ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? t('paymentIn', 'Payment In') : t('creditSale', 'Credit Sale')}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
                           {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> Invoice: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
-                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">Total Bill: {formatMoney(record.amount)} • Paid: {formatMoney(record.paidAmount)}</p>}
+                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">{t('totalBill', 'Total Bill')}: {formatMoney(record.amount)} • {t('paid', 'Paid')}: {formatMoney(record.paidAmount)}</p>}
                         </div>
                         <div className="mt-2 border-t border-white/5 pt-2 text-left sm:mt-0 sm:border-0 sm:pt-0 sm:text-right">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? t('amountReceived', 'Amount Received') : t('debtAdded', 'Debt Added')}</p>
                           <p className={`mt-0.5 text-lg font-black ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>{!isSale ? '-' : '+'}{formatMoney(!isSale ? record.amount : record.remainingDebt)}</p>
                           <p className="mt-1 text-[10px] text-slate-500">Bal: {formatMoney(record.runningBalance)}</p>
                         </div>
@@ -885,8 +884,8 @@ export default function CustomersPage() {
               </tbody>
             </table>
             <div className="mt-3 space-y-1 border-t border-gray-300 pt-3 text-xs">
-              <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{t('totalBill', 'Total Bill')}:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{t('paid', 'Paid')}:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
               <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>Credit:</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
             </div>
           </div>

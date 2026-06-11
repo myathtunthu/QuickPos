@@ -126,7 +126,21 @@ service cloud.firestore {
 
     match /pos_records/{docId} {
       allow read: if isSuperAdmin()
-        || (sameTenant(resource.data.tenantId) && (hasPermission('view_sales') || hasPermission('view_reports')));
+        || (
+          sameTenant(resource.data.tenantId)
+          && (
+            hasPermission('view_sales')
+            || hasPermission('view_reports')
+            || (
+              hasPermission('create_purchase')
+              && (resource.data.type == 'Supplier Payment' || resource.data.type == 'Purchase')
+            )
+            || (
+              hasPermission('accept_payment')
+              && resource.data.type == 'Customer Payment'
+            )
+          )
+        );
       allow create: if sameTenant(request.resource.data.tenantId)
         && (
           hasPermission('create_sale')
@@ -140,7 +154,16 @@ service cloud.firestore {
     }
 
     match /pos_customers/{docId} {
-      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_customers'));
+      allow read: if isSuperAdmin()
+        || (
+          sameTenant(resource.data.tenantId)
+          && (
+            hasPermission('view_customers')
+            || hasPermission('manage_customers')
+            || hasPermission('create_sale')
+            || hasPermission('accept_payment')
+          )
+        );
       allow create: if sameTenant(request.resource.data.tenantId)
         && (hasPermission('manage_customers') || hasPermission('create_sale'));
       allow update: if sameTenant(resource.data.tenantId)
@@ -153,7 +176,15 @@ service cloud.firestore {
     }
 
     match /pos_suppliers/{docId} {
-      allow read: if isSuperAdmin() || (sameTenant(resource.data.tenantId) && hasPermission('view_suppliers'));
+      allow read: if isSuperAdmin()
+        || (
+          sameTenant(resource.data.tenantId)
+          && (
+            hasPermission('view_suppliers')
+            || hasPermission('manage_suppliers')
+            || hasPermission('create_purchase')
+          )
+        );
       allow create: if sameTenant(request.resource.data.tenantId)
         && (hasPermission('manage_suppliers') || hasPermission('create_purchase'));
       allow update: if sameTenant(resource.data.tenantId)

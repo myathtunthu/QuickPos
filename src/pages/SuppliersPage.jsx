@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../firebase/config';
-import { collection, query, where, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
+import { collection, query, where, orderBy, limit, getDocs, addDoc, doc, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, increment } from 'firebase/firestore'; 
 import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
 import { Truck, Search, Plus, Edit3, Trash2, DollarSign, ClipboardList, X, History, Receipt, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
 
 import ConfirmDialog from '../components/UI/ConfirmDialog';
@@ -14,7 +13,6 @@ const SUPPLIER_HISTORY_LIMIT = 800;
 
 export default function SuppliersPage() {
   const { profile, hasPermission } = useAuth();
-  const { t } = useLanguage();
   const tenantId = profile?.tenantId;
   const isAdmin = profile?.role === 'admin';
 
@@ -51,25 +49,16 @@ export default function SuppliersPage() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const suppQ = query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId), limit(SUPPLIER_FETCH_LIMIT));
-      const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), limit(SUPPLIER_HISTORY_LIMIT));
-      const [suppSnap, recSnap] = await Promise.all([getDocs(suppQ), getDocs(recQ)]);
-
-      const suppData = suppSnap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      const suppQ = query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId), orderBy('name'), limit(SUPPLIER_FETCH_LIMIT));
+      const suppSnap = await getDocs(suppQ);
+      const suppData = suppSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      suppData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setSuppliers(suppData);
 
-      const recordData = recSnap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(record => record.type === 'Supplier Payment' || record.type === 'Purchase')
-        .sort((a, b) => {
-          const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(`${a.date || ''} ${a.time || ''}`).getTime() || 0;
-          const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(`${b.date || ''} ${b.time || ''}`).getTime() || 0;
-          return bTime - aTime;
-        });
-      setAllRecords(recordData);
-    } catch (error) { console.error("Error fetching supplier data:", error); showToast(t('dataLoadError', 'Failed to load data.'), 'error'); }
+      const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), where('type', '==', 'Supplier Payment'), orderBy('createdAt', 'desc'), limit(SUPPLIER_HISTORY_LIMIT));
+      const recSnap = await getDocs(recQ);
+      setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (error) { console.error("Error fetching data:", error); }
     setLoading(false);
   };
 
@@ -134,7 +123,7 @@ export default function SuppliersPage() {
     const merged = {};
     payments.forEach(p => {
       const sId = p.supplierId || p.personName;
-      if (!merged[sId]) merged[sId] = { supplierId: p.supplierId, personName: p.personName, total{t('paid', 'Paid')}: 0, paymentCount: 0, lastPaymentDate: p.date, details: [] };
+      if (!merged[sId]) merged[sId] = { supplierId: p.supplierId, personName: p.personName, totalPaid: 0, paymentCount: 0, lastPaymentDate: p.date, details: [] };
       merged[sId].totalPaid += Number(p.amount) || 0;
       merged[sId].paymentCount += 1;
       merged[sId].details.push(p);
@@ -313,8 +302,8 @@ export default function SuppliersPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-slate-500">
         <Truck size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">{t('accessDenied', 'Access Denied')}</h2>
-        <p className="text-sm mt-2">{t('supplierAccessDenied', 'သင့်တွင် Supplier စာရင်း ကြည့်ရှုခွင့် မရှိပါ။')}</p>
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="text-sm mt-2">သင့်တွင် Supplier စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
       </div>
     );
   }
@@ -325,26 +314,26 @@ export default function SuppliersPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-rose-500/15 shadow-xl gap-5 animate-in fade-in">
         <div className="flex items-center gap-4 bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto">
-          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Truck size={18}/> {t('supplierBook', 'Supplier Book')}</button>
-          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> {t('paymentHistory', 'Payment History')}</button>
+          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Truck size={18}/> Supplier Book</button>
+          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> Payment History</button>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 sm:min-w-[200px]">
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder={t('searchSupplier', 'Search supplier...')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
+            <input type="text" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title={t('exportCSV', 'Export CSV')}><Download size={20}/></button>
-                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title={t('importCSV', 'Import CSV')}><Upload size={20}/></button>
+                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
+                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title="Import CSV"><Upload size={20}/></button>
                   <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
                 </>
               )}
               {hasPermission('manage_suppliers') && (
-                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> {t('add', 'Add')}</button>
+                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/> Add</button>
               )}
             </div>
           )}
@@ -360,7 +349,7 @@ export default function SuppliersPage() {
                   <tr>
                     <th className="p-4 font-bold uppercase tracking-wider text-xs">Supplier Info</th>
                     <th className="p-4 font-bold uppercase tracking-wider text-xs">Contact</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{t('payableBalance', 'Payable Balance')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Payable Balance</th>
                     <th className="p-4 font-bold uppercase tracking-wider text-xs text-center w-40">Actions</th>
                   </tr>
                 </thead>
@@ -490,7 +479,7 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေပေးချေမှုမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('payableBalance', 'Payable Balance')}</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
+            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payable Balance</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးချေမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
               <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
@@ -505,7 +494,7 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
             <div className="p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20 rounded-t-3xl">
-              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedSupplier.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">{t('currentDebt', 'Current Debt:')} <span className="text-rose-400 text-sm">{Number(selectedSupplier.totalDebt).toLocaleString()} Ks</span></p></div>
+              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedSupplier.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-rose-400 text-sm">{Number(selectedSupplier.totalDebt).toLocaleString()} Ks</span></p></div>
               <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
             </div>
             <div className="overflow-y-auto custom-scrollbar flex-1 p-4 sm:p-6 bg-black/10">
@@ -516,12 +505,12 @@ export default function SuppliersPage() {
                     return (
                       <div key={record.id} onClick={() => isPurchase && setReceiptModal({ show: true, record })} className={`bg-[#12182b] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors ${isPurchase ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isPurchase ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'}`}>{!isPurchase ? t('paymentOut', 'Payment Out') : t('creditPurchase', 'Credit Purchase')}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isPurchase ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'}`}>{!isPurchase ? 'Payment Out' : 'Credit Purchase'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
                           {isPurchase ? <div><p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p></div> : <p className="text-sm font-bold text-slate-200">{record.note || 'ပွဲရုံသို့ ငွေချေခြင်း'}</p>}
-                          {isPurchase && <p className="text-[11px] font-bold text-slate-500 mt-1">{t('totalBill', 'Total Bill')}: {Number(record.amount).toLocaleString()} • {t('paid', 'Paid')}: {Number(record.paidAmount).toLocaleString()}</p>}
+                          {isPurchase && <p className="text-[11px] font-bold text-slate-500 mt-1">Total Bill: {Number(record.amount).toLocaleString()} • Paid: {Number(record.paidAmount).toLocaleString()}</p>}
                         </div>
                         <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-white/5 sm:border-0 mt-2 sm:mt-0">
-                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isPurchase ? t('amountPaid', 'Amount Paid') : t('debtAdded', 'Debt Added')}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isPurchase ? 'Amount Paid' : 'Debt Added'}</p>
                           <p className={`text-lg font-black mt-0.5 ${!isPurchase ? 'text-green-400' : 'text-rose-400'}`}>
                             {!isPurchase ? '-' : '+'}{Number(!isPurchase ? record.amount : record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span>
                           </p>
@@ -562,8 +551,8 @@ export default function SuppliersPage() {
               </table>
             </div>
             <div className="border-t border-gray-300 pt-3 mt-3 space-y-1 text-xs">
-               <div className="flex justify-between text-gray-600"><span>{t('totalBill', 'Total Bill')}:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-gray-600"><span>{t('paid', 'Paid')}:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
                <div className="flex justify-between text-rose-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>Credit Balance:</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
             </div>
           </div>

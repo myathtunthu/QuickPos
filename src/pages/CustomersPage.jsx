@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 import {
   addDoc,
   collection,
@@ -60,6 +61,7 @@ const emptyPaymentForm = {
 const normalizeText = (value) => String(value ?? '').trim();
 const normalizeLower = (value) => normalizeText(value).toLowerCase();
 const toMoney = (value) => {
+  const { t } = useLanguage();
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return 0;
   return Math.max(0, Math.round(numberValue * 100) / 100);
@@ -75,7 +77,7 @@ const customerDuplicateKey = (customer) => [
 const sanitizeCsvCell = (value) => {
   const raw = String(value ?? '').replace(/\r?\n|\r/g, ' ').trim();
   const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${safe.replace(/"/g, '""')}"`;
+  return `"${safe.replace(/"/g, '""')}`;
 };
 
 const parseCsvLine = (line) => {
@@ -600,15 +602,13 @@ export default function CustomersPage() {
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} /> Customer Book
-          </button>
+            <Users size={18} />{t('customerBook')}</button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} /> Payment History
-          </button>
+            <History size={18} />{t('paymentHistory')}</button>
         </div>
 
         <div className="flex w-full flex-col gap-3 md:w-auto sm:flex-row">
@@ -616,7 +616,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="Customer ရှာရန်..."
+              placeholder={t('searchCustomers')}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -633,7 +633,7 @@ export default function CustomersPage() {
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} /> Add</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{t('add')}</button>
               )}
             </div>
           )}

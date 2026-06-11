@@ -37,6 +37,7 @@ import ConfirmDialog from '../components/UI/ConfirmDialog';
 import { showToast } from '../components/UI/Toast';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
+import { useLanguage } from '../context/LanguageContext';
 
 const SUPPLIER_FETCH_LIMIT = 500;
 const SUPPLIER_RENDER_PAGE_SIZE = 50;
@@ -52,6 +53,7 @@ const normalizeText = (value = '') => String(value ?? '').trim();
 const normalizeLower = (value = '') => normalizeText(value).toLowerCase();
 const normalizePhone = (value = '') => normalizeText(value).replace(/\s+/g, '');
 const toSafeNumber = (value, fallback = 0) => {
+  const { t } = useLanguage();
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
@@ -62,7 +64,7 @@ const fmt = (value) => toSafeNumber(value, 0).toLocaleString();
 const csvEscape = (value = '') => {
   const raw = String(value ?? '');
   const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${protectedValue.replace(/"/g, '""')}"`;
+  return `"${protectedValue.replace(/"/g, '""')}`;
 };
 
 const parseCsvLine = (line) => {
@@ -579,17 +581,15 @@ export default function SuppliersPage() {
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-rose-500/15 shadow-xl gap-5">
         <div className="flex items-center gap-4 bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto">
           <button type="button" onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
-            <Truck size={18} /> Supplier Book
-          </button>
+            <Truck size={18} />{t('supplierBook')}</button>
           <button type="button" onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
-            <History size={18} /> Payment History
-          </button>
+            <History size={18} />{t('paymentHistory')}</button>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 sm:min-w-[220px]">
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
-            <input type="text" placeholder="Search supplier..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm" />
+            <input type="text" placeholder={t('searchSuppliers')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm" />
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
@@ -602,8 +602,7 @@ export default function SuppliersPage() {
               )}
               {hasPermission('manage_suppliers') && (
                 <button type="button" onClick={() => openSupplierModal()} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95">
-                  <Plus size={20} /> Add
-                </button>
+                  <Plus size={20} />{t('add')}</button>
               )}
             </div>
           )}
@@ -678,7 +677,7 @@ export default function SuppliersPage() {
                     </button>
                     {expanded && (
                       <div className="mt-4 pt-4 border-t border-white/5 space-y-3 text-sm">
-                        <p className="text-slate-400">Address: {supplier.address || '-'}</p>
+                        <p className="text-slate-400">{t('add')}ress: {supplier.address || '-'}</p>
                         <p className="text-slate-400">Credit Limit: {creditLimit > 0 ? `${fmt(creditLimit)} Ks` : '-'}</p>
                         {supplier.note && <p className="text-slate-400">Note: {supplier.note}</p>}
                         <div className="flex gap-2 pt-2">

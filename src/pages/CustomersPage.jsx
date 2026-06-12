@@ -45,27 +45,18 @@ const MAX_PAYMENT_AMOUNT = 999_999_999;
 
 const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin']);
 
-const CUSTOMER_PAGE_I18N = {
-  mm: {
-    unableReadCustomer: 'Customer data ဖတ်ရာတွင် အမှားဖြစ်နေပါသည်။', noPermission: 'လုပ်ပိုင်ခွင့် မရှိပါ။', tenantMissing: 'Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', customerNameRequired: 'Customer အမည် ထည့်ပါ။', customerNameTooLong: 'Customer အမည်သည် အလွန်ရှည်နေပါသည်။', phoneTooLong: 'ဖုန်းနံပါတ် အလွန်ရှည်နေပါသည်။', creditLimitTooHigh: 'Credit limit အလွန်များနေပါသည်။', duplicateCustomer: 'အမည်နှင့်ဖုန်း တူသော Customer ရှိပြီးသား ဖြစ်ပါသည်။', customerSaved: 'Customer စာရင်း သိမ်းပြီးပါပြီ။', customerSaveError: 'Customer သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', customerDeleteBlocked: '{{name}} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။', deleteCustomerTitle: 'Customer ဖျက်သိမ်းခြင်း', deleteCustomerMessage: '"{{name}}" ကို ဖျက်ရန် သေချာပါသလား?', deleted: 'ဖျက်သိမ်းပြီးပါပြီ။', customerDeleteError: 'Customer ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', paymentPermissionDenied: 'ငွေချေခွင့် မရှိပါ။', customerNotSelected: 'Customer မရွေးရသေးပါ။', defaultCustomerPaymentNote: 'အကြွေးလာဆပ်သည်', invalidAmount: 'ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', amountTooHigh: 'ငွေပမာဏ အလွန်များနေပါသည်။', customerPaymentSaved: 'ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ။', customerNotFound: 'Customer မတွေ့ပါ။', customerTenantMismatch: 'Customer tenant မကိုက်ညီပါ။', paymentExceedsDebt: 'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။', noCustomerDebt: 'လက်ရှိအကြွေး မရှိတော့ပါ။', customerPaymentSaveError: 'ငွေသွင်းမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', adminRequired: 'Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', noCustomersToExport: 'Export ထုတ်ရန် Customer မရှိပါ။', csvDownloaded: 'CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', customerImportTitle: 'Customer CSV သွင်းခြင်း', customerImportMessage: 'Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?', emptyCsv: 'ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', customerImportDone: '{{imported}} ဦး ထည့်ပြီး၊ {{skipped}} ဦး ကျော်ထားပါသည်။', importError: 'Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။', settled: 'ရှင်းပြီး', loadMore: 'Load More', noPaymentHistory: 'ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။', accessDenied: 'Access Denied', viewDenied: 'သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။'
-  },
+const CUSTOMER_PAGE_TEXT = {
   en: {
-    unableReadCustomer: 'Unable to read customer data.', noPermission: 'You do not have permission.', tenantMissing: 'Tenant not found. Please sign in again.', customerNameRequired: 'Enter customer name.', customerNameTooLong: 'Customer name is too long.', phoneTooLong: 'Phone number is too long.', creditLimitTooHigh: 'Credit limit is too high.', duplicateCustomer: 'A customer with the same name and phone already exists.', customerSaved: 'Customer saved successfully.', customerSaveError: 'Unable to save customer.', customerDeleteBlocked: '{{name}} still has outstanding debt and cannot be deleted.', deleteCustomerTitle: 'Delete Customer', deleteCustomerMessage: 'Are you sure you want to delete "{{name}}"?', deleted: 'Deleted successfully.', customerDeleteError: 'Unable to delete customer.', paymentPermissionDenied: 'You do not have payment permission.', customerNotSelected: 'No customer selected.', defaultCustomerPaymentNote: 'Customer debt payment', invalidAmount: 'Enter a valid amount.', amountTooHigh: 'Amount is too high.', customerPaymentSaved: 'Payment record saved successfully.', customerNotFound: 'Customer not found.', customerTenantMismatch: 'Customer tenant mismatch.', paymentExceedsDebt: 'Payment amount is greater than current debt.', noCustomerDebt: 'There is no outstanding debt.', customerPaymentSaveError: 'Unable to save payment record.', adminRequired: 'Admin/Owner permission is required.', noCustomersToExport: 'No customers to export.', csvDownloaded: 'CSV file downloaded.', customerImportTitle: 'Import Customer CSV', customerImportMessage: 'Are you sure you want to import new customers into the database?', emptyCsv: 'The CSV file has no data.', customerImportDone: 'Imported {{imported}} customer(s), skipped {{skipped}}.', importError: 'Unable to import file.', settled: 'Settled', loadMore: 'Load More', noPaymentHistory: 'No payment history found.', accessDenied: 'Access Denied', viewDenied: 'You do not have permission to view customers.'
+    customerBook: 'Customer Book', paymentHistory: 'Payment History', searchCustomers: 'Search customer...', add: 'Add', noCustomersFound: 'No customers found.', unableReadCustomers: 'Unable to read customer list. Please check permission or connection.',
+  },
+  mm: {
+    customerBook: 'Customer စာရင်း', paymentHistory: 'ငွေသွင်းမှတ်တမ်း', searchCustomers: 'Customer ရှာရန်...', add: 'ထည့်မည်', noCustomersFound: 'Customer မရှိသေးပါ။', unableReadCustomers: 'Customer စာရင်းဖတ်မရပါ။ Permission သို့မဟုတ် internet connection ကိုစစ်ပါ။',
   },
   zh: {
-    unableReadCustomer: '无法读取客户数据。', noPermission: '没有操作权限。', tenantMissing: '未找到租户，请重新登录。', customerNameRequired: '请输入客户名称。', customerNameTooLong: '客户名称过长。', phoneTooLong: '电话号码过长。', creditLimitTooHigh: '信用额度过高。', duplicateCustomer: '已存在相同姓名和电话的客户。', customerSaved: '客户资料已保存。', customerSaveError: '保存客户资料失败。', customerDeleteBlocked: '{{name}} 仍有欠款，不能删除。', deleteCustomerTitle: '删除客户', deleteCustomerMessage: '确定要删除“{{name}}”吗？', deleted: '删除成功。', customerDeleteError: '删除客户失败。', paymentPermissionDenied: '没有收款权限。', customerNotSelected: '尚未选择客户。', defaultCustomerPaymentNote: '客户还款', invalidAmount: '请输入正确的金额。', amountTooHigh: '金额过大。', customerPaymentSaved: '收款记录已保存。', customerNotFound: '未找到客户。', customerTenantMismatch: '客户租户不匹配。', paymentExceedsDebt: '收款金额大于当前欠款。', noCustomerDebt: '当前没有欠款。', customerPaymentSaveError: '保存收款记录失败。', adminRequired: '需要管理员/店主权限。', noCustomersToExport: '没有可导出的客户。', csvDownloaded: 'CSV 文件已下载。', customerImportTitle: '导入客户 CSV', customerImportMessage: '确定要把新客户导入数据库吗？', emptyCsv: 'CSV 文件中没有数据。', customerImportDone: '已导入 {{imported}} 个，跳过 {{skipped}} 个。', importError: '导入文件失败。', settled: '已结清', loadMore: '加载更多', noPaymentHistory: '暂无收款记录。', accessDenied: '拒绝访问', viewDenied: '您没有查看客户列表的权限。'
+    customerBook: '客户账本', paymentHistory: '付款记录', searchCustomers: '搜索客户...', add: '新增', noCustomersFound: '暂无客户。', unableReadCustomers: '无法读取客户列表，请检查权限或网络。',
   },
 };
-
-const renderCustomerPageText = (language, key, values = {}) => {
-  const selected = CUSTOMER_PAGE_I18N[language] || CUSTOMER_PAGE_I18N.en;
-  let text = selected[key] || CUSTOMER_PAGE_I18N.en[key] || key;
-  Object.entries(values).forEach(([name, value]) => {
-    text = text.replaceAll(`{{${name}}}`, String(value ?? ''));
-  });
-  return text;
-};
-
+const getCustomerText = (language, key) => CUSTOMER_PAGE_TEXT[language]?.[key] || CUSTOMER_PAGE_TEXT.en[key] || key;
 
 const emptyCustomerForm = {
   name: '',
@@ -144,8 +135,8 @@ const getPaymentPersonKey = (record) => record.customerId || normalizeLower(reco
 
 export default function CustomersPage() {
   
-  const { language, t } = useLanguage();
-  const ct = (key, values) => renderCustomerPageText(language, key, values);
+  const { language } = useLanguage();
+  const tx = (key) => getCustomerText(language, key);
   const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
@@ -189,46 +180,63 @@ export default function CustomersPage() {
       const customerQuery = query(
         collection(db, 'pos_customers'),
         where('tenantId', '==', tenantId),
-        orderBy('name'),
         limit(CUSTOMER_FETCH_LIMIT),
       );
 
-      const paymentQuery = query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', tenantId),
-        where('type', '==', 'Customer Payment'),
-        orderBy('createdAt', 'desc'),
-        limit(RECORD_FETCH_LIMIT),
-      );
-
-      const saleQuery = query(
-        collection(db, 'pos_records'),
-        where('tenantId', '==', tenantId),
-        where('type', '==', 'Sale'),
-        orderBy('createdAt', 'desc'),
-        limit(RECORD_FETCH_LIMIT),
-      );
-
-      const [customerSnap, paymentSnap, saleSnap] = await Promise.all([
-        getDocs(customerQuery),
-        getDocs(paymentQuery),
-        getDocs(saleQuery),
-      ]);
-
+      const customerSnap = await getDocs(customerQuery);
       const customerData = customerSnap.docs
         .map((snap) => ({ id: snap.id, ...snap.data() }))
         .sort((a, b) => normalizeText(a.name).localeCompare(normalizeText(b.name)));
-
       setCustomers(customerData);
-      setPaymentRecords(paymentSnap.docs.map((snap) => ({ id: snap.id, ...snap.data() })));
-      setCreditSaleRecords(
-        saleSnap.docs
-          .map((snap) => ({ id: snap.id, ...snap.data() }))
-          .filter((record) => toMoney(record.remainingDebt) > 0),
-      );
+
+      const recordJobs = [];
+      if (hasPermission('accept_payment') || hasPermission('view_reports')) {
+        const paymentQuery = query(
+          collection(db, 'pos_records'),
+          where('tenantId', '==', tenantId),
+          where('type', '==', 'Customer Payment'),
+          limit(RECORD_FETCH_LIMIT),
+        );
+        recordJobs.push(getDocs(paymentQuery).then((paymentSnap) => {
+          const payments = paymentSnap.docs
+            .map((snap) => ({ id: snap.id, ...snap.data() }))
+            .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+          setPaymentRecords(payments);
+        }));
+      } else {
+        setPaymentRecords([]);
+      }
+
+      if (hasPermission('view_sales') || hasPermission('view_reports')) {
+        const saleQuery = query(
+          collection(db, 'pos_records'),
+          where('tenantId', '==', tenantId),
+          where('type', '==', 'Sale'),
+          limit(RECORD_FETCH_LIMIT),
+        );
+        recordJobs.push(getDocs(saleQuery).then((saleSnap) => {
+          const sales = saleSnap.docs
+            .map((snap) => ({ id: snap.id, ...snap.data() }))
+            .filter((record) => toMoney(record.remainingDebt) > 0)
+            .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a));
+          setCreditSaleRecords(sales);
+        }));
+      } else {
+        setCreditSaleRecords([]);
+      }
+
+      if (recordJobs.length > 0) {
+        const results = await Promise.allSettled(recordJobs);
+        if (results.some((result) => result.status === 'rejected')) {
+          console.warn('Customer related records could not be fully loaded:', results);
+        }
+      }
     } catch (error) {
-      console.error('Error fetching customer data:', error);
-      showToast(ct('unableReadCustomer'), 'error');
+      console.error('Error fetching customer list:', error);
+      setCustomers([]);
+      setPaymentRecords([]);
+      setCreditSaleRecords([]);
+      showToast(tx('unableReadCustomers'), 'error');
     } finally {
       setLoading(false);
     }
@@ -350,8 +358,8 @@ export default function CustomersPage() {
 
   const handleSaveCustomer = async (event) => {
     event.preventDefault();
-    if (!canManageCustomers) return showToast(ct('noPermission'), 'error');
-    if (!tenantId) return showToast(ct('tenantMissing'), 'error');
+    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
 
     const name = normalizeText(customerForm.name);
     const phone = normalizeText(customerForm.phone);
@@ -359,10 +367,10 @@ export default function CustomersPage() {
     const note = normalizeText(customerForm.note);
     const creditLimit = customerForm.creditLimit === '' ? 0 : toMoney(customerForm.creditLimit);
 
-    if (!name) return showToast(ct('customerNameRequired'), 'error');
-    if (name.length > 120) return showToast(ct('customerNameTooLong'), 'error');
-    if (phone.length > 40) return showToast(ct('phoneTooLong'), 'error');
-    if (creditLimit > MAX_CUSTOMER_DEBT) return showToast(ct('creditLimitTooHigh'), 'error');
+    if (!name) return showToast('Customer အမည် ထည့်ပါ။', 'error');
+    if (name.length > 120) return showToast('Customer အမည်သည် အလွန်ရှည်နေပါသည်။', 'error');
+    if (phone.length > 40) return showToast('ဖုန်းနံပါတ် အလွန်ရှည်နေပါသည်။', 'error');
+    if (creditLimit > MAX_CUSTOMER_DEBT) return showToast('Credit limit အလွန်များနေပါသည်။', 'error');
 
     setLoading(true);
     try {
@@ -372,7 +380,7 @@ export default function CustomersPage() {
 
       if (duplicate) {
         setLoading(false);
-        return showToast(ct('duplicateCustomer'), 'warning');
+        return showToast('အမည်နှင့်ဖုန်း တူသော Customer ရှိပြီးသား ဖြစ်ပါသည်။', 'warning');
       }
 
       const payload = {
@@ -396,35 +404,35 @@ export default function CustomersPage() {
       }
 
       setCustomerModalOpen(false);
-      showToast(ct('customerSaved'), 'success');
+      showToast('Customer စာရင်း သိမ်းပြီးပါပြီ။', 'success');
       await fetchData();
     } catch (error) {
       console.error('Error saving customer:', error);
-      showToast(ct('customerSaveError'), 'error');
+      showToast('Customer သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteCustomer = (customer) => {
-    if (!canManageCustomers) return showToast(ct('noPermission'), 'error');
+    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
     if (toMoney(customer.totalDebt) > 0) {
-      return showToast(ct('customerDeleteBlocked', { name: customer.name }), 'error');
+      return showToast(`${customer.name} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။`, 'error');
     }
 
     setConfirmDialog({
       isOpen: true,
-      title: ct('deleteCustomerTitle'),
-      message: ct('deleteCustomerMessage', { name: customer.name }),
+      title: 'Customer ဖျက်သိမ်းခြင်း',
+      message: `"${customer.name}" ကို ဖျက်ရန် သေချာပါသလား?`,
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         try {
           await deleteDoc(doc(db, 'pos_customers', customer.id));
-          showToast(ct('deleted'), 'success');
+          showToast('ဖျက်သိမ်းပြီးပါပြီ။', 'success');
           await fetchData();
         } catch (error) {
           console.error('Error deleting customer:', error);
-          showToast(ct('customerDeleteError'), 'error');
+          showToast('Customer ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
         }
       },
     });
@@ -433,15 +441,15 @@ export default function CustomersPage() {
   const handlePayment = async (event) => {
     event.preventDefault();
     if (paymentSaving) return;
-    if (!canAcceptPayment) return showToast(ct('paymentPermissionDenied'), 'error');
-    if (!tenantId) return showToast(ct('tenantMissing'), 'error');
-    if (!selectedCustomer?.id) return showToast(ct('customerNotSelected'), 'error');
+    if (!canAcceptPayment) return showToast('ငွေချေခွင့် မရှိပါ။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+    if (!selectedCustomer?.id) return showToast('Customer မရွေးရသေးပါ။', 'error');
 
     const payAmount = toMoney(paymentForm.amount);
-    const note = normalizeText(paymentForm.note) || ct('defaultCustomerPaymentNote');
+    const note = normalizeText(paymentForm.note) || 'အကြွေးလာဆပ်သည်';
 
-    if (payAmount <= 0) return showToast(ct('invalidAmount'), 'error');
-    if (payAmount > MAX_PAYMENT_AMOUNT) return showToast(ct('amountTooHigh'), 'error');
+    if (payAmount <= 0) return showToast('ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', 'error');
+    if (payAmount > MAX_PAYMENT_AMOUNT) return showToast('ငွေပမာဏ အလွန်များနေပါသည်။', 'error');
 
     setPaymentSaving(true);
     setLoading(true);
@@ -489,17 +497,17 @@ export default function CustomersPage() {
       setSelectedCustomer((prev) => (prev ? { ...prev, totalDebt: paymentRecord.afterDebt } : prev));
       setPaymentModalOpen(false);
       setPaymentForm(emptyPaymentForm);
-      showToast(ct('customerPaymentSaved'), 'success');
+      showToast('ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ။', 'success');
       await fetchData();
     } catch (error) {
       console.error('Error saving payment:', error);
       const messageMap = {
-        CUSTOMER_NOT_FOUND: ct('customerNotFound'),
-        CUSTOMER_TENANT_MISMATCH: ct('customerTenantMismatch'),
-        PAYMENT_EXCEEDS_DEBT: ct('paymentExceedsDebt'),
-        NO_DEBT: ct('noCustomerDebt'),
+        CUSTOMER_NOT_FOUND: 'Customer မတွေ့ပါ။',
+        CUSTOMER_TENANT_MISMATCH: 'Customer tenant မကိုက်ညီပါ။',
+        PAYMENT_EXCEEDS_DEBT: 'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။',
+        NO_DEBT: 'လက်ရှိအကြွေး မရှိတော့ပါ။',
       };
-      showToast(messageMap[error?.message] || ct('customerPaymentSaveError'), 'error');
+      showToast(messageMap[error?.message] || 'ငွေသွင်းမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
     } finally {
       setPaymentSaving(false);
       setLoading(false);
@@ -507,8 +515,8 @@ export default function CustomersPage() {
   };
 
   const handleExportCSV = () => {
-    if (!isAdmin) return showToast(ct('adminRequired'), 'error');
-    if (customers.length === 0) return showToast(ct('noCustomersToExport'), 'warning');
+    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
+    if (customers.length === 0) return showToast('Export ထုတ်ရန် Customer မရှိပါ။', 'warning');
 
     const header = ['Name', 'Phone', 'Address', 'Credit Limit', 'Total Debt', 'Note'];
     const rows = customers.map((customer) => [
@@ -527,20 +535,20 @@ export default function CustomersPage() {
     link.download = `Customers_${todayIsoDate()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast(ct('csvDownloaded'), 'success');
+    showToast('CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', 'success');
   };
 
   const handleImportCSV = (event) => {
-    if (!isAdmin) return showToast(ct('adminRequired'), 'error');
-    if (!tenantId) return showToast(ct('tenantMissing'), 'error');
+    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
+    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
 
     const file = event.target.files?.[0];
     if (!file) return;
 
     setConfirmDialog({
       isOpen: true,
-      title: ct('customerImportTitle'),
-      message: ct('customerImportMessage'),
+      title: 'Customer CSV သွင်းခြင်း',
+      message: 'Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?',
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         setLoading(true);
@@ -549,7 +557,7 @@ export default function CustomersPage() {
           const text = await file.text();
           const rows = text.split(/\r?\n/).filter((row) => row.trim());
           if (rows.length <= 1) {
-            showToast(ct('emptyCsv'), 'warning');
+            showToast('ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', 'warning');
             return;
           }
 
@@ -597,11 +605,11 @@ export default function CustomersPage() {
           }
 
           if (imported % 400 !== 0) await batch.commit();
-          showToast(ct('customerImportDone', { imported, skipped }), 'success');
+          showToast(`${imported} ဦး ထည့်ပြီး၊ ${skipped} ဦး ကျော်ထားပါသည်။`, 'success');
           await fetchData();
         } catch (error) {
           console.error('Customer import error:', error);
-          showToast(ct('importError'), 'error');
+          showToast('Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
         } finally {
           setLoading(false);
           if (fileRef.current) fileRef.current.value = '';
@@ -614,8 +622,8 @@ export default function CustomersPage() {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">{ct('accessDenied')}</h2>
-        <p className="mt-2 text-sm">{ct('viewDenied')}</p>
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="mt-2 text-sm">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
       </div>
     );
   }
@@ -631,14 +639,14 @@ export default function CustomersPage() {
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} /> {t('customerBook')}
+            <Users size={18} /> {tx('customerBook')}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} /> {t('paymentHistory')}
+            <History size={18} /> {tx('paymentHistory')}
           </button>
         </div>
 
@@ -647,7 +655,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder={t('searchCustomers')}
+              placeholder={tx('searchCustomers')}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -664,7 +672,7 @@ export default function CustomersPage() {
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{t('add')}</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{tx('add')}</button>
               )}
             </div>
           )}
@@ -693,7 +701,7 @@ export default function CustomersPage() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filteredCustomers.length === 0 ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{t('noCustomersFound')}</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{tx('noCustomersFound')}</td></tr>
                   ) : visibleCustomers.map((customer) => {
                     const debt = toMoney(customer.totalDebt);
                     const limitAmount = toMoney(customer.creditLimit);
@@ -730,7 +738,7 @@ export default function CustomersPage() {
 
             <div className="block divide-y divide-white/5 sm:hidden">
               {filteredCustomers.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">{t('noCustomersFound')}</div>
+                <div className="p-8 text-center text-slate-500">{tx('noCustomersFound')}</div>
               ) : visibleCustomers.map((customer) => {
                 const debt = toMoney(customer.totalDebt);
                 const isExpanded = Boolean(expandedCust[customer.id]);
@@ -740,7 +748,7 @@ export default function CustomersPage() {
                       <div>
                         <p className="font-black text-white">{customer.name}</p>
                         <p className="mt-1 text-xs text-slate-400">{customer.phone || '-'}</p>
-                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : ct('settled')}</p>
+                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : 'ရှင်းပြီး'}</p>
                       </div>
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
@@ -774,7 +782,7 @@ export default function CustomersPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {mergedHistory.length === 0 ? (
-                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{ct('noPaymentHistory')}</td></tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr>
                 ) : visibleHistory.map((history) => (
                   <React.Fragment key={history.key}>
                     <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
@@ -801,11 +809,11 @@ export default function CustomersPage() {
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{ct('loadMore')} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">Load More ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{ct('loadMore')} ({visibleHistory.length}/{mergedHistory.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">Load More ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
       {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (

@@ -215,3 +215,15 @@ button {
     color: black;
   }
 }
+
+/* Sidebar collapse button visibility fix */
+.sidebar-shell {
+  overflow: visible !important;
+  isolation: isolate;
+}
+
+.sidebar-collapse-control {
+  pointer-events: auto;
+  visibility: visible !important;
+  opacity: 1 !important;
+}

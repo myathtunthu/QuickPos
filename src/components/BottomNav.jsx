@@ -17,15 +17,12 @@ export default function BottomNav() {
     { path: '/reports', icon: BarChart3, label: t('navReports', 'Reports'), perm: 'view_reports' },
   ];
 
-  return (
-    <nav
-      className="fixed bottom-0 left-0 w-full bg-[#0d1120]/95 backdrop-blur border-t-2 border-cyan-500/10 z-40"
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.25rem)' }}
-    >
-      <div className="flex justify-around items-end px-1 pt-1 pb-1 max-w-6xl mx-auto">
-        {navItems.map((item) => {
-          if (item.perm && !hasPermission(item.perm)) return null;
+  const visibleItems = navItems.filter((item) => !item.perm || hasPermission(item.perm));
 
+  return (
+    <nav className="fixed bottom-0 left-0 z-40 w-full border-t border-white/10 bg-slate-950/84 px-2 pt-2 shadow-2xl backdrop-blur-xl safe-bottom-padding">
+      <div className="mx-auto grid max-w-3xl grid-cols-5 gap-1 rounded-[1.4rem] border border-white/10 bg-white/[0.035] p-1">
+        {visibleItems.map((item) => {
           const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
           const Icon = item.icon;
 
@@ -34,12 +31,15 @@ export default function BottomNav() {
               key={item.path}
               type="button"
               onClick={() => navigate(item.path)}
-              className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-lg transition-all active:scale-95 min-w-[48px] ${
-                active ? 'text-cyan-400 scale-105' : 'text-slate-600 hover:text-slate-400'
+              className={`relative flex min-h-[54px] flex-col items-center justify-center rounded-2xl px-1 py-1.5 transition-all active:scale-95 ${
+                active
+                  ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20'
+                  : 'text-slate-500 hover:bg-white/[0.06] hover:text-slate-200'
               }`}
+              aria-current={active ? 'page' : undefined}
             >
-              <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
-              <span className={`text-[9px] font-bold uppercase mt-0.5 tracking-wider ${active ? 'text-cyan-400' : 'text-slate-600'}`}>
+              <Icon size={20} strokeWidth={active ? 2.7 : 1.8} />
+              <span className="mt-0.5 max-w-full truncate text-[9px] font-black uppercase tracking-wide">
                 {item.label}
               </span>
             </button>

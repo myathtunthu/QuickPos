@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -53,24 +52,7 @@ export default function Sidebar({ onCloseMobile }) {
 
   return (
     <aside className="flex h-full flex-col border-r border-white/10 bg-slate-950/90 shadow-2xl backdrop-blur-xl">
-      <div className="px-5 pb-5 pt-6">
-        <div className="rounded-[1.6rem] border border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 via-slate-900 to-blue-500/10 p-4 shadow-lg shadow-cyan-950/20">
-          <img
-            src="/logo.png"
-            alt="NexPOS"
-            className="mx-auto h-14 w-auto max-w-[180px] object-contain"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-          <div className="mt-3 flex items-center justify-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]" />
-            <span className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-300">
-              {t('systemOnline', 'System Online')}
-            </span>
-          </div>
-        </div>
-      </div>
+      <div className="px-3 pt-6" />
 
       <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 pb-4">
         <ul className="space-y-1.5">

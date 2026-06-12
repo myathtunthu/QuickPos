@@ -227,3 +227,20 @@ button {
   visibility: visible !important;
   opacity: 1 !important;
 }
+
+/* Mobile/sidebar/header hard fix v5 */
+.header-logo-icon img {
+  display: block;
+}
+
+.mobile-sidebar-open-control {
+  pointer-events: auto;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 767px) {
+  .sidebar-shell {
+    display: none !important;
+  }
+}

@@ -1,21 +1,19 @@
 import { forwardRef } from 'react';
 
-const Input = forwardRef(({ label, error, ...props }, ref) => {
+const Input = forwardRef(({ label, error, className = '', ...props }, ref) => {
   return (
-    <div className="w-full space-y-1">
+    <div className="w-full space-y-1.5">
       {label && (
-        <label className="block text-xs font-mono uppercase tracking-widest text-gray-400">
+        <label className="block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
           {label}
         </label>
       )}
       <input
         ref={ref}
-        className={`input-cyber ${error ? 'border-neon-pink focus:ring-neon-pink' : ''}`}
+        className={`input-cyber ${error ? 'border-rose-400 focus:border-rose-400 focus:ring-rose-400/15' : ''} ${className}`}
         {...props}
       />
-      {error && (
-        <p className="text-neon-pink text-xs mt-1">{error}</p>
-      )}
+      {error && <p className="text-xs font-semibold text-rose-300">{error}</p>}
     </div>
   );
 });

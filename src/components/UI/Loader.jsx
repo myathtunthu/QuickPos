@@ -1,28 +1,18 @@
-export default function Loader({ fullScreen = false, text = "LOADING..." }) {
+export default function Loader({ fullScreen = false, text = 'LOADING...' }) {
   const content = (
-    <div className="flex flex-col items-center justify-center space-y-4">
-      <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-t-2 border-neon-cyan animate-spin"></div>
-        <div className="absolute inset-2 rounded-full border-r-2 border-neon-pink animate-spin-reverse"></div>
-        <div className="absolute inset-4 rounded-full border-b-2 border-blue-500 animate-spin"></div>
+    <div className="flex flex-col items-center justify-center gap-4">
+      <div className="relative h-16 w-16">
+        <div className="absolute inset-0 rounded-full border-2 border-cyan-300/20 border-t-cyan-300 animate-spin" />
+        <div className="absolute inset-2 rounded-full border-2 border-blue-300/20 border-r-blue-300 animate-spin-reverse" />
+        <div className="absolute inset-5 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(34,211,238,0.55)]" />
       </div>
-      <p className="text-neon-cyan font-mono text-sm tracking-[0.2em] animate-pulse">
-        {text}
-      </p>
+      <p className="text-sm font-black uppercase tracking-[0.26em] text-cyan-200 animate-pulse">{text}</p>
     </div>
   );
 
   if (fullScreen) {
-    return (
-      <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center backdrop-blur-sm">
-        {content}
-      </div>
-    );
+    return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-md">{content}</div>;
   }
 
-  return (
-    <div className="w-full h-full min-h-[200px] flex items-center justify-center">
-      {content}
-    </div>
-  );
+  return <div className="flex min-h-[220px] w-full items-center justify-center">{content}</div>;
 }

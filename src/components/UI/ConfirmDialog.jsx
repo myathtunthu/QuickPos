@@ -9,7 +9,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   isLoading = false,
-  isDangerous = true // True ဆိုလျှင် အနီရောင်ခလုတ်ပြမည်
+  isDangerous = true,
 }) {
   const { t } = useLanguage();
   const dialogTitle = title || t('confirmDefaultTitle', 'Confirm');
@@ -18,46 +18,36 @@ export default function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-[#0d1120] border border-cyan-500/20 rounded-2xl max-w-sm w-full p-6 shadow-2xl scale-in-95 duration-200">
-        
-        <div className="flex items-center gap-4 mb-4 border-b border-white/5 pb-4">
-          <div className={`p-3 rounded-full ${isDangerous ? 'bg-rose-500/10 text-rose-500' : 'bg-cyan-500/10 text-cyan-500'}`}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/78 p-4 backdrop-blur-md">
+      <div className="app-card w-full max-w-sm overflow-hidden animate-fade-up">
+        <div className="flex items-start gap-4 border-b border-white/10 bg-white/[0.035] p-5">
+          <div className={`rounded-2xl p-3 ${isDangerous ? 'bg-rose-500/10 text-rose-200' : 'bg-cyan-500/10 text-cyan-200'}`}>
             {isDangerous ? <AlertTriangle size={24} /> : <Info size={24} />}
           </div>
-          <h2 className="text-xl font-black text-white">{dialogTitle}</h2>
+          <div className="min-w-0">
+            <h2 className="text-xl font-black text-white">{dialogTitle}</h2>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-slate-400">{dialogMessage}</p>
+          </div>
         </div>
 
-        <p className="text-slate-400 mb-8 leading-relaxed text-sm">
-          {dialogMessage}
-        </p>
-
-        <div className="flex gap-3">
+        <div className="grid grid-cols-2 gap-3 p-5">
           <button
+            type="button"
             onClick={onCancel}
             disabled={isLoading}
-            className="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
+            className="ui-btn-secondary"
           >
             {t('cancel', 'Cancel')}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className={`flex-1 px-4 py-3 font-black rounded-xl text-white transition-all active:scale-95 shadow-lg disabled:opacity-50 flex justify-center items-center gap-2
-              ${isDangerous 
-                ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20' 
-                : 'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-600/20'
-              }
-            `}
+            className={isDangerous ? 'ui-btn-danger' : 'ui-btn-primary'}
           >
-            {isLoading ? (
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-            ) : (
-              t('confirm', 'Confirm')
-            )}
+            {isLoading ? <span className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" /> : t('confirm', 'Confirm')}
           </button>
         </div>
-
       </div>
     </div>
   );

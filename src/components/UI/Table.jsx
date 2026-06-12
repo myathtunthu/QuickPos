@@ -1,20 +1,23 @@
-export default function Table({ headers, children }) {
+export default function Table({ headers = [], children, className = '' }) {
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-gray-800 glass-panel">
-      <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left text-sm text-gray-300">
-          <thead className="bg-gray-900/80 text-xs uppercase text-gray-400 font-mono tracking-wider border-b border-gray-800">
+    <div className={`app-card w-full overflow-hidden ${className}`}>
+      <div className="custom-scrollbar overflow-x-auto">
+        <table className="w-full min-w-max text-left text-sm text-slate-300">
+          <thead className="border-b border-white/10 bg-white/[0.035] text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
             <tr>
               {headers.map((header, index) => (
-                <th key={index} className={`px-6 py-4 ${header.align === 'right' ? 'text-right' : header.align === 'center' ? 'text-center' : 'text-left'}`}>
+                <th
+                  key={`${header.label}-${index}`}
+                  className={`px-4 py-4 sm:px-5 ${
+                    header.align === 'right' ? 'text-right' : header.align === 'center' ? 'text-center' : 'text-left'
+                  }`}
+                >
                   {header.label}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-800/50">
-            {children}
-          </tbody>
+          <tbody className="divide-y divide-white/[0.07]">{children}</tbody>
         </table>
       </div>
     </div>

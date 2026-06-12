@@ -1,8 +1,7 @@
 import React from 'react';
+import { AlertCircle, CheckCircle, Info, X } from 'lucide-react';
 import { useToastStore } from '../../store/toastStore';
-import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
-// 🌟 EntryPage, SettingsPage တို့မှ လှမ်းခေါ်နိုင်ရန် showToast ကို export လုပ်ပေးခြင်း
 export const showToast = (message, type = 'info') => {
   useToastStore.getState().showToast(message, type);
 };
@@ -10,33 +9,42 @@ export const showToast = (message, type = 'info') => {
 export default function Toast() {
   const { toasts, removeToast } = useToastStore();
 
+  const config = {
+    success: {
+      icon: CheckCircle,
+      className: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-50',
+      iconClass: 'text-emerald-300',
+    },
+    error: {
+      icon: AlertCircle,
+      className: 'border-rose-400/30 bg-rose-500/10 text-rose-50',
+      iconClass: 'text-rose-300',
+    },
+    info: {
+      icon: Info,
+      className: 'border-cyan-400/30 bg-cyan-500/10 text-cyan-50',
+      iconClass: 'text-cyan-300',
+    },
+  };
+
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 print:hidden">
+    <div className="fixed bottom-24 right-3 z-[9999] flex w-[calc(100vw-1.5rem)] max-w-sm flex-col gap-2 print:hidden sm:bottom-4 sm:right-4 sm:w-auto">
       {toasts.map((toast) => {
-        const isSuccess = toast.type === 'success';
-        const isError = toast.type === 'error';
+        const item = config[toast.type] || config.info;
+        const Icon = item.icon;
 
         return (
-          <div 
+          <div
             key={toast.id}
-            className={`
-              flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border min-w-[250px]
-              animate-in slide-in-from-right-8 fade-in duration-300
-              ${isSuccess ? 'bg-green-900/80 border-green-500 text-green-100' : ''}
-              ${isError ? 'bg-red-900/80 border-red-500 text-red-100' : ''}
-              ${!isSuccess && !isError ? 'bg-gray-800/90 border-gray-600 text-gray-100' : ''}
-              backdrop-blur-md
-            `}
+            className={`flex min-w-0 items-start gap-3 rounded-2xl border px-4 py-3 shadow-2xl backdrop-blur-xl animate-fade-up ${item.className}`}
           >
-            {isSuccess && <CheckCircle size={20} className="text-green-400" />}
-            {isError && <AlertCircle size={20} className="text-red-400" />}
-            {!isSuccess && !isError && <Info size={20} className="text-blue-400" />}
-            
-            <span className="flex-1 text-sm font-medium">{toast.message}</span>
-            
-            <button 
+            <Icon size={20} className={`mt-0.5 flex-shrink-0 ${item.iconClass}`} />
+            <span className="min-w-0 flex-1 text-sm font-bold leading-relaxed">{toast.message}</span>
+            <button
+              type="button"
               onClick={() => removeToast(toast.id)}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="rounded-lg p-1 text-slate-300/80 transition hover:bg-white/10 hover:text-white"
+              aria-label="Dismiss notification"
             >
               <X size={16} />
             </button>

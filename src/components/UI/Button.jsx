@@ -1,29 +1,35 @@
-export default function Button({ 
-  children, 
-  variant = 'primary', 
-  className = '', 
-  loading = false, 
+export default function Button({
+  children,
+  variant = 'primary',
+  className = '',
+  loading = false,
   icon: Icon,
-  ...props 
+  disabled,
+  type = 'button',
+  ...props
 }) {
-  const baseStyle = "flex items-center justify-center px-4 py-2 rounded-lg font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed";
-  
+  const baseStyle = 'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]';
+
   const variants = {
-    primary: "bg-transparent border border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-black hover:shadow-[0_0_15px_rgba(0,255,255,0.6)]",
-    danger: "bg-transparent border border-neon-pink text-neon-pink hover:bg-neon-pink hover:text-black hover:shadow-[0_0_15px_rgba(255,0,255,0.6)]",
-    ghost: "bg-transparent text-gray-400 hover:text-white hover:bg-gray-800"
+    primary: 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20 hover:bg-cyan-300',
+    secondary: 'border border-slate-700 bg-slate-900/70 text-slate-100 hover:border-cyan-400/60 hover:bg-slate-800',
+    danger: 'border border-rose-400/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20',
+    success: 'border border-emerald-400/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20',
+    warning: 'border border-amber-400/30 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20',
+    ghost: 'text-slate-300 hover:bg-white/[0.07] hover:text-white',
   };
 
   return (
-    <button 
-      className={`${baseStyle} ${variants[variant]} ${className}`} 
-      disabled={loading}
+    <button
+      type={type}
+      className={`${baseStyle} ${variants[variant] || variants.primary} ${className}`}
+      disabled={loading || disabled}
       {...props}
     >
       {loading ? (
-        <span className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></span>
+        <span className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" />
       ) : Icon ? (
-        <Icon size={18} className="mr-2" />
+        <Icon size={18} />
       ) : null}
       {children}
     </button>

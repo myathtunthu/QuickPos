@@ -1,25 +1,23 @@
-export default function Tabs({ tabs, activeTab, onTabChange }) {
+export default function Tabs({ tabs = [], activeTab, onTabChange }) {
   return (
-    <div className="border-b border-gray-800">
-      <nav className="-mb-px flex space-x-6 overflow-x-auto hide-scrollbar" aria-label="Tabs">
+    <div className="hide-scrollbar overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/45 p-1">
+      <nav className="flex min-w-max gap-1" aria-label="Tabs">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
+          const Icon = tab.icon;
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => onTabChange(tab.id)}
-              className={`
-                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-all duration-300
-                ${isActive
-                  ? 'border-neon-cyan text-neon-cyan drop-shadow-[0_0_8px_rgba(0,255,255,0.8)]'
-                  : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
-                }
-              `}
+              className={`inline-flex min-h-[42px] items-center gap-2 rounded-xl px-4 py-2 text-sm font-black transition-all active:scale-[0.98] ${
+                isActive
+                  ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20'
+                  : 'text-slate-400 hover:bg-white/[0.06] hover:text-white'
+              }`}
             >
-              <div className="flex items-center space-x-2">
-                {tab.icon && <tab.icon size={16} />}
-                <span className="font-mono uppercase tracking-wider">{tab.label}</span>
-              </div>
+              {Icon && <Icon size={16} />}
+              <span>{tab.label}</span>
             </button>
           );
         })}

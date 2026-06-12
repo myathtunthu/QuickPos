@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -158,6 +158,18 @@ const LOCAL_TEXT = {
     actionCenter: 'အမြန်လုပ်ဆောင်ရန်',
     importantNow: 'အခုအရေးကြီးတာ',
     healthyStock: 'ကုန်လက်ကျန်ကောင်းသည်',
+    loadingDashboard: 'NexPOS Dashboard ကို ဖွင့်နေပါသည်...',
+    saleRecord: 'အရောင်း',
+    purchaseRecord: 'အဝယ်',
+    expenseRecord: 'အသုံးစရိတ်',
+    recordFallback: 'မှတ်တမ်း',
+    productCategoryGeneral: 'အထွေထွေ',
+    readRecordsError: 'Dashboard records မဖတ်နိုင်ပါ။',
+    readProductsError: 'Dashboard products မဖတ်နိုင်ပါ။',
+    readCustomersError: 'Dashboard customers မဖတ်နိုင်ပါ။',
+    readSuppliersError: 'Dashboard suppliers မဖတ်နိုင်ပါ။',
+    partialData: 'Dashboard data တချို့ မဖတ်နိုင်သေးပါ။ Firebase rules/index ကိုစစ်ပါ။',
+    retry: 'ပြန်ဖတ်မည်',
   },
   en: {
     dashboard: 'Dashboard',
@@ -207,6 +219,18 @@ const LOCAL_TEXT = {
     actionCenter: 'Action Center',
     importantNow: 'Important Now',
     healthyStock: 'Stock is healthy',
+    loadingDashboard: 'Loading NexPOS Dashboard...',
+    saleRecord: 'Sale',
+    purchaseRecord: 'Purchase',
+    expenseRecord: 'Expense',
+    recordFallback: 'Record',
+    productCategoryGeneral: 'General',
+    readRecordsError: 'Unable to read dashboard records.',
+    readProductsError: 'Unable to read dashboard products.',
+    readCustomersError: 'Unable to read dashboard customers.',
+    readSuppliersError: 'Unable to read dashboard suppliers.',
+    partialData: 'Some dashboard data could not be loaded. Check Firebase rules/indexes.',
+    retry: 'Retry',
   },
   zh: {
     dashboard: '仪表盘',
@@ -256,6 +280,18 @@ const LOCAL_TEXT = {
     actionCenter: '快捷操作',
     importantNow: '当前重点',
     healthyStock: '库存健康',
+    loadingDashboard: '正在加载 NexPOS 仪表盘...',
+    saleRecord: '销售',
+    purchaseRecord: '采购',
+    expenseRecord: '费用',
+    recordFallback: '记录',
+    productCategoryGeneral: '通用',
+    readRecordsError: '无法读取仪表盘记录。',
+    readProductsError: '无法读取仪表盘商品。',
+    readCustomersError: '无法读取仪表盘客户。',
+    readSuppliersError: '无法读取仪表盘供应商。',
+    partialData: '部分仪表盘数据无法读取。请检查 Firebase 规则/索引。',
+    retry: '重试',
   },
 };
 
@@ -278,6 +314,8 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadErrors, setLoadErrors] = useState({});
+  const [refreshKey, setRefreshKey] = useState(0);
   const [dateRange, setDateRange] = useState('today');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -286,50 +324,62 @@ export default function DashboardPage() {
   const money = (num) => `${fmt(num)} Ks`;
 
   useEffect(() => {
-    if (!tenantId) {
-      setLoading(false);
-      return undefined;
-    }
+    let isMounted = true;
 
-    setLoading(true);
-
-    const unsubRecords = onSnapshot(
-      query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), orderBy('createdAt', 'desc'), limit(800)),
-      (snap) => {
-        setRecords(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Dashboard records error:', error);
-        setLoading(false);
+    const readCollection = async (name, maxRows, errorKey) => {
+      try {
+        const snap = await getDocs(query(collection(db, name), where('tenantId', '==', tenantId), limit(maxRows)));
+        return { ok: true, key: errorKey, rows: snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
+      } catch (error) {
+        console.error(tx(errorKey), error);
+        return { ok: false, key: errorKey, rows: [] };
       }
-    );
+    };
 
-    const unsubProducts = onSnapshot(
-      query(collection(db, 'pos_products'), where('tenantId', '==', tenantId), limit(500)),
-      (snap) => setProducts(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))),
-      (error) => console.error('Dashboard products error:', error)
-    );
+    const loadDashboardData = async () => {
+      if (!tenantId) {
+        if (isMounted) {
+          setRecords([]);
+          setProducts([]);
+          setCustomers([]);
+          setSuppliers([]);
+          setLoadErrors({});
+          setLoading(false);
+        }
+        return;
+      }
 
-    const unsubCustomers = onSnapshot(
-      query(collection(db, 'pos_customers'), where('tenantId', '==', tenantId), limit(500)),
-      (snap) => setCustomers(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))),
-      (error) => console.error('Dashboard customers error:', error)
-    );
+      setLoading(true);
+      setLoadErrors({});
 
-    const unsubSuppliers = onSnapshot(
-      query(collection(db, 'pos_suppliers'), where('tenantId', '==', tenantId), limit(500)),
-      (snap) => setSuppliers(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))),
-      (error) => console.error('Dashboard suppliers error:', error)
-    );
+      const [recordsResult, productsResult, customersResult, suppliersResult] = await Promise.all([
+        readCollection('pos_records', 1200, 'readRecordsError'),
+        readCollection('pos_products', 800, 'readProductsError'),
+        readCollection('pos_customers', 800, 'readCustomersError'),
+        readCollection('pos_suppliers', 800, 'readSuppliersError'),
+      ]);
+
+      if (!isMounted) return;
+
+      setRecords([...recordsResult.rows].sort((a, b) => getTimeValue(b) - getTimeValue(a)));
+      setProducts([...productsResult.rows].sort((a, b) => getProductName(a).localeCompare(getProductName(b))));
+      setCustomers([...customersResult.rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+      setSuppliers([...suppliersResult.rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+      setLoadErrors({
+        records: !recordsResult.ok,
+        products: !productsResult.ok,
+        customers: !customersResult.ok,
+        suppliers: !suppliersResult.ok,
+      });
+      setLoading(false);
+    };
+
+    loadDashboardData();
 
     return () => {
-      unsubRecords();
-      unsubProducts();
-      unsubCustomers();
-      unsubSuppliers();
+      isMounted = false;
     };
-  }, [tenantId]);
+  }, [tenantId, language, refreshKey]);
 
   if (profile && profile.role !== 'admin' && profile.role !== 'owner' && !hasPermission('view_reports')) {
     const permissions = profile.permissions || [];
@@ -443,18 +493,25 @@ export default function DashboardPage() {
         const minStock = toNumber(product.minStock ?? product.minStockAlert ?? 5);
         const cost = getProductCost(product);
         inventoryValue += stock * cost;
-        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || 'General' };
+        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || tx('productCategoryGeneral') };
       })
       .filter((product) => product.stock <= product.minStock)
       .sort((a, b) => a.stock - b.stock);
     return { inventoryValue, lowStock, lowStockCount: lowStock.length, outOfStock: lowStock.filter((item) => item.stock <= 0).length };
-  }, [products]);
+  }, [products, language]);
 
   const chartData = useMemo(() => {
     const days = [];
+    const dayLabels = {
+      en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      mm: ['နွေ', 'လာ', 'ဂါ', 'ဟူး', 'ကြာ', 'သော', 'နေ'],
+      zh: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+    };
+
     for (let i = 6; i >= 0; i -= 1) {
       const iso = getPastISO(i);
-      const day = new Date(iso).toLocaleDateString('en-US', { weekday: 'short' });
+      const date = new Date(iso);
+      const day = dayLabels[language]?.[date.getDay()] || dayLabels.en[date.getDay()];
       const dayRecords = records.filter((record) => getRecordDateISO(record) === iso);
       let sales = 0;
       let profit = 0;
@@ -477,7 +534,7 @@ export default function DashboardPage() {
       days.push({ day, sales, profit, expenses, net: profit - expenses });
     }
     return days;
-  }, [records, productMap]);
+  }, [records, productMap, language]);
 
   const importantAlerts = useMemo(() => {
     const alerts = [];
@@ -550,7 +607,7 @@ export default function DashboardPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#050713] text-white">
         <div className="h-14 w-14 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
-        <p className="mt-4 animate-pulse font-black text-cyan-300">Loading NexPOS Dashboard...</p>
+        <p className="mt-4 animate-pulse font-black text-cyan-300">{tx('loadingDashboard')}</p>
       </div>
     );
   }
@@ -602,6 +659,18 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+
+        {Object.values(loadErrors).some(Boolean) && (
+          <div className="flex flex-col gap-3 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 text-sm font-bold">
+              <AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={20} />
+              <span>{tx('partialData')}</span>
+            </div>
+            <button type="button" onClick={() => setRefreshKey((value) => value + 1)} className="rounded-2xl bg-amber-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-amber-200">
+              {tx('retry')}
+            </button>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {mainKpis.map((item) => <KpiCard key={item.label} item={item} />)}
@@ -741,7 +810,7 @@ export default function DashboardPage() {
                   return (
                     <Link key={record.id} to="/records" className={`block rounded-3xl border bg-gradient-to-br p-4 transition hover:-translate-y-0.5 ${palette[tone] || palette.cyan}`}>
                       <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0"><p className="truncate font-black capitalize">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
+                        <div className="min-w-0"><p className="truncate font-black">{tx(`${type}Record`) || tx('recordFallback')} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
                         <p className="text-right font-black text-white">{money(getRecordAmount(record))}</p>
                       </div>
                     </Link>

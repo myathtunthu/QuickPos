@@ -79,15 +79,11 @@ export default function Layout() {
               <Menu size={23} />
             </button>
 
-            <div className="header-logo-icon flex h-12 w-14 items-center overflow-hidden rounded-2xl">
+            <div className="header-logo-full flex h-12 min-w-0 items-center overflow-hidden">
               <img
-                src="/logo-icon.png"
-                alt="Logo"
-                className="h-12 w-auto object-contain"
-                onError={(event) => {
-                  event.currentTarget.src = '/logo.png';
-                  event.currentTarget.className = 'h-12 w-[142px] max-w-none object-cover object-left';
-                }}
+                src="/logo.png"
+                alt="NexPOS"
+                className="h-12 w-auto max-w-[170px] object-contain sm:max-w-[210px]"
               />
             </div>
           </div>

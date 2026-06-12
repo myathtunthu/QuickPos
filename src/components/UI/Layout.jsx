@@ -11,6 +11,7 @@ export default function Layout() {
   const location = useLocation();
   const { language, languageLabel, toggleLanguage, t } = useLanguage();
   const [guideOpen, setGuideOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const currentGuide = useMemo(
     () => getPageGuide(location.pathname, t, language),
@@ -19,8 +20,15 @@ export default function Layout() {
 
   return (
     <div className="app-shell-bg flex h-screen w-screen overflow-hidden text-slate-100">
-      <div className="hidden h-full w-[280px] flex-shrink-0 md:block">
-        <Sidebar />
+      <div
+        className={`hidden h-full flex-shrink-0 transition-[width] duration-300 ease-out md:block ${
+          sidebarCollapsed ? 'w-[88px]' : 'w-[280px]'
+        }`}
+      >
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+        />
       </div>
 
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">

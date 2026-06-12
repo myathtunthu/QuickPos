@@ -228,9 +228,13 @@ button {
   opacity: 1 !important;
 }
 
-/* Mobile/sidebar/header hard fix v5 */
-.header-logo-icon img {
+/* Mobile/sidebar/header hard fix v6 */
+.header-logo-full img {
   display: block;
+}
+
+.header-logo-full {
+  max-width: min(42vw, 210px);
 }
 
 .mobile-sidebar-open-control {

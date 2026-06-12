@@ -47,13 +47,85 @@ const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin']);
 
 const CUSTOMER_PAGE_TEXT = {
   en: {
-    customerBook: 'Customer Book', paymentHistory: 'Payment History', searchCustomers: 'Search customer...', add: 'Add', noCustomersFound: 'No customers found.', unableReadCustomers: 'Unable to read customer list. Please check permission or connection.',
+    customerBook: 'Customer Book',
+    paymentHistory: 'Payment History',
+    searchCustomers: 'Search customer...',
+    add: 'Add',
+    noCustomersFound: 'No customers found.',
+    unableReadCustomers: 'Unable to read customer list. Please check permission or connection.',
+    settled: 'Settled',
+    noPhone: 'No phone',
+    customerInfo: 'Customer Info',
+    contact: 'Contact',
+    creditLimit: 'Credit Limit',
+    creditBalance: 'Credit Balance',
+    actions: 'Actions',
+    address: 'Address',
+    note: 'Note',
+    ledger: 'Ledger',
+    payment: 'Payment',
+    edit: 'Edit',
+    delete: 'Delete',
+    customer: 'Customer',
+    times: 'Times',
+    totalPaid: 'Total Paid',
+    lastPayment: 'Last Payment',
+    noPaymentHistory: 'No payment history found.',
+    loadMore: 'Load More',
   },
   mm: {
-    customerBook: 'Customer စာရင်း', paymentHistory: 'ငွေသွင်းမှတ်တမ်း', searchCustomers: 'Customer ရှာရန်...', add: 'ထည့်မည်', noCustomersFound: 'Customer မရှိသေးပါ။', unableReadCustomers: 'Customer စာရင်းဖတ်မရပါ။ Permission သို့မဟုတ် internet connection ကိုစစ်ပါ။',
+    customerBook: 'Customer စာရင်း',
+    paymentHistory: 'ငွေသွင်းမှတ်တမ်း',
+    searchCustomers: 'Customer ရှာရန်...',
+    add: 'ထည့်မည်',
+    noCustomersFound: 'Customer မရှိသေးပါ။',
+    unableReadCustomers: 'Customer စာရင်းဖတ်မရပါ။ Permission သို့မဟုတ် internet connection ကိုစစ်ပါ။',
+    settled: 'ရှင်းပြီး',
+    noPhone: 'ဖုန်းမရှိ',
+    customerInfo: 'Customer အချက်အလက်',
+    contact: 'ဆက်သွယ်ရန်',
+    creditLimit: 'Credit Limit',
+    creditBalance: 'အကြွေးလက်ကျန်',
+    actions: 'လုပ်ဆောင်ချက်များ',
+    address: 'လိပ်စာ',
+    note: 'မှတ်ချက်',
+    ledger: 'မှတ်တမ်း',
+    payment: 'ငွေဆပ်မည်',
+    edit: 'ပြင်မည်',
+    delete: 'ဖျက်မည်',
+    customer: 'Customer',
+    times: 'အကြိမ်',
+    totalPaid: 'စုစုပေါင်းဆပ်ငွေ',
+    lastPayment: 'နောက်ဆုံးဆပ်ငွေ',
+    noPaymentHistory: 'ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။',
+    loadMore: 'ထပ်ပြမည်',
   },
   zh: {
-    customerBook: '客户账本', paymentHistory: '付款记录', searchCustomers: '搜索客户...', add: '新增', noCustomersFound: '暂无客户。', unableReadCustomers: '无法读取客户列表，请检查权限或网络。',
+    customerBook: '客户账本',
+    paymentHistory: '付款记录',
+    searchCustomers: '搜索客户...',
+    add: '新增',
+    noCustomersFound: '暂无客户。',
+    unableReadCustomers: '无法读取客户列表，请检查权限或网络。',
+    settled: '已结清',
+    noPhone: '无电话',
+    customerInfo: '客户信息',
+    contact: '联系方式',
+    creditLimit: '信用额度',
+    creditBalance: '欠款余额',
+    actions: '操作',
+    address: '地址',
+    note: '备注',
+    ledger: '账本',
+    payment: '收款',
+    edit: '编辑',
+    delete: '删除',
+    customer: '客户',
+    times: '次数',
+    totalPaid: '累计付款',
+    lastPayment: '最后付款',
+    noPaymentHistory: '暂无付款记录。',
+    loadMore: '加载更多',
   },
 };
 const getCustomerText = (language, key) => CUSTOMER_PAGE_TEXT[language]?.[key] || CUSTOMER_PAGE_TEXT.en[key] || key;
@@ -692,11 +764,11 @@ export default function CustomersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer Info</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Limit</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
-                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tx('customerInfo')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tx('contact')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tx('creditLimit')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tx('creditBalance')}</th>
+                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">{tx('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -712,9 +784,9 @@ export default function CustomersPage() {
                           <p className="text-base font-bold text-white">{customer.name}</p>
                           {customer.note && <p className="mt-1 max-w-[260px] truncate text-xs text-slate-500">{customer.note}</p>}
                         </td>
-                        <td className="p-4 text-slate-400"><p>{customer.phone || '-'}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
+                        <td className="p-4 text-slate-400"><p>{customer.phone || tx('noPhone')}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
                         <td className="p-4 text-right text-slate-300">{limitAmount > 0 ? formatMoney(limitAmount) : '-'}</td>
-                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">ရှင်းပြီး</span>}</td>
+                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">{tx('settled')}</span>}</td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center gap-2">
                             <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16} /></button>
@@ -747,20 +819,20 @@ export default function CustomersPage() {
                     <button type="button" onClick={() => toggleCust(customer.id)} className="flex w-full items-start justify-between gap-3 text-left">
                       <div>
                         <p className="font-black text-white">{customer.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{customer.phone || '-'}</p>
-                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : 'ရှင်းပြီး'}</p>
+                        <p className="mt-1 text-xs text-slate-400">{customer.phone || tx('noPhone')}</p>
+                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : tx('settled')}</p>
                       </div>
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
                     {isExpanded && (
                       <div className="mt-4 space-y-3 rounded-2xl bg-black/30 p-3 text-sm">
-                        <p className="text-slate-400">လိပ်စာ: {customer.address || '-'}</p>
+                        <p className="text-slate-400">{tx('address')}: {customer.address || '-'}</p>
                         <p className="text-slate-400">Credit Limit: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
-                        {customer.note && <p className="text-slate-400">မှတ်ချက်: {customer.note}</p>}
+                        {customer.note && <p className="text-slate-400">{tx('note')}: {customer.note}</p>}
                         <div className="flex flex-wrap gap-2 pt-2">
-                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">Ledger</button>
-                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">Payment</button>}
-                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">Edit</button>}
+                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">{tx('ledger')}</button>
+                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">{tx('payment')}</button>}
+                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">{tx('edit')}</button>}
                         </div>
                       </div>
                     )}
@@ -774,20 +846,20 @@ export default function CustomersPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                 <tr>
-                  <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer</th>
-                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">Times</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Last Payment</th>
+                  <th className="p-4 text-xs font-bold uppercase tracking-wider">{tx('customer')}</th>
+                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">{tx('times')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tx('totalPaid')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tx('lastPayment')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {mergedHistory.length === 0 ? (
-                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tx('noPaymentHistory')}</td></tr>
                 ) : visibleHistory.map((history) => (
                   <React.Fragment key={history.key}>
                     <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
                       <td className="p-4 text-base font-bold text-white">{history.personName}</td>
-                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} ကြိမ်</td>
+                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} {tx('times')}</td>
                       <td className="p-4 text-right text-base font-black text-green-400">+{formatMoney(history.totalPaid)}</td>
                       <td className="p-4 text-right text-slate-400">{history.lastPaymentDate || '-'}</td>
                     </tr>
@@ -809,11 +881,11 @@ export default function CustomersPage() {
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">Load More ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{tx('loadMore')} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">Load More ({visibleHistory.length}/{mergedHistory.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{tx('loadMore')} ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
       {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (

@@ -13,9 +13,15 @@ const SUPPLIER_RENDER_PAGE_SIZE = 50;
 const SUPPLIER_HISTORY_LIMIT = 800;
 
 const SUPPLIER_PAGE_TEXT = {
-  en: { supplierBook: 'Supplier Book', paymentHistory: 'Payment History', searchSuppliers: 'Search supplier...', add: 'Add', noSuppliersFound: 'No suppliers found.', unableReadSuppliers: 'Unable to read supplier list. Please check permission or connection.', payable: 'PAYABLE', settled: 'Settled', noPhone: 'No phone' },
-  mm: { supplierBook: 'Supplier စာရင်း', paymentHistory: 'ငွေချေမှတ်တမ်း', searchSuppliers: 'Supplier ရှာရန်...', add: 'ထည့်မည်', noSuppliersFound: 'Supplier မရှိသေးပါ။', unableReadSuppliers: 'Supplier စာရင်းဖတ်မရပါ။ Permission သို့မဟုတ် internet connection ကိုစစ်ပါ။', payable: 'ပေးရန်', settled: 'ရှင်းပြီး', noPhone: 'ဖုန်းမရှိ' },
-  zh: { supplierBook: '供应商账本', paymentHistory: '付款记录', searchSuppliers: '搜索供应商...', add: '新增', noSuppliersFound: '暂无供应商。', unableReadSuppliers: '无法读取供应商列表，请检查权限或网络。', payable: '应付', settled: '已结清', noPhone: '无电话' },
+  en: {
+    supplierBook: 'Supplier Book', paymentHistory: 'Payment History', searchSuppliers: 'Search supplier...', add: 'Add', noSuppliersFound: 'No suppliers found.', unableReadSuppliers: 'Unable to read supplier list. Please check permission or connection.', payable: 'Payable', settled: 'Settled', noPhone: 'No phone', supplierName: 'Supplier Name', paymentCount: 'Payment Count', totalPaidMerged: 'Total Paid', lastPayment: 'Last Payment', noPaymentHistory: 'No payment history found.', loadMore: 'Load More', address: 'Address', editSupplier: 'Edit Supplier', addSupplier: 'Add Supplier', name: 'Name', phone: 'Phone', save: 'Save', paymentTitle: 'Supplier Payment', payableBalance: 'Payable Balance', paymentAmount: 'Payment Amount', note: 'Note', pay: 'Pay',
+  },
+  mm: {
+    supplierBook: 'Supplier စာရင်း', paymentHistory: 'ငွေချေမှတ်တမ်း', searchSuppliers: 'Supplier ရှာရန်...', add: 'ထည့်မည်', noSuppliersFound: 'Supplier မရှိသေးပါ။', unableReadSuppliers: 'Supplier စာရင်းဖတ်မရပါ။ Permission သို့မဟုတ် internet connection ကိုစစ်ပါ။', payable: 'ပေးရန်', settled: 'ရှင်းပြီး', noPhone: 'ဖုန်းမရှိ', supplierName: 'Supplier အမည်', paymentCount: 'ငွေချေ အကြိမ်', totalPaidMerged: 'စုစုပေါင်းချေငွေ', lastPayment: 'နောက်ဆုံးချေငွေ', noPaymentHistory: 'ငွေချေမှတ်တမ်း မရှိသေးပါ။', loadMore: 'ထပ်ပြမည်', address: 'လိပ်စာ', editSupplier: 'Supplier ပြင်မည်', addSupplier: 'Supplier ထည့်မည်', name: 'အမည်', phone: 'ဖုန်းနံပါတ်', save: 'သိမ်းမည်', paymentTitle: 'ပွဲရုံသို့ ငွေချေခြင်း', payableBalance: 'ပေးရန်ကျန်ငွေ', paymentAmount: 'ပေးချေမည့် ငွေပမာဏ', note: 'မှတ်ချက်', pay: 'ငွေချေမည်',
+  },
+  zh: {
+    supplierBook: '供应商账本', paymentHistory: '付款记录', searchSuppliers: '搜索供应商...', add: '新增', noSuppliersFound: '暂无供应商。', unableReadSuppliers: '无法读取供应商列表，请检查权限或网络。', payable: '应付', settled: '已结清', noPhone: '无电话', supplierName: '供应商名称', paymentCount: '付款次数', totalPaidMerged: '累计付款', lastPayment: '最后付款', noPaymentHistory: '暂无付款记录。', loadMore: '加载更多', address: '地址', editSupplier: '编辑供应商', addSupplier: '新增供应商', name: '名称', phone: '电话', save: '保存', paymentTitle: '供应商付款', payableBalance: '应付余额', paymentAmount: '付款金额', note: '备注', pay: '付款',
+  },
 };
 const getSupplierText = (language, key) => SUPPLIER_PAGE_TEXT[language]?.[key] || SUPPLIER_PAGE_TEXT.en[key] || key;
 
@@ -442,7 +448,7 @@ export default function SuppliersPage() {
 
                     {isExpanded && (
                       <div className="p-4 bg-black/40 border-t border-rose-500/10 space-y-4">
-                        {s.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">Address:</span> {s.address}</p>}
+                        {s.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">{tx('address')}:</span> {s.address}</p>}
                         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/5">
                           <button onClick={() => { setSelectedSupplier(s); setLedgerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all"><ClipboardList size={20}/></button>
                           {hasPermission('create_purchase') && (
@@ -468,12 +474,12 @@ export default function SuppliersPage() {
            <div className="overflow-x-auto">
              <table className="w-full text-left text-sm">
                <thead className="bg-black/40 text-slate-400 border-b border-white/5">
-                 <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">Supplier Name</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th></tr>
+                 <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">{tx('supplierName')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">{tx('paymentCount')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{tx('totalPaidMerged')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{tx('lastPayment')}</th></tr>
                </thead>
                <tbody className="divide-y divide-white/5">
-                 {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေချေမှတ်တမ်း မရှိသေးပါ။</td></tr> :
+                 {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tx('noPaymentHistory')}</td></tr> :
                  visibleHistory.map((h, i) => (
-                   <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-rose-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
+                   <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-rose-400 font-bold">{h.paymentCount} {tx('paymentCount')}</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
                  ))}
                </tbody>
              </table>
@@ -484,7 +490,7 @@ export default function SuppliersPage() {
       {activeTab === 'book' && filteredSuppliers.length > visibleSuppliers.length && (
         <div className="flex justify-center">
           <button onClick={() => setVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-cyan-600/20 text-cyan-300 border border-cyan-500/20 font-bold hover:bg-cyan-600/30">
-            Load More ({visibleSuppliers.length}/{filteredSuppliers.length})
+            {tx('loadMore')} ({visibleSuppliers.length}/{filteredSuppliers.length})
           </button>
         </div>
       )}
@@ -492,7 +498,7 @@ export default function SuppliersPage() {
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
         <div className="flex justify-center">
           <button onClick={() => setHistoryVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/20 font-bold hover:bg-purple-600/30">
-            Load More ({visibleHistory.length}/{mergedHistory.length})
+            {tx('loadMore')} ({visibleHistory.length}/{mergedHistory.length})
           </button>
         </div>
       )}
@@ -507,13 +513,13 @@ export default function SuppliersPage() {
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handleSaveSupplier} className="bg-[#0d1120] border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-rose-400 tracking-wide">{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</h3><button type="button" onClick={() => setSupplierModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-rose-400 tracking-wide">{editingSupplier ? tx('editSupplier') : tx('addSupplier')}</h3><button type="button" onClick={() => setSupplierModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
             <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">အမည် *</label><input required value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm, name: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ဖုန်းနံပါတ်</label><input type="tel" value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm, phone: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">လိပ်စာ</label><textarea value={supplierForm.address} onChange={e=>setSupplierForm({...supplierForm, address: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm custom-scrollbar" rows="2"></textarea></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tx('name')} *</label><input required value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm, name: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tx('phone')}</label><input type="tel" value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm, phone: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tx('address')}</label><textarea value={supplierForm.address} onChange={e=>setSupplierForm({...supplierForm, address: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm custom-scrollbar" rows="2"></textarea></div>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-rose-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">သိမ်းမည်</button>
+            <button type="submit" disabled={loading} className="w-full mt-8 bg-rose-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">{tx('save')}</button>
           </form>
         </div>
       )}
@@ -521,13 +527,13 @@ export default function SuppliersPage() {
       {isPaymentModalOpen && selectedSupplier && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေပေးချေမှုမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Payable Balance</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">{tx('paymentTitle')}</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{tx('payableBalance')}</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးချေမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tx('paymentAmount')} *</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tx('note')}</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
             </div>
-            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေချေမည်</button>
+            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">{tx('pay')}</button>
           </form>
         </div>
       )}

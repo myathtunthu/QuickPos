@@ -45,13 +45,6 @@ const MAX_PAYMENT_AMOUNT = 999_999_999;
 
 const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin']);
 
-const CUSTOMER_PAGE_TEXT = {
-  en: { accessDenied:'Access Denied', noViewPermission:'You do not have permission to view customer records.', customerBook:'Customer Book', paymentHistory:'Payment History', searchCustomers:'Search customers...', exportCsv:'Export CSV', importCsv:'Import CSV', add:'Add', duplicateWarningPrefix:'Possible duplicate customer groups:', duplicateWarningSuffix:'Auto-merge is disabled. Please review and fix manually.', customerInfo:'Customer Info', contact:'Contact', creditLimit:'Credit Limit', creditBalance:'Credit Balance', actions:'Actions', noCustomersFound:'No customers found.', settled:'Settled', viewLedger:'View ledger', acceptPayment:'Accept payment', edit:'Edit', delete:'Delete', address:'Address', note:'Note', ledger:'Ledger', payment:'Payment', customer:'Customer', times:'Times', totalPaid:'Total Paid', lastPayment:'Last Payment', noPaymentHistory:'No payment history yet.', timesSuffix:'times', loadMore:'Load More', dataLimitWarning:'Large data detected, so only the latest records are shown. Add server-side pagination/date filters in the next phase.', editCustomer:'Edit Customer', addCustomer:'Add Customer', nameRequired:'Name *', phone:'Phone', noLimitPlaceholder:'0 = no limit', save:'Save', paymentRecord:'Payment Record', paymentAmount:'Payment Amount *', payNow:'Save Payment', currentDebt:'Current Debt', noRecordsYet:'No records yet.', paymentIn:'Payment In', creditSale:'Credit Sale', invoice:'Invoice', totalBill:'Total Bill', paid:'Paid', amountReceived:'Amount Received', debtAdded:'Debt Added', balanceShort:'Bal', receipt:'RECEIPT', voucherNo:'Voucher No:', date:'Date:', item:'Item', amount:'Amount', credit:'Credit:' },
-  mm: { accessDenied:'ဝင်ခွင့်မရှိပါ', noViewPermission:'သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။', customerBook:'Customer စာရင်း', paymentHistory:'ငွေသွင်းမှတ်တမ်း', searchCustomers:'Customer ရှာရန်...', exportCsv:'CSV ထုတ်ရန်', importCsv:'CSV သွင်းရန်', add:'ထည့်မည်', duplicateWarningPrefix:'Customer duplicate ဖြစ်နိုင်သော စာရင်း:', duplicateWarningSuffix:'Auto-merge မလုပ်တော့ပါ။ Admin မှ စစ်ပြီး manual ပြင်ပါ။', customerInfo:'Customer အချက်အလက်', contact:'ဆက်သွယ်ရန်', creditLimit:'Credit Limit', creditBalance:'အကြွေးကျန်ငွေ', actions:'လုပ်ဆောင်ချက်များ', noCustomersFound:'Customer မရှိသေးပါ။', settled:'ရှင်းပြီး', viewLedger:'မှတ်တမ်းကြည့်မည်', acceptPayment:'အကြွေးဆပ်မည်', edit:'ပြင်မည်', delete:'ဖျက်မည်', address:'လိပ်စာ', note:'မှတ်ချက်', ledger:'Ledger', payment:'Payment', customer:'Customer', times:'အကြိမ်ရေ', totalPaid:'စုစုပေါင်းသွင်းငွေ', lastPayment:'နောက်ဆုံးသွင်းငွေ', noPaymentHistory:'ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။', timesSuffix:'ကြိမ်', loadMore:'ထပ်ကြည့်မည်', dataLimitWarning:'Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့သာ ဖော်ပြထားပါသည်။ နောက်အဆင့်တွင် server-side pagination/date filter ထည့်သင့်ပါသည်။', editCustomer:'Customer ပြင်မည်', addCustomer:'Customer ထည့်မည်', nameRequired:'အမည် *', phone:'ဖုန်းနံပါတ်', noLimitPlaceholder:'0 = limit မသတ်မှတ်', save:'သိမ်းမည်', paymentRecord:'ငွေသွင်းမှတ်တမ်း', paymentAmount:'ပေးသွင်းမည့် ငွေပမာဏ *', payNow:'ငွေသွင်းမည်', currentDebt:'လက်ရှိအကြွေး', noRecordsYet:'မှတ်တမ်း မရှိသေးပါ။', paymentIn:'ငွေသွင်း', creditSale:'အကြွေးရောင်း', invoice:'ဘောက်ချာ', totalBill:'စုစုပေါင်း', paid:'ပေးပြီး', amountReceived:'လက်ခံငွေ', debtAdded:'အကြွေးတိုး', balanceShort:'ကျန်', receipt:'RECEIPT', voucherNo:'Voucher No:', date:'Date:', item:'Item', amount:'Amount', credit:'Credit:' },
-  zh: { accessDenied:'无访问权限', noViewPermission:'您没有权限查看客户记录。', customerBook:'客户账本', paymentHistory:'付款记录', searchCustomers:'搜索客户...', exportCsv:'导出 CSV', importCsv:'导入 CSV', add:'新增', duplicateWarningPrefix:'可能重复的客户组:', duplicateWarningSuffix:'自动合并已关闭，请手动检查并修正。', customerInfo:'客户信息', contact:'联系方式', creditLimit:'信用额度', creditBalance:'欠款余额', actions:'操作', noCustomersFound:'暂无客户。', settled:'已结清', viewLedger:'查看账本', acceptPayment:'收款', edit:'编辑', delete:'删除', address:'地址', note:'备注', ledger:'账本', payment:'付款', customer:'客户', times:'次数', totalPaid:'付款总额', lastPayment:'最后付款', noPaymentHistory:'暂无付款记录。', timesSuffix:'次', loadMore:'加载更多', dataLimitWarning:'数据较多，仅显示最新记录。下一阶段应加入服务端分页/日期筛选。', editCustomer:'编辑客户', addCustomer:'新增客户', nameRequired:'姓名 *', phone:'电话', noLimitPlaceholder:'0 = 无限制', save:'保存', paymentRecord:'付款记录', paymentAmount:'付款金额 *', payNow:'保存付款', currentDebt:'当前欠款', noRecordsYet:'暂无记录。', paymentIn:'收款', creditSale:'赊销', invoice:'发票', totalBill:'账单总额', paid:'已付', amountReceived:'已收金额', debtAdded:'新增欠款', balanceShort:'余额', receipt:'收据', voucherNo:'凭证号:', date:'日期:', item:'商品', amount:'金额', credit:'欠款:' },
-};
-
-
 const emptyCustomerForm = {
   name: '',
   phone: '',
@@ -127,11 +120,19 @@ const getRecordTimestamp = (record) => {
 
 const getPaymentPersonKey = (record) => record.customerId || normalizeLower(record.personName);
 
+const interpolate = (template, values = {}) => String(template ?? '').replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '');
+
+const CUSTOMER_PAGE_TEXT = {
+  en: { customerBook:'Customer Book', paymentHistory:'Payment History', searchCustomers:'Search customers...', add:'Add', noCustomersFound:'No customers found.', noPermissionMessage:'You do not have permission to view customers.', duplicateWarning:'{count} possible duplicate customer record(s) found. Auto-merge is disabled. Please review manually.', customerInfo:'Customer Info', phone:'Phone', debt:'Debt', actions:'Actions', noPhone:'No phone', settled:'Settled', address:'Address', note:'Note', ledger:'Ledger', payment:'Payment', edit:'Edit', customer:'Customer', times:'Times', totalPaid:'Total Paid', lastPayment:'Last Payment', noPaymentHistory:'No payment history yet.', timesSuffix:'time(s)', loadMore:'Load More', dataLimited:'Too much data. Only the latest records are shown.', editCustomer:'Edit Customer', addCustomer:'Add Customer', nameRequired:'Name *', creditLimit:'Credit Limit', creditLimitPlaceholder:'0 = no limit', save:'Save', readError:'Unable to read customer data.', noPermission:'You do not have permission.', tenantMissing:'Tenant not found. Please sign in again.', customerNameRequiredToast:'Customer name is required.', customerNameTooLong:'Customer name is too long.', phoneTooLong:'Phone number is too long.', creditLimitTooHigh:'Credit limit is too high.', duplicateCustomer:'A customer with the same name and phone already exists.', customerSaved:'Customer saved successfully.', customerSaveError:'Unable to save customer.', debtDeleteBlocked:'{name} cannot be deleted because there is outstanding debt.', deleteCustomerTitle:'Delete Customer', deleteCustomerMessage:'Are you sure you want to delete "{name}"?', deleted:'Deleted successfully.', deleteError:'Unable to delete customer.', paymentPermissionDenied:'You do not have permission to accept payment.', customerNotSelected:'No customer selected.', defaultCustomerPaymentNote:'Customer debt payment', invalidAmount:'Enter a valid amount.', amountTooHigh:'Amount is too high.', paymentSaved:'Payment record saved successfully.', customerNotFound:'Customer not found.', tenantMismatch:'Customer tenant mismatch.', paymentExceedsDebt:'Payment amount exceeds current debt.', noDebt:'No current debt.', paymentSaveError:'Unable to save payment record.', adminRequired:'Admin/Owner permission is required.', noCustomersToExport:'There are no customers to export.', csvDownloaded:'CSV file downloaded.', importCustomerTitle:'Import Customer CSV', importCustomerMessage:'Are you sure you want to import new customer records into the database?', emptyFile:'The file contains no data.', importSuccess:'{imported} imported, {skipped} skipped.', importError:'Unable to import CSV.' },
+  mm: { customerBook:'Customer စာရင်း', paymentHistory:'ငွေသွင်းမှတ်တမ်း', searchCustomers:'Customer ရှာရန်...', add:'အသစ်ထည့်', noCustomersFound:'Customer မရှိသေးပါ။', noPermissionMessage:'သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။', duplicateWarning:'Customer duplicate ဖြစ်နိုင်သော စာရင်း {count} ခုရှိသည်။ Auto-merge မလုပ်တော့ပါ။ Admin မှ စစ်ပြီး manual ပြင်ပါ။', customerInfo:'Customer Info', phone:'ဖုန်း', debt:'ပေးရန်', actions:'လုပ်ဆောင်ချက်', noPhone:'ဖုန်းမရှိ', settled:'ရှင်းပြီး', address:'လိပ်စာ', note:'မှတ်ချက်', ledger:'မှတ်တမ်း', payment:'ငွေသွင်း', edit:'ပြင်မည်', customer:'Customer', times:'အကြိမ်', totalPaid:'စုစုပေါင်းသွင်းငွေ', lastPayment:'နောက်ဆုံးသွင်းငွေ', noPaymentHistory:'ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။', timesSuffix:'ကြိမ်', loadMore:'ထပ်ပြမည်', dataLimited:'Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့သာ ဖော်ပြထားပါသည်။', editCustomer:'Customer ပြင်ရန်', addCustomer:'Customer အသစ်ထည့်ရန်', nameRequired:'အမည် *', creditLimit:'Credit Limit', creditLimitPlaceholder:'0 = limit မသတ်မှတ်', save:'သိမ်းမည်', readError:'Customer data ဖတ်ရာတွင် အမှားဖြစ်နေပါသည်။', noPermission:'လုပ်ပိုင်ခွင့် မရှိပါ။', tenantMissing:'Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', customerNameRequiredToast:'Customer အမည် ထည့်ပါ။', customerNameTooLong:'Customer အမည်သည် အလွန်ရှည်နေပါသည်။', phoneTooLong:'ဖုန်းနံပါတ် အလွန်ရှည်နေပါသည်။', creditLimitTooHigh:'Credit limit အလွန်များနေပါသည်။', duplicateCustomer:'အမည်နှင့်ဖုန်း တူသော Customer ရှိပြီးသား ဖြစ်ပါသည်။', customerSaved:'Customer စာရင်း သိမ်းပြီးပါပြီ။', customerSaveError:'Customer သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', debtDeleteBlocked:'{name} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။', deleteCustomerTitle:'Customer ဖျက်သိမ်းခြင်း', deleteCustomerMessage:'"{name}" ကို ဖျက်ရန် သေချာပါသလား?', deleted:'ဖျက်သိမ်းပြီးပါပြီ။', deleteError:'Customer ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', paymentPermissionDenied:'ငွေချေခွင့် မရှိပါ။', customerNotSelected:'Customer မရွေးရသေးပါ။', defaultCustomerPaymentNote:'အကြွေးလာဆပ်သည်', invalidAmount:'ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', amountTooHigh:'ငွေပမာဏ အလွန်များနေပါသည်။', paymentSaved:'ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ။', customerNotFound:'Customer မတွေ့ပါ။', tenantMismatch:'Customer tenant မကိုက်ညီပါ။', paymentExceedsDebt:'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။', noDebt:'လက်ရှိအကြွေး မရှိတော့ပါ။', paymentSaveError:'ငွေသွင်းမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', adminRequired:'Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', noCustomersToExport:'Export ထုတ်ရန် Customer မရှိပါ။', csvDownloaded:'CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', importCustomerTitle:'Customer CSV သွင်းခြင်း', importCustomerMessage:'Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?', emptyFile:'ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', importSuccess:'{imported} ဦး ထည့်ပြီး၊ {skipped} ဦး ကျော်ထားပါသည်။', importError:'Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။' },
+  zh: { customerBook:'客户账本', paymentHistory:'付款记录', searchCustomers:'搜索客户...', add:'新增', noCustomersFound:'暂无客户。', noPermissionMessage:'您没有查看客户列表的权限。', duplicateWarning:'发现 {count} 条可能重复的客户记录。已禁用自动合并，请管理员手动检查。', customerInfo:'客户信息', phone:'电话', debt:'应收', actions:'操作', noPhone:'无电话', settled:'已结清', address:'地址', note:'备注', ledger:'账本', payment:'收款', edit:'编辑', customer:'客户', times:'次数', totalPaid:'收款合计', lastPayment:'最后收款', noPaymentHistory:'暂无收款记录。', timesSuffix:'次', loadMore:'加载更多', dataLimited:'数据过多，目前只显示最新记录。', editCustomer:'编辑客户', addCustomer:'新增客户', nameRequired:'名称 *', creditLimit:'信用额度', creditLimitPlaceholder:'0 = 不限制', save:'保存', readError:'无法读取客户数据。', noPermission:'您没有权限。', tenantMissing:'未找到租户，请重新登录。', customerNameRequiredToast:'请输入客户名称。', customerNameTooLong:'客户名称过长。', phoneTooLong:'电话号码过长。', creditLimitTooHigh:'信用额度过高。', duplicateCustomer:'已存在相同名称和电话的客户。', customerSaved:'客户资料已保存。', customerSaveError:'保存客户失败。', debtDeleteBlocked:'{name} 仍有欠款，无法删除。', deleteCustomerTitle:'删除客户', deleteCustomerMessage:'确定要删除 “{name}” 吗？', deleted:'已删除。', deleteError:'删除客户失败。', paymentPermissionDenied:'您没有收款权限。', customerNotSelected:'尚未选择客户。', defaultCustomerPaymentNote:'客户还款', invalidAmount:'请输入有效金额。', amountTooHigh:'金额过大。', paymentSaved:'收款记录已保存。', customerNotFound:'未找到客户。', tenantMismatch:'客户租户不匹配。', paymentExceedsDebt:'收款金额超过当前欠款。', noDebt:'当前没有欠款。', paymentSaveError:'保存收款记录失败。', adminRequired:'需要管理员/店主权限。', noCustomersToExport:'没有可导出的客户。', csvDownloaded:'CSV 文件已下载。', importCustomerTitle:'导入客户 CSV', importCustomerMessage:'确定要把新的客户记录导入数据库吗？', emptyFile:'文件中没有数据。', importSuccess:'已导入 {imported} 条，跳过 {skipped} 条。', importError:'导入失败。' },
+};
+
 export default function CustomersPage() {
   
-  const { language } = useLanguage();
-  const tt = (key) => CUSTOMER_PAGE_TEXT[language]?.[key] || CUSTOMER_PAGE_TEXT.en[key] || key;
-  const { profile, hasPermission } = useAuth();
+  const { t, language } = useLanguage();
+  const pt = (key, values) => interpolate(CUSTOMER_PAGE_TEXT[language]?.[key] || CUSTOMER_PAGE_TEXT.en[key] || t(key, key), values);
+const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
 
@@ -213,7 +214,7 @@ export default function CustomersPage() {
       );
     } catch (error) {
       console.error('Error fetching customer data:', error);
-      showToast('Customer data ဖတ်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+      showToast(pt('readError'), 'error');
     } finally {
       setLoading(false);
     }
@@ -335,8 +336,8 @@ export default function CustomersPage() {
 
   const handleSaveCustomer = async (event) => {
     event.preventDefault();
-    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
-    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+    if (!canManageCustomers) return showToast(pt('noPermission'), 'error');
+    if (!tenantId) return showToast(pt('tenantMissing'), 'error');
 
     const name = normalizeText(customerForm.name);
     const phone = normalizeText(customerForm.phone);
@@ -344,10 +345,10 @@ export default function CustomersPage() {
     const note = normalizeText(customerForm.note);
     const creditLimit = customerForm.creditLimit === '' ? 0 : toMoney(customerForm.creditLimit);
 
-    if (!name) return showToast('Customer အမည် ထည့်ပါ။', 'error');
-    if (name.length > 120) return showToast('Customer အမည်သည် အလွန်ရှည်နေပါသည်။', 'error');
-    if (phone.length > 40) return showToast('ဖုန်းနံပါတ် အလွန်ရှည်နေပါသည်။', 'error');
-    if (creditLimit > MAX_CUSTOMER_DEBT) return showToast('Credit limit အလွန်များနေပါသည်။', 'error');
+    if (!name) return showToast(pt('customerNameRequiredToast'), 'error');
+    if (name.length > 120) return showToast(pt('customerNameTooLong'), 'error');
+    if (phone.length > 40) return showToast(pt('phoneTooLong'), 'error');
+    if (creditLimit > MAX_CUSTOMER_DEBT) return showToast(pt('creditLimitTooHigh'), 'error');
 
     setLoading(true);
     try {
@@ -357,7 +358,7 @@ export default function CustomersPage() {
 
       if (duplicate) {
         setLoading(false);
-        return showToast('အမည်နှင့်ဖုန်း တူသော Customer ရှိပြီးသား ဖြစ်ပါသည်။', 'warning');
+        return showToast(pt('duplicateCustomer'), 'warning');
       }
 
       const payload = {
@@ -381,35 +382,35 @@ export default function CustomersPage() {
       }
 
       setCustomerModalOpen(false);
-      showToast('Customer စာရင်း သိမ်းပြီးပါပြီ။', 'success');
+      showToast(pt('customerSaved'), 'success');
       await fetchData();
     } catch (error) {
       console.error('Error saving customer:', error);
-      showToast('Customer သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+      showToast(pt('customerSaveError'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteCustomer = (customer) => {
-    if (!canManageCustomers) return showToast('လုပ်ပိုင်ခွင့် မရှိပါ။', 'error');
+    if (!canManageCustomers) return showToast(pt('noPermission'), 'error');
     if (toMoney(customer.totalDebt) > 0) {
-      return showToast(`${customer.name} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။`, 'error');
+      return showToast(pt('debtDeleteBlocked', { name: customer.name }), 'error');
     }
 
     setConfirmDialog({
       isOpen: true,
-      title: 'Customer ဖျက်သိမ်းခြင်း',
-      message: `"${customer.name}" ကို ဖျက်ရန် သေချာပါသလား?`,
+      title: pt('deleteCustomerTitle'),
+      message: pt('deleteCustomerMessage', { name: customer.name }),
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         try {
           await deleteDoc(doc(db, 'pos_customers', customer.id));
-          showToast('ဖျက်သိမ်းပြီးပါပြီ။', 'success');
+          showToast(pt('deleted'), 'success');
           await fetchData();
         } catch (error) {
           console.error('Error deleting customer:', error);
-          showToast('Customer ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+          showToast(pt('deleteError'), 'error');
         }
       },
     });
@@ -418,15 +419,15 @@ export default function CustomersPage() {
   const handlePayment = async (event) => {
     event.preventDefault();
     if (paymentSaving) return;
-    if (!canAcceptPayment) return showToast('ငွေချေခွင့် မရှိပါ။', 'error');
-    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
-    if (!selectedCustomer?.id) return showToast('Customer မရွေးရသေးပါ။', 'error');
+    if (!canAcceptPayment) return showToast(pt('paymentPermissionDenied'), 'error');
+    if (!tenantId) return showToast(pt('tenantMissing'), 'error');
+    if (!selectedCustomer?.id) return showToast(pt('customerNotSelected'), 'error');
 
     const payAmount = toMoney(paymentForm.amount);
-    const note = normalizeText(paymentForm.note) || 'အကြွေးလာဆပ်သည်';
+    const note = normalizeText(paymentForm.note) || pt('defaultCustomerPaymentNote');
 
-    if (payAmount <= 0) return showToast('ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', 'error');
-    if (payAmount > MAX_PAYMENT_AMOUNT) return showToast('ငွေပမာဏ အလွန်များနေပါသည်။', 'error');
+    if (payAmount <= 0) return showToast(pt('invalidAmount'), 'error');
+    if (payAmount > MAX_PAYMENT_AMOUNT) return showToast(pt('amountTooHigh'), 'error');
 
     setPaymentSaving(true);
     setLoading(true);
@@ -474,17 +475,17 @@ export default function CustomersPage() {
       setSelectedCustomer((prev) => (prev ? { ...prev, totalDebt: paymentRecord.afterDebt } : prev));
       setPaymentModalOpen(false);
       setPaymentForm(emptyPaymentForm);
-      showToast('ငွေသွင်းမှတ်တမ်း သိမ်းပြီးပါပြီ။', 'success');
+      showToast(pt('paymentSaved'), 'success');
       await fetchData();
     } catch (error) {
       console.error('Error saving payment:', error);
       const messageMap = {
-        CUSTOMER_NOT_FOUND: 'Customer မတွေ့ပါ။',
-        CUSTOMER_TENANT_MISMATCH: 'Customer tenant မကိုက်ညီပါ။',
-        PAYMENT_EXCEEDS_DEBT: 'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။',
-        NO_DEBT: 'လက်ရှိအကြွေး မရှိတော့ပါ။',
+        CUSTOMER_NOT_FOUND: pt('customerNotFound'),
+        CUSTOMER_TENANT_MISMATCH: pt('tenantMismatch'),
+        PAYMENT_EXCEEDS_DEBT: pt('paymentExceedsDebt'),
+        NO_DEBT: pt('noDebt'),
       };
-      showToast(messageMap[error?.message] || 'ငွေသွင်းမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+      showToast(messageMap[error?.message] || pt('paymentSaveError'), 'error');
     } finally {
       setPaymentSaving(false);
       setLoading(false);
@@ -492,8 +493,8 @@ export default function CustomersPage() {
   };
 
   const handleExportCSV = () => {
-    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
-    if (customers.length === 0) return showToast('Export ထုတ်ရန် Customer မရှိပါ။', 'warning');
+    if (!isAdmin) return showToast(pt('adminRequired'), 'error');
+    if (customers.length === 0) return showToast(pt('noCustomersToExport'), 'warning');
 
     const header = ['Name', 'Phone', 'Address', 'Credit Limit', 'Total Debt', 'Note'];
     const rows = customers.map((customer) => [
@@ -512,20 +513,20 @@ export default function CustomersPage() {
     link.download = `Customers_${todayIsoDate()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', 'success');
+    showToast(pt('csvDownloaded'), 'success');
   };
 
   const handleImportCSV = (event) => {
-    if (!isAdmin) return showToast('Admin/Owner လုပ်ပိုင်ခွင့်လိုအပ်ပါသည်။', 'error');
-    if (!tenantId) return showToast('Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', 'error');
+    if (!isAdmin) return showToast(pt('adminRequired'), 'error');
+    if (!tenantId) return showToast(pt('tenantMissing'), 'error');
 
     const file = event.target.files?.[0];
     if (!file) return;
 
     setConfirmDialog({
       isOpen: true,
-      title: 'Customer CSV သွင်းခြင်း',
-      message: 'Customer စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?',
+      title: pt('importCustomerTitle'),
+      message: pt('importCustomerMessage'),
       onConfirm: async () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         setLoading(true);
@@ -534,7 +535,7 @@ export default function CustomersPage() {
           const text = await file.text();
           const rows = text.split(/\r?\n/).filter((row) => row.trim());
           if (rows.length <= 1) {
-            showToast('ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', 'warning');
+            showToast(pt('emptyFile'), 'warning');
             return;
           }
 
@@ -582,11 +583,11 @@ export default function CustomersPage() {
           }
 
           if (imported % 400 !== 0) await batch.commit();
-          showToast(`${imported} ဦး ထည့်ပြီး၊ ${skipped} ဦး ကျော်ထားပါသည်။`, 'success');
+          showToast(pt('importSuccess', { imported, skipped }), 'success');
           await fetchData();
         } catch (error) {
           console.error('Customer import error:', error);
-          showToast('Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။', 'error');
+          showToast(pt('importError'), 'error');
         } finally {
           setLoading(false);
           if (fileRef.current) fileRef.current.value = '';
@@ -599,8 +600,8 @@ export default function CustomersPage() {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">{tt('accessDenied')}</h2>
-        <p className="mt-2 text-sm">{tt('noViewPermission')}</p>
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="mt-2 text-sm">{pt('noPermissionMessage')}</p>
       </div>
     );
   }
@@ -616,14 +617,14 @@ export default function CustomersPage() {
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} /> {tt('customerBook')}
+            <Users size={18} /> {pt('customerBook')}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} /> {tt('paymentHistory')}
+            <History size={18} /> {pt('paymentHistory')}
           </button>
         </div>
 
@@ -632,7 +633,7 @@ export default function CustomersPage() {
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder={tt('searchCustomers')}
+              placeholder={pt('searchCustomers')}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -643,13 +644,13 @@ export default function CustomersPage() {
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title={tt('exportCsv')}><Download size={20} /></button>
-                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title={tt('importCsv')}><Upload size={20} /></button>
+                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title="Export CSV"><Download size={20} /></button>
+                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title="Import CSV"><Upload size={20} /></button>
                   <input type="file" accept=".csv,text/csv" ref={fileRef} onChange={handleImportCSV} className="hidden" />
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{tt('add')}</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{pt('add')}</button>
               )}
             </div>
           )}
@@ -658,7 +659,7 @@ export default function CustomersPage() {
 
       {duplicateCustomerWarnings.length > 0 && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          {tt('duplicateWarningPrefix')} {duplicateCustomerWarnings.length}။ {tt('duplicateWarningSuffix')}
+          {pt('duplicateWarning', { count: duplicateCustomerWarnings.length })}
         </div>
       )}
 
@@ -669,16 +670,16 @@ export default function CustomersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('customerInfo')}</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('contact')}</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('creditLimit')}</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('creditBalance')}</th>
-                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">{tt('actions')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{pt('customerInfo')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{pt('creditLimit')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
+                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">{pt('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filteredCustomers.length === 0 ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{tt('noCustomersFound')}</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{pt('noCustomersFound')}</td></tr>
                   ) : visibleCustomers.map((customer) => {
                     const debt = toMoney(customer.totalDebt);
                     const limitAmount = toMoney(customer.creditLimit);
@@ -689,19 +690,19 @@ export default function CustomersPage() {
                           <p className="text-base font-bold text-white">{customer.name}</p>
                           {customer.note && <p className="mt-1 max-w-[260px] truncate text-xs text-slate-500">{customer.note}</p>}
                         </td>
-                        <td className="p-4 text-slate-400"><p>{customer.phone || '-'}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
+                        <td className="p-4 text-slate-400"><p>{customer.phone || pt('noPhone')}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
                         <td className="p-4 text-right text-slate-300">{limitAmount > 0 ? formatMoney(limitAmount) : '-'}</td>
-                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">{tt('settled')}</span>}</td>
+                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">ရှင်းပြီး</span>}</td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center gap-2">
-                            <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title={tt('viewLedger')}><ClipboardList size={16} /></button>
+                            <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16} /></button>
                             {canAcceptPayment && (
-                              <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} disabled={debt <= 0} className={`rounded-lg p-2 transition-colors ${debt > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40' : 'cursor-not-allowed bg-gray-800 text-gray-600'}`} title={tt('acceptPayment')}><DollarSign size={16} /></button>
+                              <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} disabled={debt <= 0} className={`rounded-lg p-2 transition-colors ${debt > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40' : 'cursor-not-allowed bg-gray-800 text-gray-600'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16} /></button>
                             )}
                             {canManageCustomers && (
                               <>
-                                <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 p-2 text-indigo-400 transition-colors hover:bg-indigo-600/40" title={tt('edit')}><Edit3 size={16} /></button>
-                                <button type="button" onClick={() => handleDeleteCustomer(customer)} className="rounded-lg bg-rose-600/20 p-2 text-rose-400 transition-colors hover:bg-rose-600/40" title={tt('delete')}><Trash2 size={16} /></button>
+                                <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 p-2 text-indigo-400 transition-colors hover:bg-indigo-600/40" title="ပြင်မည်"><Edit3 size={16} /></button>
+                                <button type="button" onClick={() => handleDeleteCustomer(customer)} className="rounded-lg bg-rose-600/20 p-2 text-rose-400 transition-colors hover:bg-rose-600/40" title="ဖျက်မည်"><Trash2 size={16} /></button>
                               </>
                             )}
                           </div>
@@ -715,7 +716,7 @@ export default function CustomersPage() {
 
             <div className="block divide-y divide-white/5 sm:hidden">
               {filteredCustomers.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">{tt('noCustomersFound')}</div>
+                <div className="p-8 text-center text-slate-500">{pt('noCustomersFound')}</div>
               ) : visibleCustomers.map((customer) => {
                 const debt = toMoney(customer.totalDebt);
                 const isExpanded = Boolean(expandedCust[customer.id]);
@@ -724,20 +725,20 @@ export default function CustomersPage() {
                     <button type="button" onClick={() => toggleCust(customer.id)} className="flex w-full items-start justify-between gap-3 text-left">
                       <div>
                         <p className="font-black text-white">{customer.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">{customer.phone || '-'}</p>
-                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : tt('settled')}</p>
+                        <p className="mt-1 text-xs text-slate-400">{customer.phone || pt('noPhone')}</p>
+                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : pt('settled')}</p>
                       </div>
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
                     {isExpanded && (
                       <div className="mt-4 space-y-3 rounded-2xl bg-black/30 p-3 text-sm">
-                        <p className="text-slate-400">{tt('address')}: {customer.address || '-'}</p>
-                        <p className="text-slate-400">{tt('creditLimit')}: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
-                        {customer.note && <p className="text-slate-400">{tt('note')}: {customer.note}</p>}
+                        <p className="text-slate-400">{pt('address')}: {customer.address || '-'}</p>
+                        <p className="text-slate-400">{pt('creditLimit')}: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
+                        {customer.note && <p className="text-slate-400">{pt('note')}: {customer.note}</p>}
                         <div className="flex flex-wrap gap-2 pt-2">
-                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">{tt('ledger')}</button>
-                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">{tt('payment')}</button>}
-                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">{tt('edit')}</button>}
+                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">{pt('ledger')}</button>
+                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">{pt('payment')}</button>}
+                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">{pt('edit')}</button>}
                         </div>
                       </div>
                     )}
@@ -751,20 +752,20 @@ export default function CustomersPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                 <tr>
-                  <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('customer')}</th>
-                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">{tt('times')}</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('totalPaid')}</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('lastPayment')}</th>
+                  <th className="p-4 text-xs font-bold uppercase tracking-wider">{pt('customer')}</th>
+                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">{pt('times')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{pt('totalPaid')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{pt('lastPayment')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {mergedHistory.length === 0 ? (
-                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tt('noPaymentHistory')}</td></tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{pt('noPaymentHistory')}</td></tr>
                 ) : visibleHistory.map((history) => (
                   <React.Fragment key={history.key}>
                     <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
                       <td className="p-4 text-base font-bold text-white">{history.personName}</td>
-                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} {tt('timesSuffix')}</td>
+                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} {pt('timesSuffix')}</td>
                       <td className="p-4 text-right text-base font-black text-green-400">+{formatMoney(history.totalPaid)}</td>
                       <td className="p-4 text-right text-slate-400">{history.lastPaymentDate || '-'}</td>
                     </tr>
@@ -786,16 +787,16 @@ export default function CustomersPage() {
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{tt('loadMore')} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{pt('loadMore')} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{tt('loadMore')} ({visibleHistory.length}/{mergedHistory.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{pt('loadMore')} ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
       {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          {tt('dataLimitWarning')}
+          {pt('dataLimited')}
         </div>
       )}
 
@@ -803,17 +804,17 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={handleSaveCustomer} className="w-full max-w-md rounded-3xl border border-cyan-500/30 bg-[#0d1120] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? tt('editCustomer') : tt('addCustomer')}</h3>
+              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? pt('editCustomer') : pt('addCustomer')}</h3>
               <button type="button" onClick={() => setCustomerModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('nameRequired')}</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('phone')}</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('creditLimit')}</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder={tt('noLimitPlaceholder')} /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('address')}</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('note')}</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('nameRequired')}</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('phone')}</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('creditLimit')}</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder={pt('creditLimitPlaceholder')} /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('address')}</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('note')}</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
             </div>
-            <button type="submit" disabled={loading} className="mt-8 w-full rounded-xl bg-cyan-600 py-3.5 font-black text-white transition-transform active:scale-95 disabled:opacity-50">{tt('save')}</button>
+            <button type="submit" disabled={loading} className="mt-8 w-full rounded-xl bg-cyan-600 py-3.5 font-black text-white transition-transform active:scale-95 disabled:opacity-50">{pt('save')}</button>
           </form>
         </div>
       )}
@@ -822,18 +823,18 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={handlePayment} className="w-full max-w-sm rounded-3xl border border-amber-500/30 bg-[#0d1120] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-black tracking-wide text-amber-400">{tt('paymentRecord')}</h3>
+              <h3 className="text-xl font-black tracking-wide text-amber-400">ငွေသွင်းမှတ်တမ်း</h3>
               <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="mb-6 rounded-2xl border border-white/5 bg-black/40 p-5 text-center shadow-inner">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{tt('creditBalance')}</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Credit Balance</p>
               <p className="mt-2 text-3xl font-black text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</p>
             </div>
             <div className="space-y-4">
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('paymentAmount')}</label><input type="number" required min="1" max={toMoney(selectedCustomer.totalDebt)} value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} inputMode="decimal" className="w-full rounded-xl border border-amber-500/30 bg-black/50 p-4 text-center text-[16px] font-black tracking-wider text-amber-400 outline-none focus:border-amber-400 sm:text-xl" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('note')}</label><input value={paymentForm.note} onChange={(event) => setPaymentForm((prev) => ({ ...prev, note: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-amber-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={toMoney(selectedCustomer.totalDebt)} value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} inputMode="decimal" className="w-full rounded-xl border border-amber-500/30 bg-black/50 p-4 text-center text-[16px] font-black tracking-wider text-amber-400 outline-none focus:border-amber-400 sm:text-xl" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{pt('note')}</label><input value={paymentForm.note} onChange={(event) => setPaymentForm((prev) => ({ ...prev, note: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-amber-400" /></div>
             </div>
-            <button type="submit" disabled={loading || paymentSaving} className="mt-8 w-full rounded-xl bg-amber-600 py-4 font-black text-white transition-transform active:scale-95 disabled:opacity-50">{tt('payNow')}</button>
+            <button type="submit" disabled={loading || paymentSaving} className="mt-8 w-full rounded-xl bg-amber-600 py-4 font-black text-white transition-transform active:scale-95 disabled:opacity-50">ငွေသွင်းမည်</button>
           </form>
         </div>
       )}
@@ -842,12 +843,12 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-3xl border border-blue-500/30 bg-[#0d1120] shadow-2xl">
             <div className="flex items-center justify-between rounded-t-3xl border-b border-white/5 bg-black/20 p-6 pb-4">
-              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">{tt('currentDebt')}: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
+              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">Current Debt: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
               <button type="button" onClick={() => setLedgerModalOpen(false)} className="rounded-full bg-white/5 p-2 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="custom-scrollbar flex-1 overflow-y-auto bg-black/10 p-4 sm:p-6">
               {currentLedger.length === 0 ? (
-                <div className="py-10 text-center opacity-50"><p className="font-bold text-slate-400">{tt('noRecordsYet')}</p></div>
+                <div className="py-10 text-center opacity-50"><p className="font-bold text-slate-400">မှတ်တမ်း မရှိသေးပါ။</p></div>
               ) : (
                 <div className="space-y-3">
                   {currentLedger.map((record) => {
@@ -855,14 +856,14 @@ export default function CustomersPage() {
                     return (
                       <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`flex flex-col justify-between gap-3 rounded-2xl border border-white/5 bg-[#12182b] p-4 transition-colors sm:flex-row sm:items-center ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? tt('paymentIn') : tt('creditSale')}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
-                          {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> {tt('invoice')}: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
-                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">{tt('totalBill')}: {formatMoney(record.amount)} • {tt('paid')}: {formatMoney(record.paidAmount)}</p>}
+                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> Invoice: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
+                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">Total Bill: {formatMoney(record.amount)} • Paid: {formatMoney(record.paidAmount)}</p>}
                         </div>
                         <div className="mt-2 border-t border-white/5 pt-2 text-left sm:mt-0 sm:border-0 sm:pt-0 sm:text-right">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? tt('amountReceived') : tt('debtAdded')}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
                           <p className={`mt-0.5 text-lg font-black ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>{!isSale ? '-' : '+'}{formatMoney(!isSale ? record.amount : record.remainingDebt)}</p>
-                          <p className="mt-1 text-[10px] text-slate-500">{tt('balanceShort')}: {formatMoney(record.runningBalance)}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">Bal: {formatMoney(record.runningBalance)}</p>
                         </div>
                       </div>
                     );
@@ -878,14 +879,14 @@ export default function CustomersPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm print:hidden">
           <div className="custom-scrollbar relative max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl bg-white p-6 font-sans text-black shadow-2xl">
             <button type="button" onClick={() => setReceiptModal({ show: false, record: null })} className="absolute right-4 top-4 rounded-full bg-gray-200 p-1 text-gray-600 hover:bg-gray-300"><X size={20} /></button>
-            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">{tt('receipt')}</h2></div>
+            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">RECEIPT</h2></div>
             <div className="mb-4 space-y-1.5 border-y border-dashed border-gray-300 py-3 text-[11px] font-semibold text-gray-600">
-              <div className="flex justify-between"><span>{tt('voucherNo')}</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
-              <div className="flex justify-between"><span>{tt('date')}</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
-              <div className="flex justify-between"><span>{tt('customer')}:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
+              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
+              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
+              <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
             </div>
             <table className="w-full text-xs">
-              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">{tt('item')}</th><th className="py-2 text-right">{tt('amount')}</th></tr></thead>
+              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">Item</th><th className="py-2 text-right">Amount</th></tr></thead>
               <tbody>
                 {(receiptModal.record.itemsDetail || []).map((item, index) => {
                   const quantity = toMoney(item.quantity);
@@ -901,9 +902,9 @@ export default function CustomersPage() {
               </tbody>
             </table>
             <div className="mt-3 space-y-1 border-t border-gray-300 pt-3 text-xs">
-              <div className="flex justify-between text-gray-600"><span>{tt('totalBill')}:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>{tt('paid')}:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
-              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>{tt('credit')}</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
+              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>Credit:</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
             </div>
           </div>
         </div>

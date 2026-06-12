@@ -12,18 +12,20 @@ const SUPPLIER_FETCH_LIMIT = 500;
 const SUPPLIER_RENDER_PAGE_SIZE = 50;
 const SUPPLIER_HISTORY_LIMIT = 800;
 
-const SUPPLIER_PAGE_TEXT = {
-  en: { accessDenied:'Access Denied', noViewPermission:'You do not have permission to view supplier records.', supplierBook:'Supplier Book', paymentHistory:'Payment History', searchSuppliers:'Search suppliers...', exportCsv:'Export CSV', importCsv:'Import CSV', add:'Add', supplierInfo:'Supplier Info', contact:'Contact', payableBalance:'Payable Balance', actions:'Actions', noSuppliers:'No suppliers found.', settled:'Settled', viewLedger:'View ledger', paySupplier:'Pay supplier', edit:'Edit', delete:'Delete', noPhone:'No phone', payable:'Payable', address:'Address', supplierName:'Supplier Name', paymentCount:'Payment Count', totalPaidMerged:'Total Paid', lastPayment:'Last Payment', noPaymentHistory:'No payment history yet.', timesSuffix:'times', loadMore:'Load More', dataLimitWarning:'Large data detected, so only the latest records are shown. Continue with date/filter pagination in the next phase.', editSupplier:'Edit Supplier', addSupplier:'Add Supplier', nameRequired:'Name *', phone:'Phone', note:'Note', save:'Save', paymentRecord:'Payment Record', paymentAmount:'Payment Amount *', payNow:'Save Payment', currentDebt:'Current Debt', noRecordsYet:'No records yet.', paymentOut:'Payment Out', creditPurchase:'Credit Purchase', invoice:'Invoice', totalBill:'Total Bill', paid:'Paid', amountPaid:'Amount Paid', debtAdded:'Debt Added', balanceShort:'Bal', purchaseReceipt:'PURCHASE RECEIPT', voucherNo:'Voucher No:', date:'Date:', supplier:'Supplier:', item:'Item', amount:'Amount', creditBalance:'Credit Balance:' },
-  mm: { accessDenied:'ဝင်ခွင့်မရှိပါ', noViewPermission:'သင့်တွင် Supplier စာရင်း ကြည့်ရှုခွင့် မရှိပါ။', supplierBook:'Supplier စာရင်း', paymentHistory:'ငွေချေမှတ်တမ်း', searchSuppliers:'Supplier ရှာရန်...', exportCsv:'CSV ထုတ်ရန်', importCsv:'CSV သွင်းရန်', add:'ထည့်မည်', supplierInfo:'Supplier အချက်အလက်', contact:'ဆက်သွယ်ရန်', payableBalance:'ပေးရန်ကျန်ငွေ', actions:'လုပ်ဆောင်ချက်များ', noSuppliers:'Supplier မရှိသေးပါ။', settled:'ရှင်းပြီး', viewLedger:'မှတ်တမ်းကြည့်မည်', paySupplier:'ငွေချေမည်', edit:'ပြင်မည်', delete:'ဖျက်မည်', noPhone:'ဖုန်းမရှိ', payable:'ပေးရန်', address:'လိပ်စာ', supplierName:'Supplier အမည်', paymentCount:'ငွေချေအကြိမ်ရေ', totalPaidMerged:'စုစုပေါင်းချေငွေ', lastPayment:'နောက်ဆုံးချေငွေ', noPaymentHistory:'ငွေချေမှတ်တမ်း မရှိသေးပါ။', timesSuffix:'ကြိမ်', loadMore:'ထပ်ကြည့်မည်', dataLimitWarning:'Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့ပဲ ဖော်ပြထားပါတယ်။ Search/Filter မတွေ့ပါက date/filter pagination phase ဆက်လိုပါမယ်။', editSupplier:'Supplier ပြင်မည်', addSupplier:'Supplier ထည့်မည်', nameRequired:'အမည် *', phone:'ဖုန်းနံပါတ်', note:'မှတ်ချက်', save:'သိမ်းမည်', paymentRecord:'ငွေပေးချေမှုမှတ်တမ်း', paymentAmount:'ပေးချေမည့် ငွေပမာဏ *', payNow:'ငွေချေမည်', currentDebt:'လက်ရှိအကြွေး', noRecordsYet:'မှတ်တမ်း မရှိသေးပါ။', paymentOut:'ငွေချေ', creditPurchase:'အကြွေးဝယ်', invoice:'ဘောက်ချာ', totalBill:'စုစုပေါင်း', paid:'ပေးပြီး', amountPaid:'ချေပြီးငွေ', debtAdded:'အကြွေးတိုး', balanceShort:'ကျန်', purchaseReceipt:'PURCHASE RECEIPT', voucherNo:'Voucher No:', date:'Date:', supplier:'Supplier:', item:'Item', amount:'Amount', creditBalance:'Credit Balance:' },
-  zh: { accessDenied:'无访问权限', noViewPermission:'您没有权限查看供应商记录。', supplierBook:'供应商账本', paymentHistory:'付款记录', searchSuppliers:'搜索供应商...', exportCsv:'导出 CSV', importCsv:'导入 CSV', add:'新增', supplierInfo:'供应商信息', contact:'联系方式', payableBalance:'应付余额', actions:'操作', noSuppliers:'暂无供应商。', settled:'已结清', viewLedger:'查看账本', paySupplier:'付款', edit:'编辑', delete:'删除', noPhone:'无电话', payable:'应付', address:'地址', supplierName:'供应商名称', paymentCount:'付款次数', totalPaidMerged:'付款总额', lastPayment:'最后付款', noPaymentHistory:'暂无付款记录。', timesSuffix:'次', loadMore:'加载更多', dataLimitWarning:'数据较多，仅显示最新记录。下一阶段请继续加入日期/筛选分页。', editSupplier:'编辑供应商', addSupplier:'新增供应商', nameRequired:'姓名 *', phone:'电话', note:'备注', save:'保存', paymentRecord:'付款记录', paymentAmount:'付款金额 *', payNow:'保存付款', currentDebt:'当前欠款', noRecordsYet:'暂无记录。', paymentOut:'付款', creditPurchase:'赊购', invoice:'发票', totalBill:'账单总额', paid:'已付', amountPaid:'已付金额', debtAdded:'新增欠款', balanceShort:'余额', purchaseReceipt:'采购收据', voucherNo:'凭证号:', date:'日期:', supplier:'供应商:', item:'商品', amount:'金额', creditBalance:'欠款余额:' },
-};
+const normalizeText = (value) => String(value ?? '').trim();
+const interpolate = (template, values = {}) => String(template ?? '').replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '');
 
+const SUPPLIER_PAGE_TEXT = {
+  en: { supplierBook:'Supplier Book', paymentHistory:'Payment History', searchSuppliers:'Search suppliers...', add:'Add', noSuppliers:'No suppliers found.', noPhone:'No phone', payable:'Payable', paidOff:'Paid off', address:'Address', ledger:'Ledger', payment:'Payment', edit:'Edit', delete:'Delete', supplierInfo:'Supplier Info', contact:'Contact', payableBalance:'Payable Balance', actions:'Actions', loadMore:'Load More', dataLimited:'Too much data. Only latest records are shown.', editSupplier:'Edit Supplier', addSupplier:'Add Supplier', nameRequired:'Name *', phone:'Phone', save:'Save', readError:'Unable to read supplier data.', noPermission:'You do not have permission.', tenantMissing:'Tenant not found. Please sign in again.', nameRequiredToast:'Supplier name is required.', duplicateSupplier:'This supplier already exists.', supplierSaved:'Supplier saved successfully.', supplierSaveError:'Unable to save supplier.', debtDeleteBlocked:'{name} cannot be deleted because payable balance exists.', deleteSupplierTitle:'Delete Supplier', deleteSupplierMessage:'Are you sure you want to delete "{name}"?', deleted:'Deleted successfully.', deleteError:'Unable to delete supplier.', supplierNotSelected:'No supplier selected.', invalidAmount:'Enter a valid amount.', amountExceedsDebt:'Payment amount exceeds payable balance.', paymentSaved:'Payment saved successfully.', paymentSaveError:'Unable to save payment.', noSuppliersToExport:'There are no suppliers to export.', csvDownloaded:'CSV file downloaded.', importSupplierTitle:'Import Supplier CSV', importSupplierMessage:'Are you sure you want to import new supplier records into the database?', emptyFile:'The file contains no data.', importSuccess:'{imported} imported, {skipped} skipped.', importError:'Unable to import CSV.' },
+  mm: { supplierBook:'Supplier စာရင်း', paymentHistory:'ငွေချေမှတ်တမ်း', searchSuppliers:'Supplier ရှာရန်...', add:'အသစ်ထည့်', noSuppliers:'Supplier မရှိသေးပါ။', noPhone:'ဖုန်းမရှိ', payable:'ပေးရန်', paidOff:'ရှင်းပြီး', address:'လိပ်စာ', ledger:'မှတ်တမ်း', payment:'ငွေချေ', edit:'ပြင်မည်', delete:'ဖျက်မည်', supplierInfo:'Supplier Info', contact:'ဆက်သွယ်ရန်', payableBalance:'ပေးရန်လက်ကျန်', actions:'လုပ်ဆောင်ချက်', loadMore:'ထပ်ပြမည်', dataLimited:'Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့ပဲ ဖော်ပြထားပါတယ်။', editSupplier:'Supplier ပြင်ရန်', addSupplier:'Supplier အသစ်ထည့်ရန်', nameRequired:'အမည် *', phone:'ဖုန်း', save:'သိမ်းမည်', readError:'Supplier data ဖတ်ရာတွင် အမှားဖြစ်နေပါသည်။', noPermission:'လုပ်ပိုင်ခွင့် မရှိပါ။', tenantMissing:'Tenant မတွေ့ပါ။ ပြန်ဝင်ပါ။', nameRequiredToast:'Supplier အမည် ထည့်ပါ။', duplicateSupplier:'Supplier ရှိပြီးသား ဖြစ်ပါသည်။', supplierSaved:'Supplier စာရင်း သိမ်းပြီးပါပြီ။', supplierSaveError:'Supplier သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', debtDeleteBlocked:'{name} တွင် ပေးရန်ကျန်ငွေရှိနေသဖြင့် ဖျက်၍မရပါ။', deleteSupplierTitle:'Supplier ဖျက်သိမ်းခြင်း', deleteSupplierMessage:'"{name}" ကို ဖျက်ရန် သေချာပါသလား?', deleted:'ဖျက်သိမ်းပြီးပါပြီ။', deleteError:'Supplier ဖျက်ရာတွင် အမှားဖြစ်နေပါသည်။', supplierNotSelected:'Supplier မရွေးရသေးပါ။', invalidAmount:'ငွေပမာဏ မှန်ကန်စွာထည့်ပါ။', amountExceedsDebt:'ဆပ်သည့်ငွေသည် လက်ရှိအကြွေးထက် များနေပါသည်။', paymentSaved:'ငွေချေမှတ်တမ်း သိမ်းပြီးပါပြီ။', paymentSaveError:'ငွေချေမှတ်တမ်း သိမ်းရာတွင် အမှားဖြစ်နေပါသည်။', noSuppliersToExport:'Export ထုတ်ရန် Supplier မရှိပါ။', csvDownloaded:'CSV ဖိုင် ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ။', importSupplierTitle:'Supplier CSV သွင်းခြင်း', importSupplierMessage:'Supplier စာရင်းအသစ်များကို Database သို့ ထည့်သွင်းမှာ သေချာပါသလား?', emptyFile:'ဖိုင်ထဲတွင် ဒေတာမရှိပါ။', importSuccess:'{imported} ဦး ထည့်ပြီး၊ {skipped} ဦး ကျော်ထားပါသည်။', importError:'Import လုပ်ရာတွင် အမှားဖြစ်နေပါသည်။' },
+  zh: { supplierBook:'供应商账本', paymentHistory:'付款记录', searchSuppliers:'搜索供应商...', add:'新增', noSuppliers:'暂无供应商。', noPhone:'无电话', payable:'应付', paidOff:'已结清', address:'地址', ledger:'账本', payment:'付款', edit:'编辑', delete:'删除', supplierInfo:'供应商信息', contact:'联系方式', payableBalance:'应付余额', actions:'操作', loadMore:'加载更多', dataLimited:'数据过多，目前只显示最新记录。', editSupplier:'编辑供应商', addSupplier:'新增供应商', nameRequired:'名称 *', phone:'电话', save:'保存', readError:'无法读取供应商数据。', noPermission:'您没有权限。', tenantMissing:'未找到租户，请重新登录。', nameRequiredToast:'请输入供应商名称。', duplicateSupplier:'该供应商已存在。', supplierSaved:'供应商资料已保存。', supplierSaveError:'保存供应商失败。', debtDeleteBlocked:'{name} 仍有应付余额，无法删除。', deleteSupplierTitle:'删除供应商', deleteSupplierMessage:'确定要删除 “{name}” 吗？', deleted:'已删除。', deleteError:'删除供应商失败。', supplierNotSelected:'尚未选择供应商。', invalidAmount:'请输入有效金额。', amountExceedsDebt:'付款金额超过当前应付余额。', paymentSaved:'付款记录已保存。', paymentSaveError:'保存付款记录失败。', noSuppliersToExport:'没有可导出的供应商。', csvDownloaded:'CSV 文件已下载。', importSupplierTitle:'导入供应商 CSV', importSupplierMessage:'确定要把新的供应商记录导入数据库吗？', emptyFile:'文件中没有数据。', importSuccess:'已导入 {imported} 条，跳过 {skipped} 条。', importError:'导入失败。' },
+};
 
 export default function SuppliersPage() {
   
-  const { language } = useLanguage();
-  const tt = (key) => SUPPLIER_PAGE_TEXT[language]?.[key] || SUPPLIER_PAGE_TEXT.en[key] || key;
-  const { profile, hasPermission } = useAuth();
+  const { t, language } = useLanguage();
+  const pt = (key, values) => interpolate(SUPPLIER_PAGE_TEXT[language]?.[key] || SUPPLIER_PAGE_TEXT.en[key] || t(key, key), values);
+const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = profile?.role === 'admin';
 
@@ -69,7 +71,7 @@ export default function SuppliersPage() {
       const recQ = query(collection(db, 'pos_records'), where('tenantId', '==', tenantId), where('type', '==', 'Supplier Payment'), orderBy('createdAt', 'desc'), limit(SUPPLIER_HISTORY_LIMIT));
       const recSnap = await getDocs(recQ);
       setAllRecords(recSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (error) { console.error("Error fetching data:", error); }
+    } catch (error) { console.error("Error fetching data:", error); showToast(pt('readError'), 'error'); }
     setLoading(false);
   };
 
@@ -313,8 +315,8 @@ export default function SuppliersPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-slate-500">
         <Truck size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">{tt('accessDenied')}</h2>
-        <p className="text-sm mt-2">{tt('noViewPermission')}</p>
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="text-sm mt-2">သင့်တွင် Supplier စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
       </div>
     );
   }
@@ -325,26 +327,26 @@ export default function SuppliersPage() {
 
       <div className="flex flex-col md:flex-row justify-between items-center bg-[#0d1120] p-4 sm:p-6 rounded-3xl border border-rose-500/15 shadow-xl gap-5 animate-in fade-in">
         <div className="flex items-center gap-4 bg-black/40 p-1.5 rounded-2xl border border-white/5 w-full md:w-auto">
-          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Truck size={18}/> {tt('supplierBook')}</button>
-          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> {tt('paymentHistory')}</button>
+          <button onClick={() => setActiveTab('book')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'book' ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><Truck size={18}/> {pt('supplierBook')}</button>
+          <button onClick={() => setActiveTab('history')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-xl font-bold text-sm transition-all flex justify-center items-center gap-2 ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}><History size={18}/> {pt('paymentHistory')}</button>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative flex-1 sm:min-w-[200px]">
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500"/>
-            <input type="text" placeholder={tt('searchSuppliers')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
+            <input type="text" placeholder={pt('searchSuppliers')} value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-black/50 border border-rose-500/20 rounded-xl outline-none focus:border-rose-400 text-sm"/>
           </div>
           {activeTab === 'book' && (
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title={tt('exportCsv')}><Download size={20}/></button>
-                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title={tt('importCsv')}><Upload size={20}/></button>
+                  <button onClick={handleExportCSV} className="bg-emerald-600/20 text-emerald-400 p-3 rounded-xl hover:bg-emerald-600/40 transition-colors" title="Export CSV"><Download size={20}/></button>
+                  <button onClick={() => fileRef.current?.click()} className="bg-amber-600/20 text-amber-400 p-3 rounded-xl hover:bg-amber-600/40 transition-colors" title="Import CSV"><Upload size={20}/></button>
                   <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
                 </>
               )}
               {hasPermission('manage_suppliers') && (
-                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/>{tt('add')}</button>
+                <button onClick={() => { setEditingSupplier(null); setSupplierForm({ name: '', phone: '', address: '' }); setSupplierModalOpen(true); }} className="bg-rose-600 text-white px-5 py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-rose-500 transition-colors shadow-lg active:scale-95"><Plus size={20}/>{pt('add')}</button>
               )}
             </div>
           )}
@@ -358,29 +360,29 @@ export default function SuppliersPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-black/40 text-slate-400 border-b border-white/5">
                   <tr>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{tt('supplierInfo')}</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{tt('contact')}</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{tt('payableBalance')}</th>
-                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-center w-40">{tt('actions')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{pt('supplierInfo')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs">{pt('contact')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{pt('payableBalance')}</th>
+                    <th className="p-4 font-bold uppercase tracking-wider text-xs text-center w-40">{pt('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {filteredSuppliers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tt('noSuppliers')}</td></tr> : 
+                  {filteredSuppliers.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">{pt('noSuppliers')}</td></tr> : 
                   visibleSuppliers.map(s => (
                     <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="p-4 font-bold text-white text-base">{s.name}</td>
-                      <td className="p-4 text-slate-400"><p>{s.phone || '-'}</p><p className="text-xs text-slate-500 truncate max-w-[200px]">{s.address || '-'}</p></td>
-                      <td className="p-4 text-right">{Number(s.totalDebt) > 0 ? <span className="font-black text-rose-400 text-base">{Number(s.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">{tt('settled')}</span>}</td>
+                      <td className="p-4 text-slate-400"><p>{s.phone || pt('noPhone')}</p><p className="text-xs text-slate-500 truncate max-w-[200px]">{s.address || '-'}</p></td>
+                      <td className="p-4 text-right">{Number(s.totalDebt) > 0 ? <span className="font-black text-rose-400 text-base">{Number(s.totalDebt).toLocaleString()} Ks</span> : <span className="font-bold text-green-500 text-sm">{pt('paidOff')}</span>}</td>
                       <td className="p-4 text-center">
                         <div className="flex justify-center gap-2">
-                          <button onClick={() => { setSelectedSupplier(s); setLedgerModalOpen(true); }} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title={tt('viewLedger')}><ClipboardList size={16}/></button>
+                          <button onClick={() => { setSelectedSupplier(s); setLedgerModalOpen(true); }} className="p-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/40 transition-colors active:scale-95" title={pt('ledger')}><ClipboardList size={16}/></button>
                           {hasPermission('create_purchase') && (
-                            <button onClick={() => { setSelectedSupplier(s); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(s.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(s.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title={tt('paySupplier')}><DollarSign size={16}/></button>
+                            <button onClick={() => { setSelectedSupplier(s); setPaymentForm({ amount: '', note: '' }); setPaymentModalOpen(true); }} disabled={Number(s.totalDebt) <= 0} className={`p-2 rounded-lg transition-colors ${Number(s.totalDebt) > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40 active:scale-95' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} title="ငွေချေမည်"><DollarSign size={16}/></button>
                           )}
                           {hasPermission('manage_suppliers') && (
                             <>
-                              <button onClick={() => { setEditingSupplier(s); setSupplierForm({ name: s.name, phone: s.phone || '', address: s.address || '' }); setSupplierModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title={tt('edit')}><Edit3 size={16}/></button>
-                              <button onClick={() => handleDeleteSupplier(s.id, s.name, Number(s.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title={tt('delete')}><Trash2 size={16}/></button>
+                              <button onClick={() => { setEditingSupplier(s); setSupplierForm({ name: s.name, phone: s.phone || '', address: s.address || '' }); setSupplierModalOpen(true); }} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg hover:bg-indigo-600/40 transition-colors active:scale-95" title={pt('edit')}><Edit3 size={16}/></button>
+                              <button onClick={() => handleDeleteSupplier(s.id, s.name, Number(s.totalDebt))} className="p-2 bg-rose-600/20 text-rose-400 rounded-lg hover:bg-rose-600/40 transition-colors active:scale-95" title={pt('delete')}><Trash2 size={16}/></button>
                             </>
                           )}
                         </div>
@@ -399,10 +401,10 @@ export default function SuppliersPage() {
                     <div onClick={() => toggleSupp(s.id)} className="p-4 flex justify-between items-center cursor-pointer">
                       <div className="flex-1">
                         <h4 className="font-bold text-white text-base">{s.name}</h4>
-                        <p className="text-xs text-slate-500 mt-0.5">{s.phone || tt('noPhone')}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{s.phone || 'No phone'}</p>
                       </div>
                       <div className="text-right flex flex-col items-end">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{tt('payable')}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Payable</p>
                         {Number(s.totalDebt) > 0 ? <p className="font-black text-rose-400 text-lg leading-none">{Number(s.totalDebt).toLocaleString()} Ks</p> : <p className="font-bold text-green-500 text-sm leading-none">ရှင်းပြီး</p>}
                       </div>
                       <div className="ml-4 pl-4 border-l border-white/10">{isExpanded ? <ChevronUp size={20} className="text-rose-400"/> : <ChevronDown size={20} className="text-slate-500"/>}</div>
@@ -410,7 +412,7 @@ export default function SuppliersPage() {
 
                     {isExpanded && (
                       <div className="p-4 bg-black/40 border-t border-rose-500/10 space-y-4">
-                        {s.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">{tt('address')}:</span> {s.address}</p>}
+                        {s.address && <p className="text-xs text-slate-300 bg-black/50 p-3 rounded-xl border border-white/5"><span className="text-slate-500 font-bold block mb-1">Address:</span> {s.address}</p>}
                         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-white/5">
                           <button onClick={() => { setSelectedSupplier(s); setLedgerModalOpen(true); }} className="py-2.5 flex justify-center items-center bg-blue-600/20 text-blue-400 rounded-xl active:bg-blue-600/40 transition-all"><ClipboardList size={20}/></button>
                           {hasPermission('create_purchase') && (
@@ -436,12 +438,12 @@ export default function SuppliersPage() {
            <div className="overflow-x-auto">
              <table className="w-full text-left text-sm">
                <thead className="bg-black/40 text-slate-400 border-b border-white/5">
-                 <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">{tt('supplierName')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">{tt('paymentCount')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{tt('totalPaidMerged')}</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">{tt('lastPayment')}</th></tr>
+                 <tr><th className="p-4 font-bold uppercase tracking-wider text-xs">Supplier Name</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-center">Payment Count</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Total Paid (Merged)</th><th className="p-4 font-bold uppercase tracking-wider text-xs text-right">Last Payment</th></tr>
                </thead>
                <tbody className="divide-y divide-white/5">
-                 {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tt('noPaymentHistory')}</td></tr> :
+                 {mergedHistory.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေချေမှတ်တမ်း မရှိသေးပါ။</td></tr> :
                  visibleHistory.map((h, i) => (
-                   <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-rose-400 font-bold">{h.paymentCount} {tt('timesSuffix')}</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
+                   <tr key={i} className="hover:bg-white/[0.02] transition-colors"><td className="p-4 font-bold text-white text-base">{h.personName}</td><td className="p-4 text-center text-rose-400 font-bold">{h.paymentCount} ကြိမ်</td><td className="p-4 text-right font-black text-green-400 text-base">+{h.totalPaid.toLocaleString()} Ks</td><td className="p-4 text-right text-slate-400">{h.lastPaymentDate}</td></tr>
                  ))}
                </tbody>
              </table>
@@ -452,7 +454,7 @@ export default function SuppliersPage() {
       {activeTab === 'book' && filteredSuppliers.length > visibleSuppliers.length && (
         <div className="flex justify-center">
           <button onClick={() => setVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-cyan-600/20 text-cyan-300 border border-cyan-500/20 font-bold hover:bg-cyan-600/30">
-            {tt('loadMore')} ({visibleSuppliers.length}/{filteredSuppliers.length})
+            {pt('loadMore')} ({visibleSuppliers.length}/{filteredSuppliers.length})
           </button>
         </div>
       )}
@@ -460,14 +462,14 @@ export default function SuppliersPage() {
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
         <div className="flex justify-center">
           <button onClick={() => setHistoryVisibleLimit(v => v + SUPPLIER_RENDER_PAGE_SIZE)} className="px-5 py-3 rounded-xl bg-purple-600/20 text-purple-300 border border-purple-500/20 font-bold hover:bg-purple-600/30">
-            {tt('loadMore')} ({visibleHistory.length}/{mergedHistory.length})
+            {pt('loadMore')} ({visibleHistory.length}/{mergedHistory.length})
           </button>
         </div>
       )}
 
       {(suppliers.length >= SUPPLIER_FETCH_LIMIT || allRecords.length >= SUPPLIER_HISTORY_LIMIT) && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          {tt('dataLimitWarning')}
+          {pt('dataLimited')}
         </div>
       )}
 
@@ -475,13 +477,13 @@ export default function SuppliersPage() {
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handleSaveSupplier} className="bg-[#0d1120] border border-rose-500/30 rounded-3xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-rose-400 tracking-wide">{editingSupplier ? tt('editSupplier') : tt('addSupplier')}</h3><button type="button" onClick={() => setSupplierModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-rose-400 tracking-wide">{editingSupplier ? pt('editSupplier') : pt('addSupplier')}</h3><button type="button" onClick={() => setSupplierModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
             <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tt('nameRequired')}</label><input required value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm, name: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tt('phone')}</label><input type="tel" value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm, phone: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tt('address')}</label><textarea value={supplierForm.address} onChange={e=>setSupplierForm({...supplierForm, address: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm custom-scrollbar" rows="2"></textarea></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{pt('nameRequired')}</label><input required value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm, name: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{pt('phone')}</label><input type="tel" value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm, phone: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{pt('address')}</label><textarea value={supplierForm.address} onChange={e=>setSupplierForm({...supplierForm, address: e.target.value})} className="w-full bg-black/50 border border-rose-500/20 rounded-xl p-3.5 text-white outline-none focus:border-rose-400 text-sm custom-scrollbar" rows="2"></textarea></div>
             </div>
-            <button type="submit" disabled={loading} className="w-full mt-8 bg-rose-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">{tt('save')}</button>
+            <button type="submit" disabled={loading} className="w-full mt-8 bg-rose-600 text-white font-black py-3.5 rounded-xl active:scale-95 transition-transform">{pt('save')}</button>
           </form>
         </div>
       )}
@@ -489,13 +491,13 @@ export default function SuppliersPage() {
       {isPaymentModalOpen && selectedSupplier && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <form onSubmit={handlePayment} className="bg-[#0d1120] border border-amber-500/30 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">{tt('paymentRecord')}</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
-            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{tt('payableBalance')}</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
+            <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black text-amber-400 tracking-wide">ငွေပေးချေမှုမှတ်တမ်း</h3><button type="button" onClick={() => setPaymentModalOpen(false)} className="text-slate-400 hover:text-white p-1 bg-white/5 rounded-full"><X size={20}/></button></div>
+            <div className="bg-black/40 p-5 rounded-2xl mb-6 text-center border border-white/5 shadow-inner"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{pt('payableBalance')}</p><p className="text-3xl font-black text-rose-400 mt-2">{Number(selectedSupplier.totalDebt).toLocaleString()} <span className="text-sm">Ks</span></p></div>
             <div className="space-y-4">
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tt('paymentAmount')}</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
-              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">{tt('note')}</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">ပေးချေမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={selectedSupplier.totalDebt} value={paymentForm.amount} onChange={e=>setPaymentForm({...paymentForm, amount: e.target.value})} inputMode="decimal" className="w-full bg-black/50 border border-amber-500/30 rounded-xl p-4 text-amber-400 text-[16px] sm:text-xl font-black outline-none focus:border-amber-400 text-center tracking-wider"/></div>
+              <div><label className="text-xs text-slate-400 font-bold ml-1 mb-1 block">မှတ်ချက်</label><input value={paymentForm.note} onChange={e=>setPaymentForm({...paymentForm, note: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl p-3.5 text-white outline-none focus:border-amber-400 text-sm"/></div>
             </div>
-            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">{tt('payNow')}</button>
+            <button type="submit" disabled={loading || paymentSaving} className="w-full mt-8 bg-amber-600 text-white font-black py-4 rounded-xl active:scale-95 transition-transform">ငွေချေမည်</button>
           </form>
         </div>
       )}
@@ -505,27 +507,27 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-[#0d1120] border border-blue-500/30 rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
             <div className="p-6 pb-4 border-b border-white/5 flex justify-between items-center bg-black/20 rounded-t-3xl">
-              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedSupplier.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">{tt('currentDebt')}: <span className="text-rose-400 text-sm">{Number(selectedSupplier.totalDebt).toLocaleString()} Ks</span></p></div>
+              <div><h3 className="text-xl font-black text-blue-400 flex items-center gap-2"><ClipboardList size={20}/> {selectedSupplier.name}</h3><p className="text-xs text-slate-400 mt-1 font-bold tracking-wider">Current Debt: <span className="text-rose-400 text-sm">{Number(selectedSupplier.totalDebt).toLocaleString()} Ks</span></p></div>
               <button onClick={() => setLedgerModalOpen(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={20}/></button>
             </div>
             <div className="overflow-y-auto custom-scrollbar flex-1 p-4 sm:p-6 bg-black/10">
-              {currentLedger.length === 0 ? <div className="text-center py-10 opacity-50"><p className="text-slate-400 font-bold">{tt('noRecordsYet')}</p></div> : 
+              {currentLedger.length === 0 ? <div className="text-center py-10 opacity-50"><p className="text-slate-400 font-bold">မှတ်တမ်း မရှိသေးပါ။</p></div> : 
                <div className="space-y-3">
                   {currentLedger.map(record => {
                     const isPurchase = record.type === 'Purchase';
                     return (
                       <div key={record.id} onClick={() => isPurchase && setReceiptModal({ show: true, record })} className={`bg-[#12182b] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors ${isPurchase ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isPurchase ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'}`}>{!isPurchase ? tt('paymentOut') : tt('creditPurchase')}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
-                          {isPurchase ? <div><p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> {tt('invoice')}: {record.voucherNo || '-'}</p></div> : <p className="text-sm font-bold text-slate-200">{record.note || 'ပွဲရုံသို့ ငွေချေခြင်း'}</p>}
-                          {isPurchase && <p className="text-[11px] font-bold text-slate-500 mt-1">{tt('totalBill')}: {Number(record.amount).toLocaleString()} • {tt('paid')}: {Number(record.paidAmount).toLocaleString()}</p>}
+                          <div className="flex items-center gap-2 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider ${!isPurchase ? 'bg-green-500/20 text-green-400 border border-green-500/20' : 'bg-rose-500/20 text-rose-400 border border-rose-500/20'}`}>{!isPurchase ? 'Payment Out' : 'Credit Purchase'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          {isPurchase ? <div><p className="text-sm font-bold text-cyan-300 flex items-center gap-1.5"><Receipt size={14}/> Invoice: {record.voucherNo || '-'}</p></div> : <p className="text-sm font-bold text-slate-200">{record.note || 'ပွဲရုံသို့ ငွေချေခြင်း'}</p>}
+                          {isPurchase && <p className="text-[11px] font-bold text-slate-500 mt-1">Total Bill: {Number(record.amount).toLocaleString()} • Paid: {Number(record.paidAmount).toLocaleString()}</p>}
                         </div>
                         <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-white/5 sm:border-0 mt-2 sm:mt-0">
-                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isPurchase ? tt('amountPaid') : tt('debtAdded')}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{!isPurchase ? 'Amount Paid' : 'Debt Added'}</p>
                           <p className={`text-lg font-black mt-0.5 ${!isPurchase ? 'text-green-400' : 'text-rose-400'}`}>
                             {!isPurchase ? '-' : '+'}{Number(!isPurchase ? record.amount : record.remainingDebt).toLocaleString()} <span className="text-xs">Ks</span>
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">{tt('balanceShort')}: {Number(record.runningBalance).toLocaleString()}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Bal: {Number(record.runningBalance).toLocaleString()}</p>
                         </div>
                       </div>
                     );
@@ -542,15 +544,15 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm print:hidden">
           <div className="w-full max-w-sm bg-white text-black rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar font-sans relative animate-in zoom-in-95">
             <button onClick={() => setReceiptModal({show:false, record:null})} className="absolute top-4 right-4 p-1 bg-gray-200 rounded-full text-gray-600 hover:bg-gray-300"><X size={20}/></button>
-            <div className="text-center mb-4 mt-2"><h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">{tt('purchaseReceipt')}</h2></div>
+            <div className="text-center mb-4 mt-2"><h2 className="text-2xl font-black text-gray-800 uppercase tracking-wider">PURCHASE RECEIPT</h2></div>
             <div className="border-t border-b border-dashed border-gray-300 py-3 mb-4 text-[11px] font-semibold text-gray-600 space-y-1.5">
-              <div className="flex justify-between"><span>{tt('voucherNo')}</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
-              <div className="flex justify-between"><span>{tt('date')}</span> <span className="text-gray-900">{receiptModal.record.date}</span></div>
-              <div className="flex justify-between"><span>{tt('supplier')}</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
+              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo}</span></div>
+              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date}</span></div>
+              <div className="flex justify-between"><span>Supplier:</span> <span className="text-gray-900">{receiptModal.record.personName}</span></div>
             </div>
             <div className="mb-4">
               <table className="w-full text-xs">
-                <thead><tr className="border-b border-gray-300 text-gray-500"><th className="text-left py-2">{tt('item')}</th><th className="text-right py-2">{tt('amount')}</th></tr></thead>
+                <thead><tr className="border-b border-gray-300 text-gray-500"><th className="text-left py-2">Item</th><th className="text-right py-2">Amount</th></tr></thead>
                 <tbody>
                   {(receiptModal.record.itemsDetail || []).map((item,i) => (
                     <tr key={i} className="border-b border-gray-100 last:border-0">
@@ -562,9 +564,9 @@ export default function SuppliersPage() {
               </table>
             </div>
             <div className="border-t border-gray-300 pt-3 mt-3 space-y-1 text-xs">
-               <div className="flex justify-between text-gray-600"><span>{tt('totalBill')}:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-gray-600"><span>{tt('paid')}:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
-               <div className="flex justify-between text-rose-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>{tt('creditBalance')}</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{Number(receiptModal.record.amount).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{Number(receiptModal.record.paidAmount).toLocaleString()} Ks</span></div>
+               <div className="flex justify-between text-rose-600 font-bold border-t border-gray-200 pt-1.5 mt-1.5"><span>Credit Balance:</span><span>{Number(receiptModal.record.remainingDebt).toLocaleString()} Ks</span></div>
             </div>
           </div>
         </div>

@@ -45,6 +45,13 @@ const MAX_PAYMENT_AMOUNT = 999_999_999;
 
 const ADMIN_ROLES = new Set(['owner', 'admin', 'superadmin']);
 
+const CUSTOMER_PAGE_TEXT = {
+  en: { accessDenied:'Access Denied', noViewPermission:'You do not have permission to view customer records.', customerBook:'Customer Book', paymentHistory:'Payment History', searchCustomers:'Search customers...', exportCsv:'Export CSV', importCsv:'Import CSV', add:'Add', duplicateWarningPrefix:'Possible duplicate customer groups:', duplicateWarningSuffix:'Auto-merge is disabled. Please review and fix manually.', customerInfo:'Customer Info', contact:'Contact', creditLimit:'Credit Limit', creditBalance:'Credit Balance', actions:'Actions', noCustomersFound:'No customers found.', settled:'Settled', viewLedger:'View ledger', acceptPayment:'Accept payment', edit:'Edit', delete:'Delete', address:'Address', note:'Note', ledger:'Ledger', payment:'Payment', customer:'Customer', times:'Times', totalPaid:'Total Paid', lastPayment:'Last Payment', noPaymentHistory:'No payment history yet.', timesSuffix:'times', loadMore:'Load More', dataLimitWarning:'Large data detected, so only the latest records are shown. Add server-side pagination/date filters in the next phase.', editCustomer:'Edit Customer', addCustomer:'Add Customer', nameRequired:'Name *', phone:'Phone', noLimitPlaceholder:'0 = no limit', save:'Save', paymentRecord:'Payment Record', paymentAmount:'Payment Amount *', payNow:'Save Payment', currentDebt:'Current Debt', noRecordsYet:'No records yet.', paymentIn:'Payment In', creditSale:'Credit Sale', invoice:'Invoice', totalBill:'Total Bill', paid:'Paid', amountReceived:'Amount Received', debtAdded:'Debt Added', balanceShort:'Bal', receipt:'RECEIPT', voucherNo:'Voucher No:', date:'Date:', item:'Item', amount:'Amount', credit:'Credit:' },
+  mm: { accessDenied:'ဝင်ခွင့်မရှိပါ', noViewPermission:'သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။', customerBook:'Customer စာရင်း', paymentHistory:'ငွေသွင်းမှတ်တမ်း', searchCustomers:'Customer ရှာရန်...', exportCsv:'CSV ထုတ်ရန်', importCsv:'CSV သွင်းရန်', add:'ထည့်မည်', duplicateWarningPrefix:'Customer duplicate ဖြစ်နိုင်သော စာရင်း:', duplicateWarningSuffix:'Auto-merge မလုပ်တော့ပါ။ Admin မှ စစ်ပြီး manual ပြင်ပါ။', customerInfo:'Customer အချက်အလက်', contact:'ဆက်သွယ်ရန်', creditLimit:'Credit Limit', creditBalance:'အကြွေးကျန်ငွေ', actions:'လုပ်ဆောင်ချက်များ', noCustomersFound:'Customer မရှိသေးပါ။', settled:'ရှင်းပြီး', viewLedger:'မှတ်တမ်းကြည့်မည်', acceptPayment:'အကြွေးဆပ်မည်', edit:'ပြင်မည်', delete:'ဖျက်မည်', address:'လိပ်စာ', note:'မှတ်ချက်', ledger:'Ledger', payment:'Payment', customer:'Customer', times:'အကြိမ်ရေ', totalPaid:'စုစုပေါင်းသွင်းငွေ', lastPayment:'နောက်ဆုံးသွင်းငွေ', noPaymentHistory:'ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။', timesSuffix:'ကြိမ်', loadMore:'ထပ်ကြည့်မည်', dataLimitWarning:'Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့သာ ဖော်ပြထားပါသည်။ နောက်အဆင့်တွင် server-side pagination/date filter ထည့်သင့်ပါသည်။', editCustomer:'Customer ပြင်မည်', addCustomer:'Customer ထည့်မည်', nameRequired:'အမည် *', phone:'ဖုန်းနံပါတ်', noLimitPlaceholder:'0 = limit မသတ်မှတ်', save:'သိမ်းမည်', paymentRecord:'ငွေသွင်းမှတ်တမ်း', paymentAmount:'ပေးသွင်းမည့် ငွေပမာဏ *', payNow:'ငွေသွင်းမည်', currentDebt:'လက်ရှိအကြွေး', noRecordsYet:'မှတ်တမ်း မရှိသေးပါ။', paymentIn:'ငွေသွင်း', creditSale:'အကြွေးရောင်း', invoice:'ဘောက်ချာ', totalBill:'စုစုပေါင်း', paid:'ပေးပြီး', amountReceived:'လက်ခံငွေ', debtAdded:'အကြွေးတိုး', balanceShort:'ကျန်', receipt:'RECEIPT', voucherNo:'Voucher No:', date:'Date:', item:'Item', amount:'Amount', credit:'Credit:' },
+  zh: { accessDenied:'无访问权限', noViewPermission:'您没有权限查看客户记录。', customerBook:'客户账本', paymentHistory:'付款记录', searchCustomers:'搜索客户...', exportCsv:'导出 CSV', importCsv:'导入 CSV', add:'新增', duplicateWarningPrefix:'可能重复的客户组:', duplicateWarningSuffix:'自动合并已关闭，请手动检查并修正。', customerInfo:'客户信息', contact:'联系方式', creditLimit:'信用额度', creditBalance:'欠款余额', actions:'操作', noCustomersFound:'暂无客户。', settled:'已结清', viewLedger:'查看账本', acceptPayment:'收款', edit:'编辑', delete:'删除', address:'地址', note:'备注', ledger:'账本', payment:'付款', customer:'客户', times:'次数', totalPaid:'付款总额', lastPayment:'最后付款', noPaymentHistory:'暂无付款记录。', timesSuffix:'次', loadMore:'加载更多', dataLimitWarning:'数据较多，仅显示最新记录。下一阶段应加入服务端分页/日期筛选。', editCustomer:'编辑客户', addCustomer:'新增客户', nameRequired:'姓名 *', phone:'电话', noLimitPlaceholder:'0 = 无限制', save:'保存', paymentRecord:'付款记录', paymentAmount:'付款金额 *', payNow:'保存付款', currentDebt:'当前欠款', noRecordsYet:'暂无记录。', paymentIn:'收款', creditSale:'赊销', invoice:'发票', totalBill:'账单总额', paid:'已付', amountReceived:'已收金额', debtAdded:'新增欠款', balanceShort:'余额', receipt:'收据', voucherNo:'凭证号:', date:'日期:', item:'商品', amount:'金额', credit:'欠款:' },
+};
+
+
 const emptyCustomerForm = {
   name: '',
   phone: '',
@@ -122,8 +129,9 @@ const getPaymentPersonKey = (record) => record.customerId || normalizeLower(reco
 
 export default function CustomersPage() {
   
-  const { t } = useLanguage();
-const { profile, hasPermission } = useAuth();
+  const { language } = useLanguage();
+  const tt = (key) => CUSTOMER_PAGE_TEXT[language]?.[key] || CUSTOMER_PAGE_TEXT.en[key] || key;
+  const { profile, hasPermission } = useAuth();
   const tenantId = profile?.tenantId;
   const isAdmin = ADMIN_ROLES.has(profile?.role);
 
@@ -591,8 +599,8 @@ const { profile, hasPermission } = useAuth();
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center text-slate-500">
         <Users size={64} className="mb-4 opacity-20" />
-        <h2 className="text-xl font-bold">Access Denied</h2>
-        <p className="mt-2 text-sm">သင့်တွင် Customer စာရင်း ကြည့်ရှုခွင့် မရှိပါ။</p>
+        <h2 className="text-xl font-bold">{tt('accessDenied')}</h2>
+        <p className="mt-2 text-sm">{tt('noViewPermission')}</p>
       </div>
     );
   }
@@ -608,14 +616,14 @@ const { profile, hasPermission } = useAuth();
             onClick={() => setActiveTab('book')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'book' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <Users size={18} /> {t('customerBook')}
+            <Users size={18} /> {tt('customerBook')}
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold transition-all md:flex-none ${activeTab === 'history' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/5 hover:text-white'}`}
           >
-            <History size={18} /> {t('paymentHistory')}
+            <History size={18} /> {tt('paymentHistory')}
           </button>
         </div>
 
@@ -624,7 +632,7 @@ const { profile, hasPermission } = useAuth();
             <Search size={18} className="absolute left-4 top-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder={t('searchCustomers')}
+              placeholder={tt('searchCustomers')}
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full rounded-xl border border-cyan-500/20 bg-black/50 py-3 pl-11 pr-4 text-sm outline-none focus:border-cyan-400"
@@ -635,13 +643,13 @@ const { profile, hasPermission } = useAuth();
             <div className="flex gap-2">
               {isAdmin && (
                 <>
-                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title="Export CSV"><Download size={20} /></button>
-                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title="Import CSV"><Upload size={20} /></button>
+                  <button type="button" onClick={handleExportCSV} className="rounded-xl bg-emerald-600/20 p-3 text-emerald-400 transition-colors hover:bg-emerald-600/40" title={tt('exportCsv')}><Download size={20} /></button>
+                  <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xl bg-amber-600/20 p-3 text-amber-400 transition-colors hover:bg-amber-600/40" title={tt('importCsv')}><Upload size={20} /></button>
                   <input type="file" accept=".csv,text/csv" ref={fileRef} onChange={handleImportCSV} className="hidden" />
                 </>
               )}
               {canManageCustomers && (
-                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{t('add')}</button>
+                <button type="button" onClick={resetCustomerModal} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-cyan-500 active:scale-95"><Plus size={20} />{tt('add')}</button>
               )}
             </div>
           )}
@@ -650,7 +658,7 @@ const { profile, hasPermission } = useAuth();
 
       {duplicateCustomerWarnings.length > 0 && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          Customer duplicate ဖြစ်နိုင်သော စာရင်း {duplicateCustomerWarnings.length} ခုရှိသည်။ Auto-merge မလုပ်တော့ပါ။ Admin မှ စစ်ပြီး manual ပြင်ပါ။
+          {tt('duplicateWarningPrefix')} {duplicateCustomerWarnings.length}။ {tt('duplicateWarningSuffix')}
         </div>
       )}
 
@@ -661,16 +669,16 @@ const { profile, hasPermission } = useAuth();
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                   <tr>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer Info</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider">Contact</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Limit</th>
-                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Credit Balance</th>
-                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('customerInfo')}</th>
+                    <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('contact')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('creditLimit')}</th>
+                    <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('creditBalance')}</th>
+                    <th className="w-44 p-4 text-center text-xs font-bold uppercase tracking-wider">{tt('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {filteredCustomers.length === 0 ? (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{t('noCustomersFound')}</td></tr>
+                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">{tt('noCustomersFound')}</td></tr>
                   ) : visibleCustomers.map((customer) => {
                     const debt = toMoney(customer.totalDebt);
                     const limitAmount = toMoney(customer.creditLimit);
@@ -683,17 +691,17 @@ const { profile, hasPermission } = useAuth();
                         </td>
                         <td className="p-4 text-slate-400"><p>{customer.phone || '-'}</p><p className="max-w-[220px] truncate text-xs text-slate-500">{customer.address || '-'}</p></td>
                         <td className="p-4 text-right text-slate-300">{limitAmount > 0 ? formatMoney(limitAmount) : '-'}</td>
-                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">ရှင်းပြီး</span>}</td>
+                        <td className="p-4 text-right">{debt > 0 ? <span className={`text-base font-black ${isOverLimit ? 'text-rose-400' : 'text-amber-400'}`}>{formatMoney(debt)}</span> : <span className="text-sm font-bold text-green-500">{tt('settled')}</span>}</td>
                         <td className="p-4 text-center">
                           <div className="flex justify-center gap-2">
-                            <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title="မှတ်တမ်းကြည့်မည်"><ClipboardList size={16} /></button>
+                            <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 p-2 text-blue-400 transition-colors hover:bg-blue-600/40" title={tt('viewLedger')}><ClipboardList size={16} /></button>
                             {canAcceptPayment && (
-                              <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} disabled={debt <= 0} className={`rounded-lg p-2 transition-colors ${debt > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40' : 'cursor-not-allowed bg-gray-800 text-gray-600'}`} title="အကြွေးဆပ်မည်"><DollarSign size={16} /></button>
+                              <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} disabled={debt <= 0} className={`rounded-lg p-2 transition-colors ${debt > 0 ? 'bg-amber-600/20 text-amber-400 hover:bg-amber-600/40' : 'cursor-not-allowed bg-gray-800 text-gray-600'}`} title={tt('acceptPayment')}><DollarSign size={16} /></button>
                             )}
                             {canManageCustomers && (
                               <>
-                                <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 p-2 text-indigo-400 transition-colors hover:bg-indigo-600/40" title="ပြင်မည်"><Edit3 size={16} /></button>
-                                <button type="button" onClick={() => handleDeleteCustomer(customer)} className="rounded-lg bg-rose-600/20 p-2 text-rose-400 transition-colors hover:bg-rose-600/40" title="ဖျက်မည်"><Trash2 size={16} /></button>
+                                <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 p-2 text-indigo-400 transition-colors hover:bg-indigo-600/40" title={tt('edit')}><Edit3 size={16} /></button>
+                                <button type="button" onClick={() => handleDeleteCustomer(customer)} className="rounded-lg bg-rose-600/20 p-2 text-rose-400 transition-colors hover:bg-rose-600/40" title={tt('delete')}><Trash2 size={16} /></button>
                               </>
                             )}
                           </div>
@@ -707,7 +715,7 @@ const { profile, hasPermission } = useAuth();
 
             <div className="block divide-y divide-white/5 sm:hidden">
               {filteredCustomers.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">{t('noCustomersFound')}</div>
+                <div className="p-8 text-center text-slate-500">{tt('noCustomersFound')}</div>
               ) : visibleCustomers.map((customer) => {
                 const debt = toMoney(customer.totalDebt);
                 const isExpanded = Boolean(expandedCust[customer.id]);
@@ -717,19 +725,19 @@ const { profile, hasPermission } = useAuth();
                       <div>
                         <p className="font-black text-white">{customer.name}</p>
                         <p className="mt-1 text-xs text-slate-400">{customer.phone || '-'}</p>
-                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : 'ရှင်းပြီး'}</p>
+                        <p className={`mt-2 text-sm font-black ${debt > 0 ? 'text-amber-400' : 'text-green-500'}`}>{debt > 0 ? formatMoney(debt) : tt('settled')}</p>
                       </div>
                       {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
                     {isExpanded && (
                       <div className="mt-4 space-y-3 rounded-2xl bg-black/30 p-3 text-sm">
-                        <p className="text-slate-400">လိပ်စာ: {customer.address || '-'}</p>
-                        <p className="text-slate-400">Credit Limit: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
-                        {customer.note && <p className="text-slate-400">မှတ်ချက်: {customer.note}</p>}
+                        <p className="text-slate-400">{tt('address')}: {customer.address || '-'}</p>
+                        <p className="text-slate-400">{tt('creditLimit')}: {toMoney(customer.creditLimit) > 0 ? formatMoney(customer.creditLimit) : '-'}</p>
+                        {customer.note && <p className="text-slate-400">{tt('note')}: {customer.note}</p>}
                         <div className="flex flex-wrap gap-2 pt-2">
-                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">Ledger</button>
-                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">Payment</button>}
-                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">Edit</button>}
+                          <button type="button" onClick={() => { setSelectedCustomer(customer); setLedgerModalOpen(true); }} className="rounded-lg bg-blue-600/20 px-3 py-2 text-xs font-bold text-blue-300">{tt('ledger')}</button>
+                          {canAcceptPayment && debt > 0 && <button type="button" onClick={() => { setSelectedCustomer(customer); setPaymentForm(emptyPaymentForm); setPaymentModalOpen(true); }} className="rounded-lg bg-amber-600/20 px-3 py-2 text-xs font-bold text-amber-300">{tt('payment')}</button>}
+                          {canManageCustomers && <button type="button" onClick={() => openEditCustomer(customer)} className="rounded-lg bg-indigo-600/20 px-3 py-2 text-xs font-bold text-indigo-300">{tt('edit')}</button>}
                         </div>
                       </div>
                     )}
@@ -743,20 +751,20 @@ const { profile, hasPermission } = useAuth();
             <table className="w-full text-left text-sm">
               <thead className="border-b border-white/5 bg-black/40 text-slate-400">
                 <tr>
-                  <th className="p-4 text-xs font-bold uppercase tracking-wider">Customer</th>
-                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">Times</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Total Paid</th>
-                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">Last Payment</th>
+                  <th className="p-4 text-xs font-bold uppercase tracking-wider">{tt('customer')}</th>
+                  <th className="p-4 text-center text-xs font-bold uppercase tracking-wider">{tt('times')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('totalPaid')}</th>
+                  <th className="p-4 text-right text-xs font-bold uppercase tracking-wider">{tt('lastPayment')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {mergedHistory.length === 0 ? (
-                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">ငွေသွင်းမှတ်တမ်း မရှိသေးပါ။</td></tr>
+                  <tr><td colSpan="4" className="p-8 text-center text-slate-500">{tt('noPaymentHistory')}</td></tr>
                 ) : visibleHistory.map((history) => (
                   <React.Fragment key={history.key}>
                     <tr className="cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={() => toggleHist(history.key)}>
                       <td className="p-4 text-base font-bold text-white">{history.personName}</td>
-                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} ကြိမ်</td>
+                      <td className="p-4 text-center font-bold text-cyan-400">{history.paymentCount} {tt('timesSuffix')}</td>
                       <td className="p-4 text-right text-base font-black text-green-400">+{formatMoney(history.totalPaid)}</td>
                       <td className="p-4 text-right text-slate-400">{history.lastPaymentDate || '-'}</td>
                     </tr>
@@ -778,16 +786,16 @@ const { profile, hasPermission } = useAuth();
       </div>
 
       {activeTab === 'book' && filteredCustomers.length > visibleCustomers.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">Load More ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-cyan-500/20 bg-cyan-600/20 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-600/30">{tt('loadMore')} ({visibleCustomers.length}/{filteredCustomers.length})</button></div>
       )}
 
       {activeTab === 'history' && mergedHistory.length > visibleHistory.length && (
-        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">Load More ({visibleHistory.length}/{mergedHistory.length})</button></div>
+        <div className="flex justify-center"><button type="button" onClick={() => setHistoryVisibleLimit((prev) => prev + CUSTOMER_RENDER_PAGE_SIZE)} className="rounded-xl border border-purple-500/20 bg-purple-600/20 px-5 py-3 font-bold text-purple-300 hover:bg-purple-600/30">{tt('loadMore')} ({visibleHistory.length}/{mergedHistory.length})</button></div>
       )}
 
       {(customers.length >= CUSTOMER_FETCH_LIMIT || paymentRecords.length >= RECORD_FETCH_LIMIT || creditSaleRecords.length >= RECORD_FETCH_LIMIT) && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
-          Data များလွန်းလို့ latest records ကို အကန့်အသတ်နဲ့သာ ဖော်ပြထားပါသည်။ နောက်အဆင့်တွင် server-side pagination/date filter ထည့်သင့်ပါသည်။
+          {tt('dataLimitWarning')}
         </div>
       )}
 
@@ -795,17 +803,17 @@ const { profile, hasPermission } = useAuth();
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={handleSaveCustomer} className="w-full max-w-md rounded-3xl border border-cyan-500/30 bg-[#0d1120] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? 'Edit Customer' : 'Add Customer'}</h3>
+              <h3 className="text-xl font-black tracking-wide text-cyan-400">{editingCustomer ? tt('editCustomer') : tt('addCustomer')}</h3>
               <button type="button" onClick={() => setCustomerModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">အမည် *</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ဖုန်းနံပါတ်</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">Credit Limit</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder="0 = limit မသတ်မှတ်" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">လိပ်စာ</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('nameRequired')}</label><input required value={customerForm.name} onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('phone')}</label><input type="tel" value={customerForm.phone} onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('creditLimit')}</label><input type="number" min="0" inputMode="decimal" value={customerForm.creditLimit} onChange={(event) => setCustomerForm((prev) => ({ ...prev, creditLimit: event.target.value }))} className="w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" placeholder={tt('noLimitPlaceholder')} /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('address')}</label><textarea value={customerForm.address} onChange={(event) => setCustomerForm((prev) => ({ ...prev, address: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('note')}</label><textarea value={customerForm.note} onChange={(event) => setCustomerForm((prev) => ({ ...prev, note: event.target.value }))} className="custom-scrollbar w-full rounded-xl border border-cyan-500/20 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-cyan-400" rows="2" /></div>
             </div>
-            <button type="submit" disabled={loading} className="mt-8 w-full rounded-xl bg-cyan-600 py-3.5 font-black text-white transition-transform active:scale-95 disabled:opacity-50">သိမ်းမည်</button>
+            <button type="submit" disabled={loading} className="mt-8 w-full rounded-xl bg-cyan-600 py-3.5 font-black text-white transition-transform active:scale-95 disabled:opacity-50">{tt('save')}</button>
           </form>
         </div>
       )}
@@ -814,18 +822,18 @@ const { profile, hasPermission } = useAuth();
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={handlePayment} className="w-full max-w-sm rounded-3xl border border-amber-500/30 bg-[#0d1120] p-6 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-black tracking-wide text-amber-400">ငွေသွင်းမှတ်တမ်း</h3>
+              <h3 className="text-xl font-black tracking-wide text-amber-400">{tt('paymentRecord')}</h3>
               <button type="button" onClick={() => setPaymentModalOpen(false)} className="rounded-full bg-white/5 p-1 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="mb-6 rounded-2xl border border-white/5 bg-black/40 p-5 text-center shadow-inner">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Credit Balance</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{tt('creditBalance')}</p>
               <p className="mt-2 text-3xl font-black text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</p>
             </div>
             <div className="space-y-4">
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">ပေးသွင်းမည့် ငွေပမာဏ *</label><input type="number" required min="1" max={toMoney(selectedCustomer.totalDebt)} value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} inputMode="decimal" className="w-full rounded-xl border border-amber-500/30 bg-black/50 p-4 text-center text-[16px] font-black tracking-wider text-amber-400 outline-none focus:border-amber-400 sm:text-xl" /></div>
-              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">မှတ်ချက်</label><input value={paymentForm.note} onChange={(event) => setPaymentForm((prev) => ({ ...prev, note: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-amber-400" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('paymentAmount')}</label><input type="number" required min="1" max={toMoney(selectedCustomer.totalDebt)} value={paymentForm.amount} onChange={(event) => setPaymentForm((prev) => ({ ...prev, amount: event.target.value }))} inputMode="decimal" className="w-full rounded-xl border border-amber-500/30 bg-black/50 p-4 text-center text-[16px] font-black tracking-wider text-amber-400 outline-none focus:border-amber-400 sm:text-xl" /></div>
+              <div><label className="mb-1 ml-1 block text-xs font-bold text-slate-400">{tt('note')}</label><input value={paymentForm.note} onChange={(event) => setPaymentForm((prev) => ({ ...prev, note: event.target.value }))} className="w-full rounded-xl border border-white/10 bg-black/50 p-3.5 text-sm text-white outline-none focus:border-amber-400" /></div>
             </div>
-            <button type="submit" disabled={loading || paymentSaving} className="mt-8 w-full rounded-xl bg-amber-600 py-4 font-black text-white transition-transform active:scale-95 disabled:opacity-50">ငွေသွင်းမည်</button>
+            <button type="submit" disabled={loading || paymentSaving} className="mt-8 w-full rounded-xl bg-amber-600 py-4 font-black text-white transition-transform active:scale-95 disabled:opacity-50">{tt('payNow')}</button>
           </form>
         </div>
       )}
@@ -834,12 +842,12 @@ const { profile, hasPermission } = useAuth();
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-3xl border border-blue-500/30 bg-[#0d1120] shadow-2xl">
             <div className="flex items-center justify-between rounded-t-3xl border-b border-white/5 bg-black/20 p-6 pb-4">
-              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">Current Debt: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
+              <div><h3 className="flex items-center gap-2 text-xl font-black text-blue-400"><ClipboardList size={20} /> {selectedCustomer.name}</h3><p className="mt-1 text-xs font-bold tracking-wider text-slate-400">{tt('currentDebt')}: <span className="text-sm text-amber-400">{formatMoney(selectedCustomer.totalDebt)}</span></p></div>
               <button type="button" onClick={() => setLedgerModalOpen(false)} className="rounded-full bg-white/5 p-2 text-slate-400 hover:text-white"><X size={20} /></button>
             </div>
             <div className="custom-scrollbar flex-1 overflow-y-auto bg-black/10 p-4 sm:p-6">
               {currentLedger.length === 0 ? (
-                <div className="py-10 text-center opacity-50"><p className="font-bold text-slate-400">မှတ်တမ်း မရှိသေးပါ။</p></div>
+                <div className="py-10 text-center opacity-50"><p className="font-bold text-slate-400">{tt('noRecordsYet')}</p></div>
               ) : (
                 <div className="space-y-3">
                   {currentLedger.map((record) => {
@@ -847,14 +855,14 @@ const { profile, hasPermission } = useAuth();
                     return (
                       <div key={record.id} onClick={() => isSale && setReceiptModal({ show: true, record })} className={`flex flex-col justify-between gap-3 rounded-2xl border border-white/5 bg-[#12182b] p-4 transition-colors sm:flex-row sm:items-center ${isSale ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-[#1a2235]' : 'hover:border-blue-500/30'}`}>
                         <div>
-                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? 'Payment In' : 'Credit Sale'}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
-                          {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> Invoice: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
-                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">Total Bill: {formatMoney(record.amount)} • Paid: {formatMoney(record.paidAmount)}</p>}
+                          <div className="mb-2 flex items-center gap-2"><span className={`rounded border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${!isSale ? 'border-green-500/20 bg-green-500/20 text-green-400' : 'border-amber-500/20 bg-amber-500/20 text-amber-400'}`}>{!isSale ? tt('paymentIn') : tt('creditSale')}</span><span className="text-[11px] font-bold text-slate-500">{record.date} {record.time}</span></div>
+                          {isSale ? <p className="flex items-center gap-1.5 text-sm font-bold text-cyan-300"><Receipt size={14} /> {tt('invoice')}: {record.voucherNo || '-'}</p> : <p className="text-sm font-bold text-slate-200">{record.note || 'အကြွေးဆပ်ခြင်း'}</p>}
+                          {isSale && <p className="mt-1 text-[11px] font-bold text-slate-500">{tt('totalBill')}: {formatMoney(record.amount)} • {tt('paid')}: {formatMoney(record.paidAmount)}</p>}
                         </div>
                         <div className="mt-2 border-t border-white/5 pt-2 text-left sm:mt-0 sm:border-0 sm:pt-0 sm:text-right">
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? 'Amount Received' : 'Debt Added'}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{!isSale ? tt('amountReceived') : tt('debtAdded')}</p>
                           <p className={`mt-0.5 text-lg font-black ${!isSale ? 'text-green-400' : 'text-amber-400'}`}>{!isSale ? '-' : '+'}{formatMoney(!isSale ? record.amount : record.remainingDebt)}</p>
-                          <p className="mt-1 text-[10px] text-slate-500">Bal: {formatMoney(record.runningBalance)}</p>
+                          <p className="mt-1 text-[10px] text-slate-500">{tt('balanceShort')}: {formatMoney(record.runningBalance)}</p>
                         </div>
                       </div>
                     );
@@ -870,14 +878,14 @@ const { profile, hasPermission } = useAuth();
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm print:hidden">
           <div className="custom-scrollbar relative max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-xl bg-white p-6 font-sans text-black shadow-2xl">
             <button type="button" onClick={() => setReceiptModal({ show: false, record: null })} className="absolute right-4 top-4 rounded-full bg-gray-200 p-1 text-gray-600 hover:bg-gray-300"><X size={20} /></button>
-            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">RECEIPT</h2></div>
+            <div className="mb-4 mt-2 text-center"><h2 className="text-2xl font-black uppercase tracking-wider text-gray-800">{tt('receipt')}</h2></div>
             <div className="mb-4 space-y-1.5 border-y border-dashed border-gray-300 py-3 text-[11px] font-semibold text-gray-600">
-              <div className="flex justify-between"><span>Voucher No:</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
-              <div className="flex justify-between"><span>Date:</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
-              <div className="flex justify-between"><span>Customer:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
+              <div className="flex justify-between"><span>{tt('voucherNo')}</span> <span className="text-gray-900">{receiptModal.record.voucherNo || '-'}</span></div>
+              <div className="flex justify-between"><span>{tt('date')}</span> <span className="text-gray-900">{receiptModal.record.date || '-'}</span></div>
+              <div className="flex justify-between"><span>{tt('customer')}:</span> <span className="text-gray-900">{receiptModal.record.personName || '-'}</span></div>
             </div>
             <table className="w-full text-xs">
-              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">Item</th><th className="py-2 text-right">Amount</th></tr></thead>
+              <thead><tr className="border-b border-gray-300 text-gray-500"><th className="py-2 text-left">{tt('item')}</th><th className="py-2 text-right">{tt('amount')}</th></tr></thead>
               <tbody>
                 {(receiptModal.record.itemsDetail || []).map((item, index) => {
                   const quantity = toMoney(item.quantity);
@@ -893,9 +901,9 @@ const { profile, hasPermission } = useAuth();
               </tbody>
             </table>
             <div className="mt-3 space-y-1 border-t border-gray-300 pt-3 text-xs">
-              <div className="flex justify-between text-gray-600"><span>Total Bill:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
-              <div className="flex justify-between text-gray-600"><span>Paid:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
-              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>Credit:</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{tt('totalBill')}:</span><span>{formatMoney(receiptModal.record.amount)}</span></div>
+              <div className="flex justify-between text-gray-600"><span>{tt('paid')}:</span><span>{formatMoney(receiptModal.record.paidAmount)}</span></div>
+              <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-bold text-red-600"><span>{tt('credit')}</span><span>{formatMoney(receiptModal.record.remainingDebt)}</span></div>
             </div>
           </div>
         </div>

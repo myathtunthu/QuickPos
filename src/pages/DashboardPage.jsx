@@ -15,10 +15,8 @@ import {
   Package,
   RefreshCw,
   ReceiptText,
-  Search,
   ShieldCheck,
   ShoppingCart,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Users,
@@ -305,7 +303,6 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
   const [dateRange, setDateRange] = useState('today');
-  const [searchTerm, setSearchTerm] = useState('');
 
   const text = TEXT[language] || TEXT.mm;
   const tx = (key) => t?.(`dashboard_${key}`, text[key] || TEXT.en[key] || key) || text[key] || TEXT.en[key] || key;
@@ -361,8 +358,6 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     const today = getPastISO(0);
     const weekStart = getPastISO(6);
     const monthStart = getPastISO(29);
-    const keyword = searchTerm.trim().toLowerCase();
-
     return records
       .filter((record) => {
         const iso = getRecordDateISO(record);
@@ -371,13 +366,8 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
         if (dateRange === 'month') return iso >= monthStart && iso <= today;
         return true;
       })
-      .filter((record) => {
-        if (!keyword) return true;
-        return [record.personName, record.customerName, record.supplierName, record.voucherNo, record.invoiceNo, record.type, record.item]
-          .some((value) => String(value || '').toLowerCase().includes(keyword));
-      })
       .sort((a, b) => getTimeValue(b) - getTimeValue(a));
-  }, [records, dateRange, searchTerm]);
+  }, [records, dateRange]);
 
   const productMap = useMemo(() => {
     const map = {};
@@ -524,8 +514,8 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   const mainCards = [
     { label: tx('revenue'), value: money(analytics.revenue), icon: DollarSign, tone: 'cyan', note: `${analytics.salesCount} ${tx('orders')}` },
     { label: tx('netProfit'), value: money(analytics.netProfit), icon: analytics.netProfit >= 0 ? TrendingUp : TrendingDown, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', note: `${tx('grossProfit')}: ${money(analytics.grossProfit)}` },
-    { label: tx('cashBalance'), value: money(analytics.cashBalance), icon: Wallet, tone: analytics.cashBalance >= 0 ? 'blue' : 'rose', note: `${tx('cashIn')} ${money(analytics.cashIn)}` },
-    { label: tx('inventoryValue'), value: money(inventoryStats.inventoryValue), icon: Package, tone: 'violet', note: `${products.length} ${tx('products')}` },
+    { label: tx('customerDebt'), value: money(analytics.customerDebt), icon: CreditCard, tone: analytics.customerDebt > 0 ? 'amber' : 'blue', note: tx('customers') },
+    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), icon: Wallet, tone: analytics.supplierPayable > 0 ? 'rose' : 'violet', note: tx('suppliers') },
   ];
 
   const CompactMetric = ({ label, value, tone = 'cyan' }) => (
@@ -543,7 +533,6 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     return (
       <div className="min-h-screen bg-[#050713] px-4 py-10 text-white">
         <div className="mx-auto max-w-7xl space-y-4">
-          <div className="h-48 animate-pulse rounded-[2rem] bg-slate-800/60" />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[1, 2, 3, 4].map((item) => <div key={item} className="h-36 animate-pulse rounded-[2rem] bg-slate-800/50" />)}
           </div>
@@ -581,7 +570,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           <CompactMetric label={tx('orders')} value={analytics.salesCount} tone="cyan" />
           <CompactMetric label={tx('products')} value={products.length} tone="violet" />
           <CompactMetric label={tx('customers')} value={customers.length} tone="emerald" />
-          <CompactMetric label={tx('suppliers')} value={suppliers.length} tone="blue" />
+          <CompactMetric label={tx('lowStockItems')} value={inventoryStats.lowStockCount} tone={inventoryStats.lowStockCount > 0 ? 'amber' : 'blue'} />
         </section>
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -608,16 +597,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </div>
         )}
 
-        <section className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={21} />
-            <input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder={tx('search')}
-              className="h-14 w-full rounded-[1.4rem] border border-white/10 bg-[#0c1222]/90 pl-12 pr-4 text-base font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-4 focus:ring-cyan-300/10"
-            />
-          </div>
+        <section className="grid gap-3 lg:grid-cols-[auto_auto] lg:items-center lg:justify-between">
           <div className="grid grid-cols-4 gap-1 rounded-[1.4rem] border border-white/10 bg-[#0c1222]/90 p-1">
             {rangeOptions.map((option) => (
               <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-[1.05rem] px-3 py-3 text-xs font-black transition ${dateRange === option.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
@@ -656,7 +636,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><Sparkles className="text-amber-300" /> {tx('importantNow')}</h2>
+            <h2 className="mb-5 text-2xl font-black">{tx('importantNow')}</h2>
             <div className="space-y-3">
               {importantAlerts.map((alert) => {
                 const Icon = alert.icon;
@@ -698,7 +678,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-5 text-2xl font-black">🏆 {tx('topProducts')}</h2>
+            <h2 className="mb-5 text-2xl font-black">{tx('topProducts')}</h2>
             {analytics.topProducts.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noProducts')}</div>
             ) : (

@@ -497,6 +497,15 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     return alerts.slice(0, 4);
   }, [analytics.customerDebt, analytics.supplierPayable, inventoryStats.lowStockCount, inventoryStats.outOfStock, language]);
 
+
+
+  const mobileChartSummary = useMemo(() => chartData.map((row) => ({
+    label: row.day,
+    sales: row.sales,
+    profit: row.profit,
+    expenses: row.expenses,
+  })), [chartData]);
+
   const rangeOptions = [
     { key: 'today', label: tx('today') },
     { key: 'week', label: tx('week') },
@@ -526,7 +535,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   );
 
   const Panel = ({ children, className = '' }) => (
-    <section className={`w-full min-w-0 max-w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0c1222]/90 p-3 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>
+    <section className={`w-full min-w-0 max-w-full overflow-hidden rounded-[1.1rem] border border-white/10 bg-[#0c1222]/90 p-3 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>
   );
 
   if (loading) {
@@ -546,7 +555,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     <div className="min-h-screen overflow-x-hidden bg-[#050713] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_5%,rgba(34,211,238,0.22),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(168,85,247,0.18),transparent_28%),linear-gradient(180deg,#050713,#09111f_52%,#050713)]" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-3 px-2 py-3 pb-40 sm:gap-5 sm:px-6 sm:pb-32 lg:px-8">
+      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-3 overflow-x-hidden px-3 py-3 pb-44 sm:gap-5 sm:px-6 sm:pb-32 lg:px-8">
         <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
           {mainCards.map((card) => {
             const Icon = card.icon;
@@ -555,8 +564,8 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                 <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
                 <div className="relative flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="truncate text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{card.label}</p>
-                    <p className="mt-2 break-words text-base font-black leading-tight text-white sm:mt-3 sm:text-3xl">{card.value}</p>
+                    <p className="truncate text-[9px] font-black uppercase tracking-[0.08em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{card.label}</p>
+                    <p className="mt-2 break-words text-sm font-black leading-tight text-white sm:mt-3 sm:text-3xl">{card.value}</p>
                     <p className="mt-1 truncate text-[10px] font-bold text-slate-400 sm:mt-2 sm:text-xs">{card.note}</p>
                   </div>
                   <div className={`hidden rounded-2xl p-3 sm:block ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={23} /></div>
@@ -616,16 +625,37 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-5 sm:gap-3">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300 sm:text-xs sm:tracking-[0.2em]">{tx('salesTrend')}</p>
-                <h2 className="mt-1 text-base font-black leading-tight sm:text-2xl">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
+                <h2 className="mt-1 text-sm font-black leading-tight sm:text-2xl">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
               </div>
               <CalendarDays className="text-cyan-300" size={22} />
             </div>
-            <div className="h-48 sm:h-80">
+            <div className="space-y-2 sm:hidden">
+              {mobileChartSummary.map((row) => {
+                const max = Math.max(...mobileChartSummary.map((item) => item.sales), 1);
+                const width = Math.max((row.sales / max) * 100, row.sales > 0 ? 8 : 0);
+                return (
+                  <div key={row.label} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-slate-300">{row.label}</span>
+                      <span className="max-w-[8.5rem] truncate text-right text-xs font-black text-cyan-200">{money(row.sales)}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-950/80">
+                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500">
+                      <span className="truncate">{tx('profit')}: {money(row.profit)}</span>
+                      <span className="truncate text-right">{tx('expenses')}: {money(row.expenses)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden h-80 sm:block">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 4, left: -24, bottom: 0 }}>
+                <LineChart data={chartData} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis width={28} stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                  <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis width={46} stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
                   <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(34,211,238,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value, name) => [money(value), name]} />
                   <Line type="monotone" dataKey="sales" name={tx('sales')} stroke="#22d3ee" strokeWidth={4} dot={false} activeDot={{ r: 6 }} />
                   <Line type="monotone" dataKey="profit" name={tx('profit')} stroke="#34d399" strokeWidth={3} dot={false} />
@@ -636,7 +666,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-3 text-lg font-black leading-tight sm:mb-5 sm:text-2xl">{tx('importantNow')}</h2>
+            <h2 className="mb-3 text-base font-black leading-tight sm:mb-5 sm:text-2xl">{tx('importantNow')}</h2>
             <div className="space-y-3">
               {importantAlerts.map((alert) => {
                 const Icon = alert.icon;
@@ -656,7 +686,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
         <section className="grid min-w-0 gap-3 sm:gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-black leading-tight sm:mb-5 sm:text-2xl"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-base font-black leading-tight sm:mb-5 sm:text-2xl"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
             <div className="space-y-3 sm:hidden">
               {[
                 { name: tx('cashIn'), value: analytics.cashIn, tone: 'cyan' },
@@ -691,7 +721,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-3 text-lg font-black leading-tight sm:mb-5 sm:text-2xl">{tx('topProducts')}</h2>
+            <h2 className="mb-3 text-base font-black leading-tight sm:mb-5 sm:text-2xl">{tx('topProducts')}</h2>
             {analytics.topProducts.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noProducts')}</div>
             ) : (
@@ -701,9 +731,9 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                   const width = Math.max((product.revenue / max) * 100, 8);
                   return (
                     <div key={product.name}>
-                      <div className="mb-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-sm font-black">
+                      <div className="mb-2 min-w-0 space-y-1 text-sm font-black sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2 sm:space-y-0">
                         <span className="min-w-0 truncate">{index + 1}. {product.name}</span>
-                        <span className="shrink-0 text-xs text-cyan-300 sm:text-sm">{money(product.revenue)}</span>
+                        <span className="block truncate text-xs text-cyan-300 sm:text-right sm:text-sm">{money(product.revenue)}</span>
                       </div>
                       <div className="mb-1 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500 sm:text-xs"><span className="truncate">{tx('qty')}: {product.qty}</span><span className="truncate text-right">{tx('profit')}: {money(product.profit)}</span></div>
                       <div className="h-2.5 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} /></div>
@@ -717,7 +747,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
         <section className="grid min-w-0 gap-3 sm:gap-5 xl:grid-cols-2">
           <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-black leading-tight sm:mb-5 sm:text-2xl"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-base font-black leading-tight sm:mb-5 sm:text-2xl"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
             {inventoryStats.lowStock.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noLowStock')}</div>
             ) : (
@@ -733,7 +763,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-black leading-tight sm:mb-5 sm:text-2xl"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-base font-black leading-tight sm:mb-5 sm:text-2xl"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
             {analytics.recent.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noTransactions')}</div>
             ) : (
@@ -743,9 +773,12 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                   const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
                   return (
                     <Link key={record.id} to="/records" className={`block w-full min-w-0 max-w-full overflow-hidden rounded-[1rem] border p-3 transition active:scale-[0.99] hover:border-cyan-300/35 sm:rounded-[1.4rem] sm:p-4 ${tones[tone]?.card || tones.cyan.card}`}>
-                      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)] items-center gap-2">
-                        <div className="min-w-0"><p className="truncate text-sm font-black capitalize text-white sm:text-base">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-[11px] font-bold text-slate-500 sm:text-xs">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
-                        <p className="min-w-0 max-w-[6.4rem] truncate text-right text-xs font-black text-white sm:max-w-none sm:text-base">{money(getRecordAmount(record))}</p>
+                      <div className="min-w-0 space-y-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 sm:space-y-0">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black capitalize text-white sm:text-base">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p>
+                          <p className="truncate text-[10px] font-bold text-slate-500 sm:text-xs">{record.personName || record.customerName || record.supplierName || '-'}</p>
+                        </div>
+                        <p className="truncate text-sm font-black text-cyan-100 sm:text-right sm:text-base">{money(getRecordAmount(record))}</p>
                       </div>
                     </Link>
                   );

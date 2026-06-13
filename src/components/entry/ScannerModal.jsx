@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ScanLine } from 'lucide-react';
+import { ScanLine, X, Keyboard, CameraOff } from 'lucide-react';
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import logger from '../../utils/logger';
 
 export default function ScannerModal({ onClose, onScan }) {
   const videoRef = useRef(null);
+  const manualInputRef = useRef(null);
   const [cameraError, setCameraError] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [manualCode, setManualCode] = useState('');
   const readerRef = useRef(null);
   const streamRef = useRef(null);
   const onScanRef = useRef(onScan);
@@ -17,6 +19,43 @@ export default function ScannerModal({ onClose, onScan }) {
     onScanRef.current = onScan;
     onCloseRef.current = onClose;
   }, [onScan, onClose]);
+
+  const stopCamera = () => {
+    if (readerRef.current) readerRef.current.reset();
+    if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
+  };
+
+  const closeModal = () => {
+    stopCamera();
+    onCloseRef.current?.();
+  };
+
+  const submitCode = (rawCode) => {
+    const code = String(rawCode || '').trim();
+    if (!code || isProcessing) return;
+
+    const now = Date.now();
+    if (code === lastScannedRef.current.code && now - lastScannedRef.current.time < 1200) return;
+
+    lastScannedRef.current = { code, time: now };
+    setIsProcessing(true);
+    onScanRef.current?.(code);
+
+    setManualCode('');
+    setTimeout(() => {
+      setIsProcessing(false);
+      manualInputRef.current?.focus();
+    }, 650);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') closeModal();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const hints = new Map();
@@ -43,85 +82,114 @@ export default function ScannerModal({ onClose, onScan }) {
     };
 
     navigator.mediaDevices
-      .getUserMedia(constraints)
+      ?.getUserMedia(constraints)
       .then((stream) => {
         streamRef.current = stream;
-
         if (videoRef.current) videoRef.current.srcObject = stream;
 
         codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
-          if (!result) return;
-
-          const now = Date.now();
-          if (result.text === lastScannedRef.current.code && now - lastScannedRef.current.time < 1500) {
-            return;
-          }
-
-          lastScannedRef.current = { code: result.text, time: now };
-          setIsProcessing(true);
-
-          if (onScanRef.current) onScanRef.current(result.text);
-
-          setTimeout(() => setIsProcessing(false), 900);
+          if (!result?.text) return;
+          submitCode(result.text);
         });
       })
       .catch((err) => {
         logger.error('Camera error:', err);
         setCameraError(true);
+        requestAnimationFrame(() => manualInputRef.current?.focus());
       });
 
+    const focusTimer = window.setTimeout(() => manualInputRef.current?.focus(), 300);
+
     return () => {
-      if (readerRef.current) readerRef.current.reset();
-      if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
+      window.clearTimeout(focusTimer);
+      stopCamera();
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm print:hidden">
-      <div className="w-full max-w-sm bg-[#0d1120] border border-cyan-500/30 rounded-3xl overflow-hidden relative shadow-2xl shadow-cyan-950/40">
-        <div className="p-4 bg-cyan-500/10 flex justify-between items-center text-white border-b border-cyan-500/20">
-          <h3 className="font-black flex items-center gap-2">
-            <ScanLine size={18} className="text-cyan-400" />
-            Barcode Scanner
-          </h3>
+    <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/75 p-4 backdrop-blur-md print:hidden" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) closeModal();
+    }}>
+      <div className="w-full max-w-[430px] overflow-hidden rounded-[28px] border border-cyan-400/30 bg-[#0b1020] text-white shadow-2xl shadow-cyan-950/40 max-h-[88dvh]">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-500/15 text-cyan-300">
+              <ScanLine size={22} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black">Scan Barcode</p>
+              <p className="text-[11px] font-bold text-slate-500">Camera or barcode reader</p>
+            </div>
+          </div>
+
           <button
             type="button"
-            onClick={() => onCloseRef.current()}
-            className="text-rose-400 hover:text-rose-300 font-black text-2xl leading-none"
+            onClick={closeModal}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-slate-300 transition hover:text-white active:scale-95"
+            aria-label="Close scanner"
           >
-            &times;
+            <X size={18} />
           </button>
         </div>
 
         <div className="relative bg-black">
           {cameraError ? (
-            <div className="p-8 text-center text-rose-400 font-bold">
-              Camera access denied or not available.
+            <div className="grid min-h-[190px] place-items-center px-6 py-8 text-center">
+              <div>
+                <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-3xl border border-amber-400/25 bg-amber-500/10 text-amber-300">
+                  <CameraOff size={26} />
+                </div>
+                <p className="text-sm font-black text-amber-200">Camera not available</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">Use manual barcode input below.</p>
+              </div>
             </div>
           ) : (
-            <video ref={videoRef} className="w-full h-auto min-h-[250px]" autoPlay playsInline muted />
+            <video ref={videoRef} className="block h-[220px] w-full object-cover sm:h-[250px]" autoPlay playsInline muted />
           )}
 
-          <div className="absolute inset-x-8 top-1/2 h-0.5 bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.9)]" />
+          {!cameraError && <div className="absolute inset-x-10 top-1/2 h-0.5 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,0.95)]" />}
 
           {isProcessing && (
-            <div className="absolute inset-0 bg-[#0d1120]/90 flex flex-col items-center justify-center z-10">
-              <div className="w-10 h-10 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-cyan-300 font-black text-base">ပစ္စည်းစာရင်းသွင်းနေပါသည်</p>
-              <p className="text-sm font-bold text-slate-400 mt-1">ခဏစောင့်ပါ...</p>
+            <div className="absolute inset-0 z-10 grid place-items-center bg-[#07101f]/90 backdrop-blur-sm">
+              <div className="text-center">
+                <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent" />
+                <p className="text-sm font-black text-cyan-200">Adding item...</p>
+              </div>
             </div>
           )}
         </div>
 
-        <div
-          className={`p-4 text-center text-xs font-black transition-colors ${
-            isProcessing ? 'bg-amber-500/10 text-amber-400' : 'bg-emerald-500/10 text-emerald-400'
-          }`}
+        <form
+          className="space-y-3 p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitCode(manualCode);
+          }}
         >
-          {isProcessing
-            ? 'စနစ်ထဲသို့ ထည့်သွင်းနေပါသည်...'
-            : 'စကင်နာ ဖွင့်ထားဆဲဖြစ်သည် - ပစ္စည်းများ ဆက်တိုက်ဖတ်နိုင်ပါသည်'}
-        </div>
+          <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+            <Keyboard size={14} />
+            Manual barcode
+          </label>
+          <div className="flex gap-2">
+            <input
+              ref={manualInputRef}
+              value={manualCode}
+              onChange={(event) => setManualCode(event.target.value)}
+              placeholder="Scan or type barcode"
+              className="min-w-0 flex-1 rounded-2xl border border-cyan-500/25 bg-black/40 px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-cyan-300"
+              inputMode="numeric"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={!manualCode.trim() || isProcessing}
+              className="shrink-0 rounded-2xl bg-cyan-500 px-4 py-3 text-xs font-black text-[#06111f] transition active:scale-95 disabled:opacity-50"
+            >
+              Add
+            </button>
+          </div>
+          <p className="text-center text-[11px] font-bold text-slate-500">ESC or outside click to close</p>
+        </form>
       </div>
     </div>
   );

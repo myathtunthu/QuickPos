@@ -51,6 +51,13 @@ function getPastISO(daysAgo) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function isRecordInRange(record, range) {
+  const iso = getRecordDateISO(record);
+  if (range === '30d') return iso >= getPastISO(29);
+  if (range === '7d') return iso >= getPastISO(6);
+  return iso === getPastISO(0);
+}
+
 function getRecordDateISO(record) {
   if (record?.date && String(record.date).includes('-')) return String(record.date).slice(0, 10);
   const time = getTimeValue(record);
@@ -99,6 +106,9 @@ function getProductCost(product) {
 const TEXT = {
   mm: {
     dashboard: 'ဒက်ရှ်ဘုတ်',
+    today: 'ယနေ့',
+    last7: '၇ ရက်',
+    last30: '၃၀ ရက်',
     todaySales: 'ယနေ့ အရောင်း',
     todayProfit: 'ယနေ့ အမြတ်',
     customerDebt: 'Customer ကြွေး',
@@ -134,6 +144,9 @@ const TEXT = {
   },
   en: {
     dashboard: 'Dashboard',
+    today: 'Today',
+    last7: '7 Days',
+    last30: '30 Days',
     todaySales: 'Today Sales',
     todayProfit: 'Today Profit',
     customerDebt: 'Customer Debt',
@@ -169,6 +182,9 @@ const TEXT = {
   },
   zh: {
     dashboard: '仪表盘',
+    today: '今天',
+    last7: '7天',
+    last30: '30天',
     todaySales: '今日销售',
     todayProfit: '今日利润',
     customerDebt: '客户欠款',
@@ -203,6 +219,40 @@ const TEXT = {
     viewAll: '查看全部',
   },
 };
+
+
+
+const DASHBOARD_CACHE_TTL_MS = 60 * 1000;
+
+function getDashboardCacheKey(tenantId) {
+  return tenantId ? `quickpos_dashboard_${tenantId}` : '';
+}
+
+function readDashboardCache(tenantId) {
+  if (typeof window === 'undefined') return null;
+  const key = getDashboardCacheKey(tenantId);
+  if (!key) return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached?.savedAt || Date.now() - cached.savedAt > DASHBOARD_CACHE_TTL_MS) return null;
+    return cached;
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeDashboardCache(tenantId, payload) {
+  if (typeof window === 'undefined') return;
+  const key = getDashboardCacheKey(tenantId);
+  if (!key) return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), ...payload }));
+  } catch (error) {
+    // Cache failures must never block POS usage.
+  }
+}
 
 const toneClasses = {
   cyan: 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200',
@@ -256,30 +306,45 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
+  const [range, setRange] = useState('today');
 
   const text = TEXT[language] || TEXT.mm;
   const tx = (key) => t?.(`dashboard_${key}`, text[key] || TEXT.en[key] || key) || text[key] || TEXT.en[key] || key;
   const fmt = (num) => toNumber(num).toLocaleString();
   const money = (num) => `${fmt(num)} Ks`;
 
-  const loadDashboard = async () => {
+  const loadDashboard = async ({ force = false } = {}) => {
     if (!tenantId) {
       setLoading(false);
       return;
     }
+
+    const cached = !force ? readDashboardCache(tenantId) : null;
+    if (cached) {
+      setRecords(cached.records || []);
+      setProducts(cached.products || []);
+      setCustomers(cached.customers || []);
+      setSuppliers(cached.suppliers || []);
+      setLoading(false);
+      setErrorText('');
+      return;
+    }
+
     setLoading(true);
     setErrorText('');
     try {
       const [recordRows, productRows, customerRows, supplierRows] = await Promise.all([
-        safeReadCollection('pos_records', tenantId, 900),
-        safeReadCollection('pos_products', tenantId, 700),
-        safeReadCollection('pos_customers', tenantId, 700),
-        safeReadCollection('pos_suppliers', tenantId, 700),
+        safeReadCollection('pos_records', tenantId, 1200),
+        safeReadCollection('pos_products', tenantId, 900),
+        safeReadCollection('pos_customers', tenantId, 900),
+        safeReadCollection('pos_suppliers', tenantId, 900),
       ]);
-      setRecords(recordRows.length ? recordRows : Array.isArray(recordsFromApp) ? recordsFromApp : []);
+      const nextRecords = recordRows.length ? recordRows : Array.isArray(recordsFromApp) ? recordsFromApp : [];
+      setRecords(nextRecords);
       setProducts(productRows);
       setCustomers(customerRows);
       setSuppliers(supplierRows);
+      writeDashboardCache(tenantId, { records: nextRecords, products: productRows, customers: customerRows, suppliers: supplierRows });
     } catch (error) {
       console.error('Dashboard load error:', error);
       setErrorText(tx('unableToRead'));
@@ -305,10 +370,9 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     return <Navigate to="/entry" replace />;
   }
 
-  const todayRecords = useMemo(() => {
-    const today = getPastISO(0);
-    return records.filter((record) => getRecordDateISO(record) === today).sort((a, b) => getTimeValue(b) - getTimeValue(a));
-  }, [records]);
+  const selectedRecords = useMemo(() => {
+    return records.filter((record) => isRecordInRange(record, range)).sort((a, b) => getTimeValue(b) - getTimeValue(a));
+  }, [records, range]);
 
   const productMap = useMemo(() => {
     const map = {};
@@ -335,10 +399,10 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
       purchaseCount: 0,
       expenseCount: 0,
       topProducts: {},
-      recent: todayRecords.slice(0, 5),
+      recent: selectedRecords.slice(0, 5),
     };
 
-    todayRecords.forEach((record) => {
+    selectedRecords.forEach((record) => {
       const type = getRecordType(record);
       const amount = getRecordAmount(record);
       const paid = getRecordPaid(record);
@@ -382,7 +446,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     result.netProfit = result.grossProfit - result.expenses;
     result.topProducts = Object.values(result.topProducts).sort((a, b) => b.revenue - a.revenue).slice(0, 4);
     return result;
-  }, [todayRecords, productMap]);
+  }, [selectedRecords, productMap]);
 
   const inventoryStats = useMemo(() => {
     const lowStock = products
@@ -398,7 +462,8 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
   const chartData = useMemo(() => {
     const days = [];
-    for (let i = 6; i >= 0; i -= 1) {
+    const daysToShow = range === '30d' ? 29 : 6;
+    for (let i = daysToShow; i >= 0; i -= 1) {
       const iso = getPastISO(i);
       const label = new Date(iso).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'my-MM', { weekday: 'short' });
       let sales = 0;
@@ -425,7 +490,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
       days.push({ iso, label, sales, profit, expenses });
     }
     return days;
-  }, [records, productMap, language]);
+  }, [records, productMap, language, range]);
 
   const maxSales = Math.max(...chartData.map((day) => day.sales), 1);
 
@@ -436,17 +501,17 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   ].filter((row) => row.value > 0), [analytics.revenue, analytics.purchaseAmount, analytics.expenses, language]);
 
   const kpiCards = [
-    { label: tx('todaySales'), value: money(analytics.revenue), tone: 'cyan', icon: Wallet },
-    { label: tx('todayProfit'), value: money(analytics.netProfit), tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', icon: TrendingUp },
-    { label: tx('customerDebt'), value: money(analytics.customerDebt), tone: 'amber', icon: Users },
-    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), tone: 'rose', icon: CreditCard },
+    { label: tx('todaySales'), value: money(analytics.revenue), tone: 'cyan', icon: Wallet, to: '/records' },
+    { label: tx('todayProfit'), value: money(analytics.netProfit), tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', icon: TrendingUp, to: '/reports' },
+    { label: tx('customerDebt'), value: money(analytics.customerDebt), tone: 'amber', icon: Users, to: '/customers' },
+    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), tone: 'rose', icon: CreditCard, to: '/suppliers' },
   ];
 
   const miniCards = [
-    { label: tx('orders'), value: analytics.salesCount + analytics.purchaseCount + analytics.expenseCount, tone: 'violet', icon: ShoppingCart },
-    { label: tx('products'), value: products.length, tone: 'cyan', icon: Package },
-    { label: tx('customers'), value: customers.length, tone: 'emerald', icon: Users },
-    { label: tx('lowStockCount'), value: inventoryStats.lowStockCount, tone: inventoryStats.lowStockCount > 0 ? 'amber' : 'emerald', icon: AlertTriangle },
+    { label: tx('orders'), value: analytics.salesCount + analytics.purchaseCount + analytics.expenseCount, tone: 'violet', icon: ShoppingCart, to: '/records' },
+    { label: tx('products'), value: products.length, tone: 'cyan', icon: Package, to: '/products' },
+    { label: tx('customers'), value: customers.length, tone: 'emerald', icon: Users, to: '/customers' },
+    { label: tx('lowStockCount'), value: inventoryStats.lowStockCount, tone: inventoryStats.lowStockCount > 0 ? 'amber' : 'emerald', icon: AlertTriangle, to: '/inventory' },
   ];
 
   const financeRows = [
@@ -466,11 +531,28 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           <h1 className="text-xl font-black tracking-tight sm:text-2xl">{tx('dashboard')}</h1>
           <button
             type="button"
-            onClick={loadDashboard}
+            onClick={() => loadDashboard({ force: true })}
             className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-black text-slate-200 active:scale-95"
           >
             <RefreshCw size={16} /> {tx('refresh')}
           </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-1.5">
+          {[
+            { key: 'today', label: tx('today') },
+            { key: '7d', label: tx('last7') },
+            { key: '30d', label: tx('last30') },
+          ].map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setRange(item.key)}
+              className={`rounded-2xl px-3 py-2 text-xs font-black transition active:scale-[0.98] ${range === item.key ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
 
         {errorText && (
@@ -481,13 +563,13 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           {kpiCards.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.label} className={`min-w-0 rounded-3xl border p-3 shadow-lg sm:p-4 ${toneClasses[card.tone] || toneClasses.slate}`}>
+              <Link key={card.label} to={card.to} className={`min-w-0 rounded-3xl border p-3 shadow-lg transition active:scale-[0.99] sm:p-4 ${toneClasses[card.tone] || toneClasses.slate}`}>
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 sm:text-xs">{card.label}</p>
                   <Icon className="shrink-0 text-current" size={18} />
                 </div>
                 <p className="break-words text-[19px] font-black leading-tight text-white sm:text-2xl">{card.value}</p>
-              </div>
+              </Link>
             );
           })}
         </section>
@@ -496,11 +578,11 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           {miniCards.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.label} className={`rounded-2xl border p-2 text-center sm:p-3 ${toneClasses[card.tone] || toneClasses.slate}`}>
+              <Link key={card.label} to={card.to} className={`rounded-2xl border p-2 text-center transition active:scale-[0.99] sm:p-3 ${toneClasses[card.tone] || toneClasses.slate}`}>
                 <Icon className="mx-auto mb-1 text-current" size={16} />
                 <p className="text-lg font-black leading-none text-white sm:text-2xl">{fmt(card.value)}</p>
                 <p className="mt-1 truncate text-[10px] font-black text-slate-400 sm:text-xs">{card.label}</p>
-              </div>
+              </Link>
             );
           })}
         </section>

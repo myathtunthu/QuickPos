@@ -20,6 +20,28 @@ export default function ScannerModal({ onClose, onScan }) {
     onCloseRef.current = onClose;
   }, [onScan, onClose]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyTouchAction = body.style.touchAction;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const previousOverscroll = documentElement.style.overscrollBehavior;
+
+    body.style.overflow = 'hidden';
+    body.style.touchAction = 'none';
+    documentElement.style.overflow = 'hidden';
+    documentElement.style.overscrollBehavior = 'none';
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      body.style.touchAction = previousBodyTouchAction;
+      documentElement.style.overflow = previousHtmlOverflow;
+      documentElement.style.overscrollBehavior = previousOverscroll;
+    };
+  }, []);
+
   const stopCamera = () => {
     if (readerRef.current) readerRef.current.reset();
     if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
@@ -107,18 +129,18 @@ export default function ScannerModal({ onClose, onScan }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/75 p-4 backdrop-blur-md print:hidden" onMouseDown={(event) => {
+    <div className="fixed inset-0 z-[9999] grid place-items-center overflow-hidden bg-black/75 p-3 backdrop-blur-md print:hidden" onWheel={(event) => event.preventDefault()} onTouchMove={(event) => event.preventDefault()} onMouseDown={(event) => {
       if (event.target === event.currentTarget) closeModal();
     }}>
-      <div className="w-full max-w-[430px] overflow-hidden rounded-[28px] border border-cyan-400/30 bg-[#0b1020] text-white shadow-2xl shadow-cyan-950/40 max-h-[88dvh]">
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-3">
+      <div className="w-full max-w-[420px] max-h-[calc(100svh-24px)] overflow-hidden rounded-[26px] border border-cyan-400/30 bg-[#0b1020] text-white shadow-2xl shadow-cyan-950/40">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-500/15 text-cyan-300">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-cyan-400/25 bg-cyan-500/15 text-cyan-300">
               <ScanLine size={22} />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-black">Scan Barcode</p>
-              <p className="text-[11px] font-bold text-slate-500">Camera or barcode reader</p>
+              <p className="text-[10px] font-bold text-slate-500">Camera or reader</p>
             </div>
           </div>
 
@@ -134,7 +156,7 @@ export default function ScannerModal({ onClose, onScan }) {
 
         <div className="relative bg-black">
           {cameraError ? (
-            <div className="grid min-h-[190px] place-items-center px-6 py-8 text-center">
+            <div className="grid min-h-[158px] place-items-center px-5 py-6 text-center">
               <div>
                 <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-3xl border border-amber-400/25 bg-amber-500/10 text-amber-300">
                   <CameraOff size={26} />
@@ -144,7 +166,7 @@ export default function ScannerModal({ onClose, onScan }) {
               </div>
             </div>
           ) : (
-            <video ref={videoRef} className="block h-[220px] w-full object-cover sm:h-[250px]" autoPlay playsInline muted />
+            <video ref={videoRef} className="block h-[178px] w-full object-cover sm:h-[220px]" autoPlay playsInline muted />
           )}
 
           {!cameraError && <div className="absolute inset-x-10 top-1/2 h-0.5 rounded-full bg-cyan-300 shadow-[0_0_22px_rgba(103,232,249,0.95)]" />}
@@ -160,7 +182,7 @@ export default function ScannerModal({ onClose, onScan }) {
         </div>
 
         <form
-          className="space-y-3 p-4"
+          className="space-y-2.5 p-3"
           onSubmit={(event) => {
             event.preventDefault();
             submitCode(manualCode);
@@ -176,19 +198,19 @@ export default function ScannerModal({ onClose, onScan }) {
               value={manualCode}
               onChange={(event) => setManualCode(event.target.value)}
               placeholder="Scan or type barcode"
-              className="min-w-0 flex-1 rounded-2xl border border-cyan-500/25 bg-black/40 px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-cyan-300"
+              className="min-w-0 flex-1 rounded-2xl border border-cyan-500/25 bg-black/40 px-3 py-2.5 text-sm font-bold text-white outline-none transition focus:border-cyan-300"
               inputMode="numeric"
               autoComplete="off"
             />
             <button
               type="submit"
               disabled={!manualCode.trim() || isProcessing}
-              className="shrink-0 rounded-2xl bg-cyan-500 px-4 py-3 text-xs font-black text-[#06111f] transition active:scale-95 disabled:opacity-50"
+              className="shrink-0 rounded-2xl bg-cyan-500 px-4 py-2.5 text-xs font-black text-[#06111f] transition active:scale-95 disabled:opacity-50"
             >
               Add
             </button>
           </div>
-          <p className="text-center text-[11px] font-bold text-slate-500">ESC or outside click to close</p>
+          <p className="text-center text-[10px] font-bold text-slate-500">ESC / outside click to close</p>
         </form>
       </div>
     </div>

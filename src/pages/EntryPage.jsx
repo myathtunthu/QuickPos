@@ -109,6 +109,8 @@ export default function EntryPage({ products = [] }) {
 
   const [entryDate, setEntryDate] = useState(todayISO);
   const [entryTab, setEntryTab] = useState(initialTab);
+  const [orderType, setOrderType] = useState('walkin');
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState(null);
@@ -274,6 +276,21 @@ export default function EntryPage({ products = [] }) {
     () => ['All', ...new Set(products.map((p) => p.category).filter(Boolean))],
     [products]
   );
+
+  const categoryCounts = useMemo(() => {
+    const counts = { All: Array.isArray(products) ? products.length : 0 };
+    (Array.isArray(products) ? products : []).forEach((product) => {
+      const category = product.category || 'Other';
+      counts[category] = (counts[category] || 0) + 1;
+    });
+    return counts;
+  }, [products]);
+
+  const orderTypes = useMemo(() => ([
+    { id: 'walkin', label: tt('walkIn', 'Walk-in'), short: tt('walkInShort', 'Walk-in') },
+    { id: 'takeaway', label: tt('takeaway', 'Takeaway'), short: tt('takeawayShort', 'Takeaway') },
+    { id: 'delivery', label: tt('delivery', 'Delivery'), short: tt('deliveryShort', 'Delivery') },
+  ]), [tt]);
 
   const filteredProducts = useMemo(() => {
     let result = products;
@@ -470,6 +487,7 @@ export default function EntryPage({ products = [] }) {
         globalDiscountType: globalDiscountType || '%',
         paymentMethod: paymentMethod || 'Cash',
         paidAmount: paidAmount || '',
+        orderType: orderType || 'walkin',
         createdAt: serverTimestamp(),
       });
 
@@ -501,6 +519,7 @@ export default function EntryPage({ products = [] }) {
     setGlobalDiscountType(draft.globalDiscountType || '%');
     setPaymentMethod(draft.paymentMethod || 'Cash');
     setPaidAmount(draft.paidAmount || '');
+    setOrderType(draft.orderType || 'walkin');
 
     if (Array.isArray(draft.cart)) {
       setCart(draft.cart.map((item) => ({ ...item, id: item.id || Date.now() + Math.random() })));
@@ -811,6 +830,7 @@ export default function EntryPage({ products = [] }) {
           itemDiscount: Number(cartTotals.itemDiscounts) || 0,
           globalDiscount: Number(cartTotals.globalDisc) || 0,
           paymentMethod: paymentMethod || 'Cash',
+          orderType: orderType || 'walkin',
           paidAmount: paid,
           remainingDebt,
           changeAmount,
@@ -936,6 +956,39 @@ export default function EntryPage({ products = [] }) {
       logger.warn('Audio beep failed', e);
     }
   };
+
+
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target;
+      const isTyping = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      if (isTyping) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key === '/') {
+        event.preventDefault();
+        setShowShortcutHelp((open) => !open);
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault();
+        setShowScanner(true);
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'h') {
+        event.preventDefault();
+        if (entryTab === 'Sale') handleHoldInvoiceClick();
+      }
+
+      if (event.key === 'F9') {
+        event.preventDefault();
+        if (cart.length > 0) scrollToCart();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cart.length, entryTab, scrollToCart]);
 
   return (
     <>
@@ -1144,6 +1197,50 @@ export default function EntryPage({ products = [] }) {
                 </div>
               )}
 
+
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-3">
+                <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-3 sm:p-4 shadow-xl">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('orderType', 'Order Type')}</p>
+                      <p className="text-sm font-black text-white truncate">{tt('selectOrderType', 'Choose how this order will be handled')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowShortcutHelp(true)}
+                      className="shrink-0 px-3 py-2 rounded-2xl bg-white/5 border border-white/10 text-[11px] font-black text-cyan-300 active:scale-95"
+                    >
+                      ?
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {orderTypes.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setOrderType(type.id)}
+                        className={`px-3 py-3 rounded-2xl border text-xs font-black transition-all active:scale-95 ${
+                          orderType === type.id
+                            ? 'bg-cyan-500 text-[#060816] border-cyan-300 shadow-lg shadow-cyan-500/20'
+                            : 'bg-black/30 text-slate-300 border-white/10 hover:border-cyan-500/30'
+                        }`}
+                      >
+                        {type.short}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#0d1120]/95 border border-white/10 rounded-3xl p-3 sm:p-4 shadow-xl">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-2">{tt('quickAccess', 'Quick Access')}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => setShowScanner(true)} className="rounded-2xl bg-cyan-500/10 border border-cyan-500/20 px-2 py-3 text-[11px] font-black text-cyan-300 active:scale-95">{tt('scan', 'Scan')}</button>
+                    <button type="button" onClick={handleHoldInvoiceClick} disabled={entryTab !== 'Sale' || cart.length === 0} className="rounded-2xl bg-amber-500/10 border border-amber-500/20 px-2 py-3 text-[11px] font-black text-amber-300 disabled:opacity-40 active:scale-95">{tt('hold', 'Hold')}</button>
+                    <button type="button" onClick={scrollToCart} disabled={cart.length === 0} className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-2 py-3 text-[11px] font-black text-emerald-300 disabled:opacity-40 active:scale-95">{tt('checkout', 'Checkout')}</button>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4 items-start">
                 <div className="space-y-4 min-w-0">
                   <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl">
@@ -1252,6 +1349,7 @@ export default function EntryPage({ products = [] }) {
                       prodSearch={prodSearch}
                       setProdSearch={setProdSearch}
                       setShowScanner={setShowScanner}
+                      categoryCounts={categoryCounts}
                     />
 
                     <div className="relative z-10 mt-4">
@@ -1418,6 +1516,34 @@ export default function EntryPage({ products = [] }) {
           </div>
         )}
       </div>
+
+
+      {showShortcutHelp && (
+        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
+          <div className="w-full max-w-md rounded-3xl border border-cyan-500/20 bg-[#0d1120] shadow-2xl overflow-hidden">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-cyan-400 font-black uppercase tracking-widest">{tt('posGuide', 'POS Guide')}</p>
+                <h3 className="text-lg font-black text-white">{tt('quickShortcuts', 'Quick shortcuts')}</h3>
+              </div>
+              <button type="button" onClick={() => setShowShortcutHelp(false)} className="w-10 h-10 rounded-2xl bg-white/5 text-white border border-white/10">×</button>
+            </div>
+            <div className="p-4 space-y-3 text-sm">
+              {[
+                ['Ctrl + B', tt('scanBarcode', 'Scan Barcode')],
+                ['Ctrl + H', tt('holdInvoice', 'Hold invoice')],
+                ['F9', tt('goCheckout', 'Go to checkout')],
+                ['Ctrl + /', tt('openCloseGuide', 'Open / close guide')],
+              ].map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 px-4 py-3">
+                  <span className="text-slate-300 font-bold">{label}</span>
+                  <span className="shrink-0 rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-3 py-1 text-xs font-black text-cyan-300">{key}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <ReceiptModal
         receiptModal={receiptModal}

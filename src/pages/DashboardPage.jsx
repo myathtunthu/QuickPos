@@ -519,14 +519,14 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   ];
 
   const CompactMetric = ({ label, value, tone = 'cyan' }) => (
-    <div className={`rounded-[1.4rem] border p-4 shadow-xl ${tones[tone]?.card || tones.cyan.card}`}>
-      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
-      <p className="mt-2 truncate text-xl font-black text-white">{value}</p>
+    <div className={`min-w-0 rounded-[1.1rem] border p-3 shadow-xl sm:rounded-[1.4rem] sm:p-4 ${tones[tone]?.card || tones.cyan.card}`}>
+      <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
+      <p className="mt-1 truncate text-lg font-black text-white sm:mt-2 sm:text-xl">{value}</p>
     </div>
   );
 
   const Panel = ({ children, className = '' }) => (
-    <section className={`rounded-[2rem] border border-white/10 bg-[#0c1222]/90 p-5 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl ${className}`}>{children}</section>
+    <section className={`min-w-0 rounded-[1.5rem] border border-white/10 bg-[#0c1222]/90 p-4 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>
   );
 
   if (loading) {
@@ -546,20 +546,20 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     <div className="min-h-screen overflow-x-hidden bg-[#050713] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_5%,rgba(34,211,238,0.22),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(168,85,247,0.18),transparent_28%),linear-gradient(180deg,#050713,#09111f_52%,#050713)]" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 pb-28 sm:px-6 lg:px-8">
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-4 px-3 py-3 pb-28 sm:gap-5 sm:px-6 lg:px-8">
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {mainCards.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.label} className={`relative overflow-hidden rounded-[1.7rem] border p-5 shadow-2xl ${tones[card.tone]?.card || tones.cyan.card}`}>
+              <div key={card.label} className={`relative min-w-0 overflow-hidden rounded-[1.25rem] border p-3 shadow-2xl sm:rounded-[1.7rem] sm:p-5 ${tones[card.tone]?.card || tones.cyan.card}`}>
                 <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
                 <div className="relative flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{card.label}</p>
-                    <p className="mt-3 break-words text-2xl font-black text-white sm:text-3xl">{card.value}</p>
-                    <p className="mt-2 truncate text-xs font-bold text-slate-400">{card.note}</p>
+                    <p className="truncate text-[10px] font-black uppercase tracking-[0.1em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{card.label}</p>
+                    <p className="mt-2 break-words text-lg font-black leading-tight text-white sm:mt-3 sm:text-3xl">{card.value}</p>
+                    <p className="mt-1 truncate text-[11px] font-bold text-slate-400 sm:mt-2 sm:text-xs">{card.note}</p>
                   </div>
-                  <div className={`rounded-2xl p-3 ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={23} /></div>
+                  <div className={`hidden rounded-2xl p-3 sm:block ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={23} /></div>
                 </div>
               </div>
             );
@@ -577,12 +577,12 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
-              <Link key={action.label} to={action.to} className={`group rounded-[1.5rem] border p-4 shadow-xl transition active:scale-[0.98] sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
+              <Link key={action.label} to={action.to} className={`group min-w-0 rounded-[1.15rem] border p-3 shadow-xl transition active:scale-[0.98] sm:rounded-[1.5rem] sm:p-4 sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
                 <div className="flex items-center gap-3">
                   <div className={`rounded-2xl p-2.5 ${tones[action.tone]?.icon || tones.cyan.icon}`}>
                     <Icon size={21} />
                   </div>
-                  <p className="min-w-0 flex-1 text-sm font-black leading-snug text-white">{action.label}</p>
+                  <p className="min-w-0 flex-1 truncate text-xs font-black leading-snug text-white sm:text-sm">{action.label}</p>
                   <ArrowRight className="hidden shrink-0 opacity-70 transition group-hover:translate-x-1 sm:block" size={18} />
                 </div>
               </Link>
@@ -600,7 +600,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
         <section className="grid gap-3 lg:grid-cols-[auto_auto] lg:items-center lg:justify-between">
           <div className="grid grid-cols-4 gap-1 rounded-[1.4rem] border border-white/10 bg-[#0c1222]/90 p-1">
             {rangeOptions.map((option) => (
-              <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-[1.05rem] px-3 py-3 text-xs font-black transition ${dateRange === option.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+              <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-[1.05rem] px-2 py-2.5 text-[11px] font-black transition sm:px-3 sm:py-3 sm:text-xs ${dateRange === option.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
                 {option.label}
               </button>
             ))}
@@ -615,17 +615,17 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           <Panel>
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">{tx('salesTrend')}</p>
-                <h2 className="mt-1 text-2xl font-black">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
+                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300 sm:text-xs sm:tracking-[0.2em]">{tx('salesTrend')}</p>
+                <h2 className="mt-1 text-lg font-black leading-tight sm:text-2xl">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
               </div>
               <CalendarDays className="text-cyan-300" size={30} />
             </div>
-            <div className="h-72 sm:h-80">
+            <div className="h-56 sm:h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                <LineChart data={chartData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
                   <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                  <XAxis dataKey="day" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis width={34} stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
                   <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(34,211,238,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value, name) => [money(value), name]} />
                   <Line type="monotone" dataKey="sales" name={tx('sales')} stroke="#22d3ee" strokeWidth={4} dot={false} activeDot={{ r: 6 }} />
                   <Line type="monotone" dataKey="profit" name={tx('profit')} stroke="#34d399" strokeWidth={3} dot={false} />
@@ -636,7 +636,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-5 text-2xl font-black">{tx('importantNow')}</h2>
+            <h2 className="mb-4 text-xl font-black sm:mb-5 sm:text-2xl">{tx('importantNow')}</h2>
             <div className="space-y-3">
               {importantAlerts.map((alert) => {
                 const Icon = alert.icon;
@@ -656,8 +656,21 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
         <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
           <Panel>
-            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
-            <div className="h-72">
+            <h2 className="mb-4 flex items-center gap-2 text-xl font-black sm:mb-5 sm:text-2xl"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
+            <div className="space-y-3 sm:hidden">
+              {[
+                { name: tx('cashIn'), value: analytics.cashIn, tone: 'cyan' },
+                { name: tx('cashOut'), value: analytics.cashOut, tone: 'rose' },
+                { name: tx('netProfit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose' },
+                { name: tx('customerDebt'), value: analytics.customerDebt, tone: 'amber' },
+              ].map((row) => (
+                <div key={row.name} className={`rounded-[1.2rem] border p-3 ${tones[row.tone]?.card || tones.cyan.card}`}>
+                  <p className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">{row.name}</p>
+                  <p className="mt-1 truncate text-lg font-black text-white">{money(row.value)}</p>
+                </div>
+              ))}
+            </div>
+            <div className="hidden h-72 sm:block">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={[
                   { name: tx('cashIn'), value: analytics.cashIn, color: '#22d3ee' },
@@ -678,7 +691,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-5 text-2xl font-black">{tx('topProducts')}</h2>
+            <h2 className="mb-4 text-xl font-black leading-tight sm:mb-5 sm:text-2xl">{tx('topProducts')}</h2>
             {analytics.topProducts.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noProducts')}</div>
             ) : (
@@ -688,11 +701,11 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                   const width = Math.max((product.revenue / max) * 100, 8);
                   return (
                     <div key={product.name}>
-                      <div className="mb-2 flex items-center justify-between gap-3 text-sm font-black">
-                        <span className="truncate">{index + 1}. {product.name}</span>
-                        <span className="text-cyan-300">{money(product.revenue)}</span>
+                      <div className="mb-2 grid grid-cols-[1fr_auto] items-center gap-2 text-sm font-black">
+                        <span className="min-w-0 truncate">{index + 1}. {product.name}</span>
+                        <span className="shrink-0 text-xs text-cyan-300 sm:text-sm">{money(product.revenue)}</span>
                       </div>
-                      <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{tx('qty')}: {product.qty}</span><span>{tx('profit')}: {money(product.profit)}</span></div>
+                      <div className="mb-1 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500 sm:text-xs"><span className="truncate">{tx('qty')}: {product.qty}</span><span className="truncate text-right">{tx('profit')}: {money(product.profit)}</span></div>
                       <div className="h-2.5 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} /></div>
                     </div>
                   );
@@ -704,7 +717,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
         <section className="grid gap-5 xl:grid-cols-2">
           <Panel>
-            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
+            <h2 className="mb-4 flex items-center gap-2 text-xl font-black leading-tight sm:mb-5 sm:text-2xl"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
             {inventoryStats.lowStock.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noLowStock')}</div>
             ) : (
@@ -720,7 +733,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
 
           <Panel>
-            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
+            <h2 className="mb-4 flex items-center gap-2 text-xl font-black leading-tight sm:mb-5 sm:text-2xl"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
             {analytics.recent.length === 0 ? (
               <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noTransactions')}</div>
             ) : (
@@ -729,10 +742,10 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                   const type = getRecordType(record);
                   const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
                   return (
-                    <Link key={record.id} to="/records" className={`block rounded-[1.4rem] border p-4 transition active:scale-[0.99] hover:border-cyan-300/35 ${tones[tone]?.card || tones.cyan.card}`}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0"><p className="truncate font-black capitalize text-white">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
-                        <p className="text-right font-black text-white">{money(getRecordAmount(record))}</p>
+                    <Link key={record.id} to="/records" className={`block min-w-0 rounded-[1.2rem] border p-3 transition active:scale-[0.99] hover:border-cyan-300/35 sm:rounded-[1.4rem] sm:p-4 ${tones[tone]?.card || tones.cyan.card}`}>
+                      <div className="grid min-w-0 grid-cols-[1fr_auto] items-center gap-2">
+                        <div className="min-w-0"><p className="truncate text-sm font-black capitalize text-white sm:text-base">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-[11px] font-bold text-slate-500 sm:text-xs">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
+                        <p className="max-w-[7.5rem] truncate text-right text-sm font-black text-white sm:max-w-none sm:text-base">{money(getRecordAmount(record))}</p>
                       </div>
                     </Link>
                   );

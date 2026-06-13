@@ -144,6 +144,32 @@ export default function EntryPage({ products = [] }) {
     cartPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  const overlayOpen = showScanner || showShortcutHelp || receiptModal.show || confirmDialog.isOpen || promptModal.isOpen;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    if (!overlayOpen) return undefined;
+
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyTouchAction = body.style.touchAction;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+
+    body.style.overflow = 'hidden';
+    body.style.touchAction = 'none';
+    documentElement.style.overflow = 'hidden';
+    documentElement.style.overscrollBehavior = 'none';
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      body.style.touchAction = previousBodyTouchAction;
+      documentElement.style.overflow = previousHtmlOverflow;
+      documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+    };
+  }, [overlayOpen]);
+
   const {
     cart,
     setCart,
@@ -1521,23 +1547,23 @@ export default function EntryPage({ products = [] }) {
 
 
       {showShortcutHelp && (
-        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 print:hidden">
-          <div className="w-full max-w-md rounded-3xl border border-cyan-500/20 bg-[#0d1120] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+        <div className="fixed inset-0 z-[9998] overflow-hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-3 print:hidden" onWheel={(event) => event.preventDefault()} onTouchMove={(event) => event.preventDefault()}>
+          <div className="w-full max-w-[420px] max-h-[calc(100svh-24px)] rounded-[26px] border border-cyan-500/20 bg-[#0d1120] shadow-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
               <div>
                 <p className="text-xs text-cyan-400 font-black uppercase tracking-widest">{tt('posGuide', 'POS Guide')}</p>
                 <h3 className="text-lg font-black text-white">{tt('quickShortcuts', 'Quick shortcuts')}</h3>
               </div>
               <button type="button" onClick={() => setShowShortcutHelp(false)} className="w-10 h-10 rounded-2xl bg-white/5 text-white border border-white/10">×</button>
             </div>
-            <div className="p-4 space-y-3 text-sm">
+            <div className="p-3 space-y-2 text-sm">
               {[
                 ['Ctrl + B', tt('scanBarcode', 'Scan Barcode')],
                 ['Ctrl + H', tt('holdInvoice', 'Hold invoice')],
                 ['F9', tt('goCheckout', 'Go to checkout')],
                 ['Ctrl + /', tt('openCloseGuide', 'Open / close guide')],
               ].map(([key, label]) => (
-                <div key={key} className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 px-4 py-3">
+                <div key={key} className="flex items-center justify-between gap-3 rounded-2xl bg-black/30 border border-white/10 px-3 py-2.5">
                   <span className="text-slate-300 font-bold">{label}</span>
                   <span className="shrink-0 rounded-xl bg-cyan-500/10 border border-cyan-500/20 px-3 py-1 text-xs font-black text-cyan-300">{key}</span>
                 </div>

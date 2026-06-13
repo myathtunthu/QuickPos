@@ -23,7 +23,6 @@ import {
   TrendingUp,
   Users,
   Wallet,
-  Zap,
 } from 'lucide-react';
 import {
   Bar,
@@ -109,10 +108,6 @@ function getProductCost(product) {
 const TEXT = {
   mm: {
     dashboard: 'ဒက်ရှ်ဘုတ်',
-    heroBadge: 'လုပ်ငန်းထိန်းချုပ်ခန်း',
-    heroTitleA: 'NexPOS အတွက်',
-    heroTitleB: 'Smart Dashboard',
-    heroText: 'ယနေ့အရောင်း၊ အမြတ်၊ ငွေလက်ကျန်၊ ကြွေးကျန်၊ စတော့အခြေအနေကို မြန်မြန်ကြည့်နိုင်အောင် ပြန်ဒီဇိုင်းလုပ်ထားသည်။',
     today: 'ယနေ့',
     week: '၇ ရက်',
     month: 'လ ၃၀',
@@ -122,10 +117,10 @@ const TEXT = {
     purchase: 'အဝယ်ထည့်',
     addProduct: 'ပစ္စည်းထည့်',
     viewReports: 'Report ကြည့်',
-    revenue: 'အရောင်းရငွေ',
+    revenue: 'ယနေ့အရောင်း',
     grossProfit: 'အမြတ်ကြမ်း',
     expense: 'အသုံးစရိတ်',
-    netProfit: 'အသားတင်အမြတ်',
+    netProfit: 'ယနေ့အမြတ်',
     cashBalance: 'ငွေလက်ကျန်',
     inventoryValue: 'ကုန်လက်ကျန်တန်ဖိုး',
     customerDebt: 'Customer ကြွေးကျန်',
@@ -160,10 +155,6 @@ const TEXT = {
   },
   en: {
     dashboard: 'Dashboard',
-    heroBadge: 'Business Command Center',
-    heroTitleA: 'NexPOS',
-    heroTitleB: 'Smart Dashboard',
-    heroText: 'A cleaner owner-focused dashboard for sales, profit, cash, debts, inventory, and urgent actions.',
     today: 'Today',
     week: '7 Days',
     month: '30 Days',
@@ -173,10 +164,10 @@ const TEXT = {
     purchase: 'Purchase',
     addProduct: 'Add Product',
     viewReports: 'View Reports',
-    revenue: 'Revenue',
+    revenue: 'Today Sales',
     grossProfit: 'Gross Profit',
     expense: 'Expenses',
-    netProfit: 'Net Profit',
+    netProfit: 'Today Profit',
     cashBalance: 'Cash Balance',
     inventoryValue: 'Inventory Value',
     customerDebt: 'Customer Debt',
@@ -211,10 +202,6 @@ const TEXT = {
   },
   zh: {
     dashboard: '仪表盘',
-    heroBadge: '业务控制中心',
-    heroTitleA: 'NexPOS',
-    heroTitleB: '智能仪表盘',
-    heroText: '集中查看销售、利润、现金、欠款、库存和重点提醒。',
     today: '今天',
     week: '7天',
     month: '30天',
@@ -224,10 +211,10 @@ const TEXT = {
     purchase: '采购',
     addProduct: '添加商品',
     viewReports: '查看报表',
-    revenue: '收入',
+    revenue: '今日销售',
     grossProfit: '毛利',
     expense: '费用',
-    netProfit: '净利润',
+    netProfit: '今日利润',
     cashBalance: '现金余额',
     inventoryValue: '库存价值',
     customerDebt: '客户欠款',
@@ -570,48 +557,48 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     <div className="min-h-screen overflow-x-hidden bg-[#050713] text-white">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_5%,rgba(34,211,238,0.22),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(168,85,247,0.18),transparent_28%),linear-gradient(180deg,#050713,#09111f_52%,#050713)]" />
 
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 pb-28 sm:px-6 lg:px-8">
-        <section className="relative overflow-hidden rounded-[2.3rem] border border-cyan-300/20 bg-[#070b16]/90 p-5 shadow-2xl shadow-cyan-950/20 ring-1 ring-white/10 sm:p-7">
-          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-cyan-400/20 blur-3xl" />
-          <div className="absolute -bottom-28 left-1/3 h-60 w-60 rounded-full bg-violet-500/20 blur-3xl" />
-
-          <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
-            <div className="space-y-5">
-              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-200">
-                <Zap size={15} /> {tx('heroBadge')}
-              </span>
-              <div>
-                <h1 className="text-4xl font-black leading-[1.05] sm:text-5xl lg:text-6xl">
-                  {tx('heroTitleA')} <span className="block bg-gradient-to-r from-cyan-200 via-emerald-200 to-violet-200 bg-clip-text text-transparent">{tx('heroTitleB')}</span>
-                </h1>
-                <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-slate-400 sm:text-base">{tx('heroText')}</p>
+      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 pb-28 sm:px-6 lg:px-8">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {mainCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className={`relative overflow-hidden rounded-[1.7rem] border p-5 shadow-2xl ${tones[card.tone]?.card || tones.cyan.card}`}>
+                <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
+                <div className="relative flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{card.label}</p>
+                    <p className="mt-3 break-words text-2xl font-black text-white sm:text-3xl">{card.value}</p>
+                    <p className="mt-2 truncate text-xs font-bold text-slate-400">{card.note}</p>
+                  </div>
+                  <div className={`rounded-2xl p-3 ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={23} /></div>
+                </div>
               </div>
+            );
+          })}
+        </section>
 
-              <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
-                <CompactMetric label={tx('orders')} value={analytics.salesCount} tone="cyan" />
-                <CompactMetric label={tx('customers')} value={customers.length} tone="emerald" />
-                <CompactMetric label={tx('products')} value={products.length} tone="violet" />
-                <CompactMetric label={tx('suppliers')} value={suppliers.length} tone="blue" />
-              </div>
-            </div>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <CompactMetric label={tx('orders')} value={analytics.salesCount} tone="cyan" />
+          <CompactMetric label={tx('products')} value={products.length} tone="violet" />
+          <CompactMetric label={tx('customers')} value={customers.length} tone="emerald" />
+          <CompactMetric label={tx('suppliers')} value={suppliers.length} tone="blue" />
+        </section>
 
-            <div className="grid grid-cols-2 gap-3">
-              {quickActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <Link key={action.label} to={action.to} className={`group min-h-[132px] rounded-[1.7rem] border p-5 shadow-xl transition active:scale-[0.98] sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
-                    <div className={`inline-flex rounded-2xl p-3 ${tones[action.tone]?.icon || tones.cyan.icon}`}>
-                      <Icon size={25} />
-                    </div>
-                    <div className="mt-5 flex items-end justify-between gap-3">
-                      <p className="text-base font-black leading-snug text-white">{action.label}</p>
-                      <ArrowRight className="shrink-0 opacity-70 transition group-hover:translate-x-1" size={20} />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link key={action.label} to={action.to} className={`group rounded-[1.5rem] border p-4 shadow-xl transition active:scale-[0.98] sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-2xl p-2.5 ${tones[action.tone]?.icon || tones.cyan.icon}`}>
+                    <Icon size={21} />
+                  </div>
+                  <p className="min-w-0 flex-1 text-sm font-black leading-snug text-white">{action.label}</p>
+                  <ArrowRight className="hidden shrink-0 opacity-70 transition group-hover:translate-x-1 sm:block" size={18} />
+                </div>
+              </Link>
+            );
+          })}
         </section>
 
         {errorText && (
@@ -643,24 +630,6 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </button>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {mainCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div key={card.label} className={`relative overflow-hidden rounded-[2rem] border p-5 shadow-2xl ${tones[card.tone]?.card || tones.cyan.card}`}>
-                <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
-                <div className="relative flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{card.label}</p>
-                    <p className="mt-3 break-words text-3xl font-black text-white">{card.value}</p>
-                    <p className="mt-3 truncate text-xs font-bold text-slate-400">{card.note}</p>
-                  </div>
-                  <div className={`rounded-2xl p-3 ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={25} /></div>
-                </div>
-              </div>
-            );
-          })}
-        </section>
 
         <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
           <Panel>

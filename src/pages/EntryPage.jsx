@@ -940,6 +940,8 @@ export default function EntryPage({ products = [] }) {
       return;
     }
 
+    showToast(`${product.name || 'Product'} ထည့်ပြီးပါပြီ။`, 'success');
+
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();

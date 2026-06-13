@@ -4,7 +4,6 @@ import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { motion } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowRight,
@@ -14,7 +13,7 @@ import {
   DollarSign,
   FileText,
   Package,
-  Plus,
+  RefreshCw,
   ReceiptText,
   Search,
   ShieldCheck,
@@ -27,13 +26,10 @@ import {
   Zap,
 } from 'lucide-react';
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -106,14 +102,17 @@ function getProductStock(product) {
 }
 
 function getProductCost(product) {
-  return toNumber(product?.costPrice ?? product?.packageUnits?.[0]?.costPrice ?? 0);
+  const firstUnit = Array.isArray(product?.packageUnits) ? product.packageUnits[0] : null;
+  return toNumber(product?.costPrice ?? firstUnit?.costPrice ?? 0);
 }
 
-const LOCAL_TEXT = {
+const TEXT = {
   mm: {
     dashboard: 'ဒက်ရှ်ဘုတ်',
-    commandCenter: 'လုပ်ငန်းထိန်းချုပ်ခန်း',
-    subtitle: 'ယနေ့အရောင်း၊ အမြတ်၊ ကုန်လက်ကျန်၊ ကြွေးကျန်များကို တစ်နေရာတည်းမှာ စစ်ပါ။',
+    heroBadge: 'လုပ်ငန်းထိန်းချုပ်ခန်း',
+    heroTitleA: 'NexPOS အတွက်',
+    heroTitleB: 'Smart Dashboard',
+    heroText: 'ယနေ့အရောင်း၊ အမြတ်၊ ငွေလက်ကျန်၊ ကြွေးကျန်၊ စတော့အခြေအနေကို မြန်မြန်ကြည့်နိုင်အောင် ပြန်ဒီဇိုင်းလုပ်ထားသည်။',
     today: 'ယနေ့',
     week: '၇ ရက်',
     month: 'လ ၃၀',
@@ -131,18 +130,6 @@ const LOCAL_TEXT = {
     inventoryValue: 'ကုန်လက်ကျန်တန်ဖိုး',
     customerDebt: 'Customer ကြွေးကျန်',
     supplierPayable: 'Supplier ပေးရန်',
-    salesAndProfit: 'အရောင်းနှင့် အမြတ် လမ်းကြောင်း',
-    revenueExpense: 'အရောင်း / အမြတ် / အသုံးစရိတ်',
-    topProducts: 'ရောင်းအားအကောင်းဆုံးပစ္စည်းများ',
-    lowStock: 'လက်ကျန်နည်းနေသောပစ္စည်းများ',
-    recentActivity: 'နောက်ဆုံးလုပ်ဆောင်မှုများ',
-    ownerSummary: 'Owner Summary',
-    alerts: 'သတိပေးချက်များ',
-    noAlerts: 'အရေးကြီးသတိပေးချက် မရှိပါ။',
-    noProducts: 'ရောင်းထားသောပစ္စည်း မရှိသေးပါ။',
-    noTransactions: 'Transaction မရှိသေးပါ။',
-    stockOut: 'လက်ကျန်ကုန်',
-    lowStockItems: 'လက်ကျန်နည်း',
     orders: 'အော်ဒါ',
     products: 'ပစ္စည်း',
     customers: 'Customer',
@@ -152,29 +139,31 @@ const LOCAL_TEXT = {
     expenses: 'အသုံးစရိတ်',
     cashIn: 'ဝင်ငွေ',
     cashOut: 'ထွက်ငွေ',
-    margin: 'အမြတ်နှုန်း',
-    qty: 'အရေအတွက်',
-    amount: 'ပမာဏ',
     actionCenter: 'အမြန်လုပ်ဆောင်ရန်',
     importantNow: 'အခုအရေးကြီးတာ',
-    healthyStock: 'ကုန်လက်ကျန်ကောင်းသည်',
-    loadingDashboard: 'NexPOS Dashboard ကို ဖွင့်နေပါသည်...',
-    saleRecord: 'အရောင်း',
-    purchaseRecord: 'အဝယ်',
-    expenseRecord: 'အသုံးစရိတ်',
-    recordFallback: 'မှတ်တမ်း',
-    productCategoryGeneral: 'အထွေထွေ',
-    readRecordsError: 'Dashboard records မဖတ်နိုင်ပါ။',
-    readProductsError: 'Dashboard products မဖတ်နိုင်ပါ။',
-    readCustomersError: 'Dashboard customers မဖတ်နိုင်ပါ။',
-    readSuppliersError: 'Dashboard suppliers မဖတ်နိုင်ပါ။',
-    partialData: 'Dashboard data တချို့ မဖတ်နိုင်သေးပါ။ Firebase rules/index ကိုစစ်ပါ။',
-    retry: 'ပြန်ဖတ်မည်',
+    salesTrend: '၇ ရက်အရောင်းလမ်းကြောင်း',
+    financeMix: 'ငွေဝင်/ထွက် အကျဉ်း',
+    topProducts: 'ရောင်းအားအကောင်းဆုံးပစ္စည်းများ',
+    lowStock: 'လက်ကျန်နည်းသောပစ္စည်းများ',
+    recentActivity: 'နောက်ဆုံးလုပ်ဆောင်မှုများ',
+    alerts: 'သတိပေးချက်များ',
+    noAlerts: 'အရေးကြီးသတိပေးချက် မရှိပါ။',
+    noProducts: 'ရောင်းထားသောပစ္စည်း မရှိသေးပါ။',
+    noTransactions: 'Transaction မရှိသေးပါ။',
+    noLowStock: 'စတော့အခြေအနေကောင်းသည်။',
+    stockOut: 'လက်ကျန်ကုန်',
+    lowStockItems: 'လက်ကျန်နည်း',
+    qty: 'အရေအတွက်',
+    refresh: 'ပြန်ဖတ်မည်',
+    loading: 'Dashboard data ဖတ်နေသည်...',
+    unableToRead: 'Dashboard data မဖတ်နိုင်ပါ။',
   },
   en: {
     dashboard: 'Dashboard',
-    commandCenter: 'Business Command Center',
-    subtitle: 'Monitor sales, profit, inventory, debts, and alerts from one owner-focused screen.',
+    heroBadge: 'Business Command Center',
+    heroTitleA: 'NexPOS',
+    heroTitleB: 'Smart Dashboard',
+    heroText: 'A cleaner owner-focused dashboard for sales, profit, cash, debts, inventory, and urgent actions.',
     today: 'Today',
     week: '7 Days',
     month: '30 Days',
@@ -192,18 +181,6 @@ const LOCAL_TEXT = {
     inventoryValue: 'Inventory Value',
     customerDebt: 'Customer Debt',
     supplierPayable: 'Supplier Payable',
-    salesAndProfit: 'Sales & Profit Trend',
-    revenueExpense: 'Revenue / Profit / Expenses',
-    topProducts: 'Top Selling Products',
-    lowStock: 'Low Stock Items',
-    recentActivity: 'Recent Activity',
-    ownerSummary: 'Owner Summary',
-    alerts: 'Alerts',
-    noAlerts: 'No important alerts.',
-    noProducts: 'No products sold yet.',
-    noTransactions: 'No transactions yet.',
-    stockOut: 'Out of stock',
-    lowStockItems: 'Low stock',
     orders: 'Orders',
     products: 'Products',
     customers: 'Customers',
@@ -213,29 +190,31 @@ const LOCAL_TEXT = {
     expenses: 'Expenses',
     cashIn: 'Cash In',
     cashOut: 'Cash Out',
-    margin: 'Margin',
-    qty: 'Qty',
-    amount: 'Amount',
     actionCenter: 'Action Center',
     importantNow: 'Important Now',
-    healthyStock: 'Stock is healthy',
-    loadingDashboard: 'Loading NexPOS Dashboard...',
-    saleRecord: 'Sale',
-    purchaseRecord: 'Purchase',
-    expenseRecord: 'Expense',
-    recordFallback: 'Record',
-    productCategoryGeneral: 'General',
-    readRecordsError: 'Unable to read dashboard records.',
-    readProductsError: 'Unable to read dashboard products.',
-    readCustomersError: 'Unable to read dashboard customers.',
-    readSuppliersError: 'Unable to read dashboard suppliers.',
-    partialData: 'Some dashboard data could not be loaded. Check Firebase rules/indexes.',
-    retry: 'Retry',
+    salesTrend: '7-Day Sales Trend',
+    financeMix: 'Cash Flow Summary',
+    topProducts: 'Top Selling Products',
+    lowStock: 'Low Stock Items',
+    recentActivity: 'Recent Activity',
+    alerts: 'Alerts',
+    noAlerts: 'No important alerts.',
+    noProducts: 'No products sold yet.',
+    noTransactions: 'No transactions yet.',
+    noLowStock: 'Stock is healthy.',
+    stockOut: 'Out of stock',
+    lowStockItems: 'Low stock',
+    qty: 'Qty',
+    refresh: 'Refresh',
+    loading: 'Loading dashboard data...',
+    unableToRead: 'Unable to read dashboard data.',
   },
   zh: {
     dashboard: '仪表盘',
-    commandCenter: '业务控制中心',
-    subtitle: '在一个页面查看销售、利润、库存、欠款和提醒。',
+    heroBadge: '业务控制中心',
+    heroTitleA: 'NexPOS',
+    heroTitleB: '智能仪表盘',
+    heroText: '集中查看销售、利润、现金、欠款、库存和重点提醒。',
     today: '今天',
     week: '7天',
     month: '30天',
@@ -253,18 +232,6 @@ const LOCAL_TEXT = {
     inventoryValue: '库存价值',
     customerDebt: '客户欠款',
     supplierPayable: '供应商应付',
-    salesAndProfit: '销售与利润趋势',
-    revenueExpense: '收入 / 利润 / 费用',
-    topProducts: '热销商品',
-    lowStock: '低库存商品',
-    recentActivity: '最近交易',
-    ownerSummary: '老板摘要',
-    alerts: '提醒',
-    noAlerts: '暂无重要提醒。',
-    noProducts: '暂无销售商品。',
-    noTransactions: '暂无交易。',
-    stockOut: '缺货',
-    lowStockItems: '低库存',
     orders: '订单',
     products: '商品',
     customers: '客户',
@@ -274,112 +241,126 @@ const LOCAL_TEXT = {
     expenses: '费用',
     cashIn: '现金收入',
     cashOut: '现金支出',
-    margin: '利润率',
-    qty: '数量',
-    amount: '金额',
     actionCenter: '快捷操作',
     importantNow: '当前重点',
-    healthyStock: '库存健康',
-    loadingDashboard: '正在加载 NexPOS 仪表盘...',
-    saleRecord: '销售',
-    purchaseRecord: '采购',
-    expenseRecord: '费用',
-    recordFallback: '记录',
-    productCategoryGeneral: '通用',
-    readRecordsError: '无法读取仪表盘记录。',
-    readProductsError: '无法读取仪表盘商品。',
-    readCustomersError: '无法读取仪表盘客户。',
-    readSuppliersError: '无法读取仪表盘供应商。',
-    partialData: '部分仪表盘数据无法读取。请检查 Firebase 规则/索引。',
-    retry: '重试',
+    salesTrend: '7天销售趋势',
+    financeMix: '现金流摘要',
+    topProducts: '热销商品',
+    lowStock: '低库存商品',
+    recentActivity: '最近交易',
+    alerts: '提醒',
+    noAlerts: '暂无重要提醒。',
+    noProducts: '暂无销售商品。',
+    noTransactions: '暂无交易。',
+    noLowStock: '库存健康。',
+    stockOut: '缺货',
+    lowStockItems: '低库存',
+    qty: '数量',
+    refresh: '刷新',
+    loading: '正在加载仪表盘数据...',
+    unableToRead: '无法读取仪表盘数据。',
   },
 };
 
-const palette = {
-  cyan: 'from-cyan-500/20 to-sky-500/5 text-cyan-300 border-cyan-400/20',
-  emerald: 'from-emerald-500/20 to-teal-500/5 text-emerald-300 border-emerald-400/20',
-  rose: 'from-rose-500/20 to-pink-500/5 text-rose-300 border-rose-400/20',
-  amber: 'from-amber-500/20 to-orange-500/5 text-amber-300 border-amber-400/20',
-  violet: 'from-violet-500/20 to-indigo-500/5 text-violet-300 border-violet-400/20',
-  blue: 'from-blue-500/20 to-cyan-500/5 text-blue-300 border-blue-400/20',
+const tones = {
+  cyan: {
+    card: 'border-cyan-400/25 bg-cyan-400/10 text-cyan-200 shadow-cyan-950/40',
+    icon: 'bg-cyan-300 text-slate-950',
+    bar: 'from-cyan-400 to-blue-500',
+  },
+  emerald: {
+    card: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-emerald-950/40',
+    icon: 'bg-emerald-300 text-slate-950',
+    bar: 'from-emerald-400 to-teal-500',
+  },
+  amber: {
+    card: 'border-amber-400/25 bg-amber-400/10 text-amber-200 shadow-amber-950/40',
+    icon: 'bg-amber-300 text-slate-950',
+    bar: 'from-amber-300 to-orange-500',
+  },
+  rose: {
+    card: 'border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-rose-950/40',
+    icon: 'bg-rose-300 text-slate-950',
+    bar: 'from-rose-400 to-pink-500',
+  },
+  violet: {
+    card: 'border-violet-400/25 bg-violet-400/10 text-violet-200 shadow-violet-950/40',
+    icon: 'bg-violet-300 text-slate-950',
+    bar: 'from-violet-400 to-indigo-500',
+  },
+  blue: {
+    card: 'border-blue-400/25 bg-blue-400/10 text-blue-200 shadow-blue-950/40',
+    icon: 'bg-blue-300 text-slate-950',
+    bar: 'from-blue-400 to-cyan-500',
+  },
 };
 
-export default function DashboardPage() {
+async function safeReadCollection(collectionName, tenantId, maxRows) {
+  if (!tenantId) return [];
+  try {
+    const snap = await getDocs(query(collection(db, collectionName), where('tenantId', '==', tenantId), limit(maxRows)));
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error(`Dashboard ${collectionName} read error:`, error);
+    return [];
+  }
+}
+
+export default function DashboardPage({ records: recordsFromApp = [] }) {
   const { profile, hasPermission } = useAuth();
   const { t, language } = useLanguage();
   const tenantId = profile?.tenantId;
 
-  const [records, setRecords] = useState([]);
+  const [records, setRecords] = useState(Array.isArray(recordsFromApp) ? recordsFromApp : []);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadErrors, setLoadErrors] = useState({});
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [errorText, setErrorText] = useState('');
   const [dateRange, setDateRange] = useState('today');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const tx = (key) => t(`dashboard_${key}`, LOCAL_TEXT?.[language]?.[key] || LOCAL_TEXT.en[key] || key);
+  const text = TEXT[language] || TEXT.mm;
+  const tx = (key) => t?.(`dashboard_${key}`, text[key] || TEXT.en[key] || key) || text[key] || TEXT.en[key] || key;
   const fmt = (num) => toNumber(num).toLocaleString();
   const money = (num) => `${fmt(num)} Ks`;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const readCollection = async (name, maxRows, errorKey) => {
-      try {
-        const snap = await getDocs(query(collection(db, name), where('tenantId', '==', tenantId), limit(maxRows)));
-        return { ok: true, key: errorKey, rows: snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })) };
-      } catch (error) {
-        console.error(tx(errorKey), error);
-        return { ok: false, key: errorKey, rows: [] };
-      }
-    };
-
-    const loadDashboardData = async () => {
-      if (!tenantId) {
-        if (isMounted) {
-          setRecords([]);
-          setProducts([]);
-          setCustomers([]);
-          setSuppliers([]);
-          setLoadErrors({});
-          setLoading(false);
-        }
-        return;
-      }
-
-      setLoading(true);
-      setLoadErrors({});
-
-      const [recordsResult, productsResult, customersResult, suppliersResult] = await Promise.all([
-        readCollection('pos_records', 1200, 'readRecordsError'),
-        readCollection('pos_products', 800, 'readProductsError'),
-        readCollection('pos_customers', 800, 'readCustomersError'),
-        readCollection('pos_suppliers', 800, 'readSuppliersError'),
-      ]);
-
-      if (!isMounted) return;
-
-      setRecords([...recordsResult.rows].sort((a, b) => getTimeValue(b) - getTimeValue(a)));
-      setProducts([...productsResult.rows].sort((a, b) => getProductName(a).localeCompare(getProductName(b))));
-      setCustomers([...customersResult.rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
-      setSuppliers([...suppliersResult.rows].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
-      setLoadErrors({
-        records: !recordsResult.ok,
-        products: !productsResult.ok,
-        customers: !customersResult.ok,
-        suppliers: !suppliersResult.ok,
-      });
+  const loadDashboard = async () => {
+    if (!tenantId) {
       setLoading(false);
-    };
+      return;
+    }
+    setLoading(true);
+    setErrorText('');
+    try {
+      const [recordRows, productRows, customerRows, supplierRows] = await Promise.all([
+        safeReadCollection('pos_records', tenantId, 900),
+        safeReadCollection('pos_products', tenantId, 700),
+        safeReadCollection('pos_customers', tenantId, 700),
+        safeReadCollection('pos_suppliers', tenantId, 700),
+      ]);
+      setRecords(recordRows.length ? recordRows : Array.isArray(recordsFromApp) ? recordsFromApp : []);
+      setProducts(productRows);
+      setCustomers(customerRows);
+      setSuppliers(supplierRows);
+    } catch (error) {
+      console.error('Dashboard load error:', error);
+      setErrorText(tx('unableToRead'));
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    loadDashboardData();
+  useEffect(() => {
+    loadDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [tenantId, language, refreshKey]);
+  useEffect(() => {
+    if (Array.isArray(recordsFromApp) && recordsFromApp.length > records.length) {
+      setRecords(recordsFromApp);
+    }
+  }, [recordsFromApp]);
 
   if (profile && profile.role !== 'admin' && profile.role !== 'owner' && !hasPermission('view_reports')) {
     const permissions = profile.permissions || [];
@@ -393,6 +374,7 @@ export default function DashboardPage() {
     const today = getPastISO(0);
     const weekStart = getPastISO(6);
     const monthStart = getPastISO(29);
+    const keyword = searchTerm.trim().toLowerCase();
 
     return records
       .filter((record) => {
@@ -403,8 +385,7 @@ export default function DashboardPage() {
         return true;
       })
       .filter((record) => {
-        if (!searchTerm.trim()) return true;
-        const keyword = searchTerm.trim().toLowerCase();
+        if (!keyword) return true;
         return [record.personName, record.customerName, record.supplierName, record.voucherNo, record.invoiceNo, record.type, record.item]
           .some((value) => String(value || '').toLowerCase().includes(keyword));
       })
@@ -481,7 +462,7 @@ export default function DashboardPage() {
     result.netProfit = result.grossProfit - result.expenses;
     result.cashBalance = result.cashIn - result.cashOut;
     result.recent = filteredRecords.slice(0, 8);
-    result.topProducts = Object.values(result.topProducts).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+    result.topProducts = Object.values(result.topProducts).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
     return result;
   }, [filteredRecords, productMap]);
 
@@ -493,25 +474,18 @@ export default function DashboardPage() {
         const minStock = toNumber(product.minStock ?? product.minStockAlert ?? 5);
         const cost = getProductCost(product);
         inventoryValue += stock * cost;
-        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || tx('productCategoryGeneral') };
+        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || 'General' };
       })
       .filter((product) => product.stock <= product.minStock)
       .sort((a, b) => a.stock - b.stock);
     return { inventoryValue, lowStock, lowStockCount: lowStock.length, outOfStock: lowStock.filter((item) => item.stock <= 0).length };
-  }, [products, language]);
+  }, [products]);
 
   const chartData = useMemo(() => {
     const days = [];
-    const dayLabels = {
-      en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-      mm: ['နွေ', 'လာ', 'ဂါ', 'ဟူး', 'ကြာ', 'သော', 'နေ'],
-      zh: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
-    };
-
     for (let i = 6; i >= 0; i -= 1) {
       const iso = getPastISO(i);
-      const date = new Date(iso);
-      const day = dayLabels[language]?.[date.getDay()] || dayLabels.en[date.getDay()];
+      const day = new Date(iso).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'my-MM', { weekday: 'short' });
       const dayRecords = records.filter((record) => getRecordDateISO(record) === iso);
       let sales = 0;
       let profit = 0;
@@ -531,7 +505,7 @@ export default function DashboardPage() {
         }
         if (type === 'expense') expenses += amount;
       });
-      days.push({ day, sales, profit, expenses, net: profit - expenses });
+      days.push({ day, sales, profit, expenses });
     }
     return days;
   }, [records, productMap, language]);
@@ -542,25 +516,9 @@ export default function DashboardPage() {
     if (inventoryStats.lowStockCount > 0) alerts.push({ tone: 'amber', title: tx('lowStockItems'), text: `${inventoryStats.lowStockCount} ${tx('products')}`, icon: Package });
     if (analytics.customerDebt > 0) alerts.push({ tone: 'amber', title: tx('customerDebt'), text: money(analytics.customerDebt), icon: CreditCard });
     if (analytics.supplierPayable > 0) alerts.push({ tone: 'rose', title: tx('supplierPayable'), text: money(analytics.supplierPayable), icon: Wallet });
-    if (alerts.length === 0) alerts.push({ tone: 'emerald', title: tx('healthyStock'), text: tx('noAlerts'), icon: ShieldCheck });
+    if (alerts.length === 0) alerts.push({ tone: 'emerald', title: tx('noAlerts'), text: tx('noLowStock'), icon: ShieldCheck });
     return alerts.slice(0, 4);
   }, [analytics.customerDebt, analytics.supplierPayable, inventoryStats.lowStockCount, inventoryStats.outOfStock, language]);
-
-  const mainKpis = [
-    { label: tx('revenue'), value: money(analytics.revenue), icon: DollarSign, tone: 'cyan', note: `${analytics.salesCount} ${tx('orders')}` },
-    { label: tx('netProfit'), value: money(analytics.netProfit), icon: TrendingUp, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', note: `${tx('grossProfit')}: ${money(analytics.grossProfit)}` },
-    { label: tx('cashBalance'), value: money(analytics.cashBalance), icon: Wallet, tone: analytics.cashBalance >= 0 ? 'blue' : 'rose', note: `${tx('cashIn')} ${money(analytics.cashIn)} / ${tx('cashOut')} ${money(analytics.cashOut)}` },
-    { label: tx('inventoryValue'), value: money(inventoryStats.inventoryValue), icon: Package, tone: 'violet', note: `${products.length} ${tx('products')}` },
-  ];
-
-  const miniStats = [
-    { label: tx('customerDebt'), value: money(analytics.customerDebt), tone: 'amber' },
-    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), tone: 'rose' },
-    { label: tx('expenses'), value: money(analytics.expenses), tone: 'rose' },
-    { label: tx('lowStock'), value: inventoryStats.lowStockCount, tone: inventoryStats.lowStockCount > 0 ? 'amber' : 'emerald' },
-    { label: tx('customers'), value: customers.length, tone: 'emerald' },
-    { label: tx('suppliers'), value: suppliers.length, tone: 'blue' },
-  ];
 
   const rangeOptions = [
     { key: 'today', label: tx('today') },
@@ -576,56 +534,64 @@ export default function DashboardPage() {
     { label: tx('viewReports'), to: '/reports', icon: BarChart3, tone: 'amber' },
   ];
 
-  const Card = ({ children, className = '' }) => (
-    <motion.section variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }} className={`rounded-[2rem] border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/30 backdrop-blur-xl ${className}`}>
-      {children}
-    </motion.section>
+  const mainCards = [
+    { label: tx('revenue'), value: money(analytics.revenue), icon: DollarSign, tone: 'cyan', note: `${analytics.salesCount} ${tx('orders')}` },
+    { label: tx('netProfit'), value: money(analytics.netProfit), icon: analytics.netProfit >= 0 ? TrendingUp : TrendingDown, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', note: `${tx('grossProfit')}: ${money(analytics.grossProfit)}` },
+    { label: tx('cashBalance'), value: money(analytics.cashBalance), icon: Wallet, tone: analytics.cashBalance >= 0 ? 'blue' : 'rose', note: `${tx('cashIn')} ${money(analytics.cashIn)}` },
+    { label: tx('inventoryValue'), value: money(inventoryStats.inventoryValue), icon: Package, tone: 'violet', note: `${products.length} ${tx('products')}` },
+  ];
+
+  const CompactMetric = ({ label, value, tone = 'cyan' }) => (
+    <div className={`rounded-[1.4rem] border p-4 shadow-xl ${tones[tone]?.card || tones.cyan.card}`}>
+      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="mt-2 truncate text-xl font-black text-white">{value}</p>
+    </div>
   );
 
-  const KpiCard = ({ item }) => {
-    const Icon = item.icon;
-    return (
-      <Card className={`relative overflow-hidden p-5 bg-gradient-to-br ${palette[item.tone] || palette.cyan}`}>
-        <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{item.label}</p>
-            <h3 className="mt-3 break-words text-3xl font-black text-white sm:text-4xl">{item.value}</h3>
-            <p className="mt-3 truncate text-xs font-bold text-slate-400">{item.note}</p>
-          </div>
-          <div className="rounded-2xl bg-black/25 p-3"><Icon size={24} /></div>
-        </div>
-      </Card>
-    );
-  };
-
-  const EmptyState = ({ text }) => (
-    <div className="rounded-3xl border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{text}</div>
+  const Panel = ({ children, className = '' }) => (
+    <section className={`rounded-[2rem] border border-white/10 bg-[#0c1222]/90 p-5 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl ${className}`}>{children}</section>
   );
 
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#050713] text-white">
-        <div className="h-14 w-14 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" />
-        <p className="mt-4 animate-pulse font-black text-cyan-300">{tx('loadingDashboard')}</p>
+      <div className="min-h-screen bg-[#050713] px-4 py-10 text-white">
+        <div className="mx-auto max-w-7xl space-y-4">
+          <div className="h-48 animate-pulse rounded-[2rem] bg-slate-800/60" />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((item) => <div key={item} className="h-36 animate-pulse rounded-[2rem] bg-slate-800/50" />)}
+          </div>
+          <p className="text-center text-sm font-black text-cyan-300">{tx('loading')}</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050713] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(168,85,247,0.12),transparent_32%),linear-gradient(180deg,#050713,#070b16)]" />
+    <div className="min-h-screen overflow-x-hidden bg-[#050713] text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_5%,rgba(34,211,238,0.22),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(168,85,247,0.18),transparent_28%),linear-gradient(180deg,#050713,#09111f_52%,#050713)]" />
 
-      <motion.main variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.05 } } }} initial="hidden" animate="visible" className="relative z-10 mx-auto w-full max-w-7xl space-y-5 px-4 py-5 pb-28 sm:px-6 lg:px-8">
-        <Card className="overflow-hidden border-cyan-400/20 bg-gradient-to-br from-slate-950 via-slate-950 to-cyan-950/25 p-5 sm:p-7">
-          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.22em] text-cyan-200">
-                <Zap size={14} /> {tx('commandCenter')}
-              </div>
+      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 pb-28 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden rounded-[2.3rem] border border-cyan-300/20 bg-[#070b16]/90 p-5 shadow-2xl shadow-cyan-950/20 ring-1 ring-white/10 sm:p-7">
+          <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-cyan-400/20 blur-3xl" />
+          <div className="absolute -bottom-28 left-1/3 h-60 w-60 rounded-full bg-violet-500/20 blur-3xl" />
+
+          <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div className="space-y-5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-200">
+                <Zap size={15} /> {tx('heroBadge')}
+              </span>
               <div>
-                <h1 className="text-4xl font-black leading-tight sm:text-5xl">NexPOS <span className="bg-gradient-to-r from-cyan-300 to-emerald-300 bg-clip-text text-transparent">{tx('dashboard')}</span></h1>
-                <p className="mt-3 max-w-2xl text-sm font-semibold leading-7 text-slate-400">{tx('subtitle')}</p>
+                <h1 className="text-4xl font-black leading-[1.05] sm:text-5xl lg:text-6xl">
+                  {tx('heroTitleA')} <span className="block bg-gradient-to-r from-cyan-200 via-emerald-200 to-violet-200 bg-clip-text text-transparent">{tx('heroTitleB')}</span>
+                </h1>
+                <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-slate-400 sm:text-base">{tx('heroText')}</p>
+              </div>
+
+              <div className="grid max-w-2xl grid-cols-2 gap-3 sm:grid-cols-4">
+                <CompactMetric label={tx('orders')} value={analytics.salesCount} tone="cyan" />
+                <CompactMetric label={tx('customers')} value={customers.length} tone="emerald" />
+                <CompactMetric label={tx('products')} value={products.length} tone="violet" />
+                <CompactMetric label={tx('suppliers')} value={suppliers.length} tone="blue" />
               </div>
             </div>
 
@@ -633,76 +599,101 @@ export default function DashboardPage() {
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
-                  <Link key={action.label} to={action.to} className={`group rounded-3xl border bg-gradient-to-br p-4 transition hover:-translate-y-1 hover:shadow-xl ${palette[action.tone] || palette.cyan}`}>
-                    <Icon size={24} />
-                    <div className="mt-4 flex items-center justify-between gap-2 text-sm font-black text-white">
-                      <span>{action.label}</span>
-                      <ArrowRight size={16} className="opacity-60 transition group-hover:translate-x-1" />
+                  <Link key={action.label} to={action.to} className={`group min-h-[132px] rounded-[1.7rem] border p-5 shadow-xl transition active:scale-[0.98] sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
+                    <div className={`inline-flex rounded-2xl p-3 ${tones[action.tone]?.icon || tones.cyan.icon}`}>
+                      <Icon size={25} />
+                    </div>
+                    <div className="mt-5 flex items-end justify-between gap-3">
+                      <p className="text-base font-black leading-snug text-white">{action.label}</p>
+                      <ArrowRight className="shrink-0 opacity-70 transition group-hover:translate-x-1" size={20} />
                     </div>
                   </Link>
                 );
               })}
             </div>
           </div>
-        </Card>
+        </section>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-            <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={tx('search')} className="h-14 w-full rounded-2xl border border-white/10 bg-slate-950/80 pl-12 pr-4 text-base font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/40 focus:ring-4 focus:ring-cyan-400/10" />
+        {errorText && (
+          <div className="flex items-center justify-between gap-3 rounded-3xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">
+            <span>{errorText}</span>
+            <button type="button" onClick={loadDashboard} className="rounded-2xl bg-rose-400/20 px-4 py-2 font-black">{tx('refresh')}</button>
           </div>
-          <div className="grid grid-cols-4 gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-1">
+        )}
+
+        <section className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={21} />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder={tx('search')}
+              className="h-14 w-full rounded-[1.4rem] border border-white/10 bg-[#0c1222]/90 pl-12 pr-4 text-base font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-4 focus:ring-cyan-300/10"
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-1 rounded-[1.4rem] border border-white/10 bg-[#0c1222]/90 p-1">
             {rangeOptions.map((option) => (
-              <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-xl px-3 py-3 text-xs font-black transition ${dateRange === option.key ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-400/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+              <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-[1.05rem] px-3 py-3 text-xs font-black transition ${dateRange === option.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
                 {option.label}
               </button>
             ))}
           </div>
-        </div>
+          <button type="button" onClick={loadDashboard} className="hidden items-center gap-2 rounded-[1.4rem] border border-white/10 bg-white/5 px-4 py-3 text-xs font-black text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 lg:inline-flex">
+            <RefreshCw size={16} /> {tx('refresh')}
+          </button>
+        </section>
 
-        {Object.values(loadErrors).some(Boolean) && (
-          <div className="flex flex-col gap-3 rounded-3xl border border-amber-400/20 bg-amber-500/10 p-4 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3 text-sm font-bold">
-              <AlertTriangle className="mt-0.5 shrink-0 text-amber-300" size={20} />
-              <span>{tx('partialData')}</span>
-            </div>
-            <button type="button" onClick={() => setRefreshKey((value) => value + 1)} className="rounded-2xl bg-amber-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-amber-200">
-              {tx('retry')}
-            </button>
-          </div>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {mainKpis.map((item) => <KpiCard key={item.label} item={item} />)}
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <Card className="p-5 sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">{tx('ownerSummary')}</p>
-                <h2 className="mt-2 text-2xl font-black">{tx('importantNow')}</h2>
-              </div>
-              <Sparkles className="text-cyan-300" size={30} />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {miniStats.map((stat) => (
-                <div key={stat.label} className={`rounded-3xl border bg-gradient-to-br p-4 ${palette[stat.tone] || palette.cyan}`}>
-                  <p className="text-xs font-black text-slate-400">{stat.label}</p>
-                  <p className="mt-2 break-words text-2xl font-black text-white">{stat.value}</p>
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {mainCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className={`relative overflow-hidden rounded-[2rem] border p-5 shadow-2xl ${tones[card.tone]?.card || tones.cyan.card}`}>
+                <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
+                <div className="relative flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{card.label}</p>
+                    <p className="mt-3 break-words text-3xl font-black text-white">{card.value}</p>
+                    <p className="mt-3 truncate text-xs font-bold text-slate-400">{card.note}</p>
+                  </div>
+                  <div className={`rounded-2xl p-3 ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={25} /></div>
                 </div>
-              ))}
-            </div>
-          </Card>
+              </div>
+            );
+          })}
+        </section>
 
-          <Card className="p-5 sm:p-6">
-            <h2 className="mb-4 flex items-center gap-2 text-2xl font-black"><AlertTriangle className="text-amber-300" /> {tx('alerts')}</h2>
+        <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+          <Panel>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">{tx('salesTrend')}</p>
+                <h2 className="mt-1 text-2xl font-black">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
+              </div>
+              <CalendarDays className="text-cyan-300" size={30} />
+            </div>
+            <div className="h-72 sm:h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
+                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(34,211,238,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value, name) => [money(value), name]} />
+                  <Line type="monotone" dataKey="sales" name={tx('sales')} stroke="#22d3ee" strokeWidth={4} dot={false} activeDot={{ r: 6 }} />
+                  <Line type="monotone" dataKey="profit" name={tx('profit')} stroke="#34d399" strokeWidth={3} dot={false} />
+                  <Line type="monotone" dataKey="expenses" name={tx('expenses')} stroke="#fb7185" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+
+          <Panel>
+            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><Sparkles className="text-amber-300" /> {tx('importantNow')}</h2>
             <div className="space-y-3">
               {importantAlerts.map((alert) => {
                 const Icon = alert.icon;
                 return (
-                  <div key={`${alert.title}-${alert.text}`} className={`flex items-center gap-3 rounded-3xl border bg-gradient-to-br p-4 ${palette[alert.tone] || palette.emerald}`}>
-                    <div className="rounded-2xl bg-black/25 p-3"><Icon size={22} /></div>
+                  <div key={`${alert.title}-${alert.text}`} className={`flex items-center gap-3 rounded-[1.4rem] border p-4 ${tones[alert.tone]?.card || tones.emerald.card}`}>
+                    <div className={`rounded-2xl p-3 ${tones[alert.tone]?.icon || tones.emerald.icon}`}><Icon size={22} /></div>
                     <div className="min-w-0">
                       <p className="font-black text-white">{alert.title}</p>
                       <p className="truncate text-sm font-bold text-slate-400">{alert.text}</p>
@@ -711,62 +702,37 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-          </Card>
-        </div>
+          </Panel>
+        </section>
 
-        <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-          <Card className="p-5 sm:p-6">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-2xl font-black"><TrendingUp className="text-cyan-300" /> {tx('salesAndProfit')}</h2>
-              <div className="flex flex-wrap gap-3 text-xs font-black text-slate-400">
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-cyan-400" />{tx('sales')}</span>
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-400" />{tx('profit')}</span>
-                <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-rose-400" />{tx('expenses')}</span>
-              </div>
-            </div>
-            <div className="h-72 sm:h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 6" vertical={false} />
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(34,211,238,.25)', borderRadius: 16, color: '#fff' }} formatter={(value, name) => [money(value), name]} />
-                  <Legend wrapperStyle={{ color: '#94a3b8', fontWeight: 800 }} />
-                  <Line type="monotone" dataKey="sales" name={tx('sales')} stroke="#22d3ee" strokeWidth={4} dot={false} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="profit" name={tx('profit')} stroke="#34d399" strokeWidth={3} dot={false} />
-                  <Line type="monotone" dataKey="expenses" name={tx('expenses')} stroke="#fb7185" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><BarChart3 className="text-violet-300" /> {tx('revenueExpense')}</h2>
-            <div className="h-72 sm:h-80">
+        <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+          <Panel>
+            <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
+            <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={[
-                  { name: tx('revenue'), value: analytics.revenue, color: '#22d3ee' },
-                  { name: tx('grossProfit'), value: analytics.grossProfit, color: '#34d399' },
-                  { name: tx('expenses'), value: analytics.expenses, color: '#fb7185' },
-                  { name: tx('netProfit'), value: analytics.netProfit, color: '#a78bfa' },
+                  { name: tx('cashIn'), value: analytics.cashIn, color: '#22d3ee' },
+                  { name: tx('cashOut'), value: analytics.cashOut, color: '#fb7185' },
+                  { name: tx('netProfit'), value: analytics.netProfit, color: '#34d399' },
+                  { name: tx('customerDebt'), value: analytics.customerDebt, color: '#fbbf24' },
                 ]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 6" vertical={false} />
+                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
                   <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} interval={0} />
                   <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(167,139,250,.25)', borderRadius: 16, color: '#fff' }} formatter={(value) => money(value)} />
+                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(167,139,250,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
                   <Bar dataKey="value" radius={[16, 16, 6, 6]}>
-                    {['#22d3ee', '#34d399', '#fb7185', '#a78bfa'].map((color) => <Cell key={color} fill={color} />)}
+                    {['#22d3ee', '#fb7185', '#34d399', '#fbbf24'].map((color) => <Cell key={color} fill={color} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </Card>
-        </div>
+          </Panel>
 
-        <div className="grid gap-5 xl:grid-cols-3">
-          <Card className="p-5 sm:p-6">
+          <Panel>
             <h2 className="mb-5 text-2xl font-black">🏆 {tx('topProducts')}</h2>
-            {analytics.topProducts.length === 0 ? <EmptyState text={tx('noProducts')} /> : (
+            {analytics.topProducts.length === 0 ? (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noProducts')}</div>
+            ) : (
               <div className="space-y-4">
                 {analytics.topProducts.map((product, index) => {
                   const max = analytics.topProducts[0]?.revenue || 1;
@@ -778,39 +744,45 @@ export default function DashboardPage() {
                         <span className="text-cyan-300">{money(product.revenue)}</span>
                       </div>
                       <div className="mb-1 flex justify-between text-xs font-bold text-slate-500"><span>{tx('qty')}: {product.qty}</span><span>{tx('profit')}: {money(product.profit)}</span></div>
-                      <div className="h-2.5 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-300" style={{ width: `${width}%` }} /></div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} /></div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </Card>
+          </Panel>
+        </section>
 
-          <Card className="p-5 sm:p-6">
+        <section className="grid gap-5 xl:grid-cols-2">
+          <Panel>
             <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
-            {inventoryStats.lowStock.length === 0 ? <EmptyState text={tx('healthyStock')} /> : (
+            {inventoryStats.lowStock.length === 0 ? (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noLowStock')}</div>
+            ) : (
               <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                 {inventoryStats.lowStock.slice(0, 8).map((product) => (
-                  <div key={product.id} className="flex items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/25 p-4">
+                  <div key={product.id} className="flex items-center justify-between gap-3 rounded-[1.4rem] border border-white/10 bg-black/25 p-4">
                     <div className="min-w-0"><p className="truncate font-black">{product.name}</p><p className="text-xs font-bold text-slate-500">{product.category}</p></div>
                     <span className={`rounded-2xl px-3 py-1 text-sm font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}>{product.stock}</span>
                   </div>
                 ))}
               </div>
             )}
-          </Card>
+          </Panel>
 
-          <Card className="p-5 sm:p-6">
+          <Panel>
             <h2 className="mb-5 flex items-center gap-2 text-2xl font-black"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
-            {analytics.recent.length === 0 ? <EmptyState text={tx('noTransactions')} /> : (
+            {analytics.recent.length === 0 ? (
+              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noTransactions')}</div>
+            ) : (
               <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
                 {analytics.recent.map((record) => {
                   const type = getRecordType(record);
                   const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
                   return (
-                    <Link key={record.id} to="/records" className={`block rounded-3xl border bg-gradient-to-br p-4 transition hover:-translate-y-0.5 ${palette[tone] || palette.cyan}`}>
+                    <Link key={record.id} to="/records" className={`block rounded-[1.4rem] border p-4 transition active:scale-[0.99] hover:border-cyan-300/35 ${tones[tone]?.card || tones.cyan.card}`}>
                       <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0"><p className="truncate font-black">{tx(`${type}Record`) || tx('recordFallback')} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
+                        <div className="min-w-0"><p className="truncate font-black capitalize text-white">{type || 'record'} • {record.voucherNo || record.invoiceNo || '-'}</p><p className="truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || '-'}</p></div>
                         <p className="text-right font-black text-white">{money(getRecordAmount(record))}</p>
                       </div>
                     </Link>
@@ -818,9 +790,9 @@ export default function DashboardPage() {
                 })}
               </div>
             )}
-          </Card>
-        </div>
-      </motion.main>
+          </Panel>
+        </section>
+      </main>
     </div>
   );
 }

@@ -16,6 +16,17 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import {
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 function toNumber(value) {
   const n = Number(value);
@@ -96,7 +107,10 @@ const TEXT = {
     products: 'ပစ္စည်း',
     customers: 'Customer',
     lowStockCount: 'လက်ကျန်နည်း',
-    sales7d: '၇ ရက် အရောင်း',
+    sales7d: '၇ ရက် Graph',
+    salesProfitChart: 'အရောင်း / အမြတ် Graph',
+    transactionMix: 'Transaction Pie',
+    noPie: 'Pie chart အတွက် data မရှိသေးပါ။',
     finance: 'ငွေကြေးအကျဉ်း',
     topProducts: 'ရောင်းအားကောင်း',
     lowStock: 'လက်ကျန်နည်းသောပစ္စည်းများ',
@@ -128,7 +142,10 @@ const TEXT = {
     products: 'Products',
     customers: 'Customers',
     lowStockCount: 'Low Stock',
-    sales7d: '7-Day Sales',
+    sales7d: '7-Day Graph',
+    salesProfitChart: 'Sales / Profit Graph',
+    transactionMix: 'Transaction Pie',
+    noPie: 'No data for pie chart yet.',
     finance: 'Finance',
     topProducts: 'Top Products',
     lowStock: 'Low Stock Items',
@@ -160,7 +177,10 @@ const TEXT = {
     products: '商品',
     customers: '客户',
     lowStockCount: '低库存',
-    sales7d: '7天销售',
+    sales7d: '7天图表',
+    salesProfitChart: '销售 / 利润图表',
+    transactionMix: '交易占比',
+    noPie: '暂无饼图数据。',
     finance: '财务摘要',
     topProducts: '热销商品',
     lowStock: '低库存商品',
@@ -310,6 +330,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
       cashOut: 0,
       customerDebt: 0,
       supplierPayable: 0,
+      purchaseAmount: 0,
       salesCount: 0,
       purchaseCount: 0,
       expenseCount: 0,
@@ -347,6 +368,7 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
         });
         result.grossProfit += amount - recordCost;
       } else if (type === 'purchase') {
+        result.purchaseAmount += amount;
         result.cashOut += paid || amount;
         result.supplierPayable += debt;
         result.purchaseCount += 1;
@@ -380,15 +402,38 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
       const iso = getPastISO(i);
       const label = new Date(iso).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'my-MM', { weekday: 'short' });
       let sales = 0;
+      let profit = 0;
+      let expenses = 0;
+
       records.forEach((record) => {
-        if (getRecordDateISO(record) === iso && getRecordType(record) === 'sale') sales += getRecordAmount(record);
+        if (getRecordDateISO(record) !== iso) return;
+        const type = getRecordType(record);
+        const amount = getRecordAmount(record);
+        if (type === 'sale') {
+          sales += amount;
+          let cost = 0;
+          getRecordItems(record).forEach((item) => {
+            const product = productMap[item.productId] || productMap[item.name] || {};
+            const qty = toNumber(item.quantity ?? item.qty ?? 1) || 1;
+            cost += toNumber(item.costPrice ?? item.cost ?? getProductCost(product)) * qty;
+          });
+          profit += amount - cost;
+        }
+        if (type === 'expense') expenses += amount;
       });
-      days.push({ iso, label, sales });
+
+      days.push({ iso, label, sales, profit, expenses });
     }
     return days;
-  }, [records, language]);
+  }, [records, productMap, language]);
 
   const maxSales = Math.max(...chartData.map((day) => day.sales), 1);
+
+  const pieData = useMemo(() => [
+    { name: tx('sale'), value: analytics.revenue, color: '#22d3ee' },
+    { name: tx('purchase'), value: analytics.purchaseAmount, color: '#34d399' },
+    { name: tx('expense'), value: analytics.expenses, color: '#fb7185' },
+  ].filter((row) => row.value > 0), [analytics.revenue, analytics.purchaseAmount, analytics.expenses, language]);
 
   const kpiCards = [
     { label: tx('todaySales'), value: money(analytics.revenue), tone: 'cyan', icon: Wallet },
@@ -462,40 +507,70 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
         <Panel>
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-base font-black sm:text-xl">{tx('sales7d')}</h2>
+            <h2 className="text-base font-black sm:text-xl">{tx('salesProfitChart')}</h2>
             <span className="text-xs font-black text-cyan-300">{money(chartData.reduce((sum, day) => sum + day.sales, 0))}</span>
           </div>
-          {chartData.every((day) => day.sales === 0) ? (
+          {chartData.every((day) => day.sales === 0 && day.profit === 0 && day.expenses === 0) ? (
             <EmptyState>{tx('noChart')}</EmptyState>
           ) : (
-            <div className="space-y-2">
-              {chartData.map((day) => {
-                const width = Math.max((day.sales / maxSales) * 100, day.sales > 0 ? 7 : 0);
-                return (
-                  <div key={day.iso} className="grid grid-cols-[42px_1fr_82px] items-center gap-2 text-xs sm:grid-cols-[56px_1fr_110px]">
-                    <span className="font-black text-slate-400">{day.label}</span>
-                    <div className="h-3 overflow-hidden rounded-full bg-black/35">
-                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+            <>
+              <div className="h-56 sm:h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+                    <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                    <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
+                    <Line type="monotone" dataKey="sales" name={tx('sale')} stroke="#22d3ee" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="profit" name={tx('netProfit')} stroke="#34d399" strokeWidth={3} dot={false} />
+                    <Line type="monotone" dataKey="expenses" name={tx('expense')} stroke="#fb7185" strokeWidth={2.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 space-y-2 sm:hidden">
+                {chartData.map((day) => {
+                  const width = Math.max((day.sales / maxSales) * 100, day.sales > 0 ? 7 : 0);
+                  return (
+                    <div key={day.iso} className="grid grid-cols-[42px_1fr_82px] items-center gap-2 text-xs">
+                      <span className="font-black text-slate-400">{day.label}</span>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-black/35">
+                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+                      </div>
+                      <span className="truncate text-right font-black text-white">{money(day.sales)}</span>
                     </div>
-                    <span className="truncate text-right font-black text-white">{money(day.sales)}</span>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Panel>
 
         <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
           <Panel>
-            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('finance')}</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {financeRows.map((row) => (
-                <div key={row.label} className={`rounded-2xl border p-3 ${toneClasses[row.tone] || toneClasses.slate}`}>
-                  <p className="truncate text-[10px] font-black text-slate-400 sm:text-xs">{row.label}</p>
-                  <p className="mt-2 break-words text-sm font-black text-white sm:text-lg">{money(row.value)}</p>
+            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('transactionMix')}</h2>
+            {pieData.length === 0 ? (
+              <EmptyState>{tx('noPie')}</EmptyState>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-[160px_1fr] sm:items-center">
+                <div className="h-44 sm:h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={4}>
+                        {pieData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-1">
+                  {financeRows.map((row) => (
+                    <div key={row.label} className={`rounded-2xl border p-3 ${toneClasses[row.tone] || toneClasses.slate}`}>
+                      <p className="truncate text-[10px] font-black text-slate-400 sm:text-xs">{row.label}</p>
+                      <p className="mt-2 break-words text-sm font-black text-white sm:text-lg">{money(row.value)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Panel>
 
           <Panel>

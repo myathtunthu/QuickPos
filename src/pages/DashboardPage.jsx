@@ -7,33 +7,15 @@ import { useLanguage } from '../context/LanguageContext';
 import {
   AlertTriangle,
   ArrowRight,
-  BarChart3,
-  CalendarDays,
   CreditCard,
-  DollarSign,
   FileText,
   Package,
   RefreshCw,
-  ReceiptText,
-  ShieldCheck,
   ShoppingCart,
-  TrendingDown,
   TrendingUp,
   Users,
   Wallet,
 } from 'lucide-react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 function toNumber(value) {
   const n = Number(value);
@@ -69,13 +51,6 @@ function getRecordType(record) {
   return String(record?.type || '').toLowerCase();
 }
 
-function getRecordTypeLabel(type, tx) {
-  if (type === 'sale') return tx('sales');
-  if (type === 'purchase') return tx('purchase');
-  if (type === 'expense') return tx('expenses');
-  return type || 'Record';
-}
-
 function getRecordAmount(record) {
   return toNumber(record?.amount ?? record?.total ?? record?.grandTotal ?? 0);
 }
@@ -107,184 +82,115 @@ function getProductStock(product) {
 
 function getProductCost(product) {
   const firstUnit = Array.isArray(product?.packageUnits) ? product.packageUnits[0] : null;
-  return toNumber(product?.costPrice ?? firstUnit?.costPrice ?? 0);
+  return toNumber(product?.costPrice ?? product?.purchasePrice ?? product?.buyPrice ?? firstUnit?.costPrice ?? 0);
 }
 
 const TEXT = {
   mm: {
     dashboard: 'ဒက်ရှ်ဘုတ်',
-    today: 'ယနေ့',
-    week: '၇ ရက်',
-    month: 'လ ၃၀',
-    all: 'အားလုံး',
-    search: 'Voucher / customer / product ရှာရန်...',
-    newSale: 'အရောင်းအသစ်',
-    purchase: 'အဝယ်ထည့်',
-    addProduct: 'ပစ္စည်းထည့်',
-    viewReports: 'Report ကြည့်',
-    revenue: 'အရောင်း',
-    grossProfit: 'အမြတ်ကြမ်း',
-    expense: 'အသုံးစရိတ်',
-    netProfit: 'အမြတ်',
-    cashBalance: 'ငွေလက်ကျန်',
-    inventoryValue: 'ကုန်လက်ကျန်တန်ဖိုး',
-    customerDebt: 'ကြွေးကျန်',
-    supplierPayable: 'ပေးရန်',
+    todaySales: 'ယနေ့ အရောင်း',
+    todayProfit: 'ယနေ့ အမြတ်',
+    customerDebt: 'Customer ကြွေး',
+    supplierPayable: 'Supplier ပေးရန်',
     orders: 'အော်ဒါ',
     products: 'ပစ္စည်း',
     customers: 'Customer',
-    suppliers: 'Supplier',
-    sales: 'အရောင်း',
-    profit: 'အမြတ်',
-    expenses: 'အသုံးစရိတ်',
+    lowStockCount: 'လက်ကျန်နည်း',
+    sales7d: '၇ ရက် အရောင်း',
+    finance: 'ငွေကြေးအကျဉ်း',
+    topProducts: 'ရောင်းအားကောင်း',
+    lowStock: 'လက်ကျန်နည်းသောပစ္စည်းများ',
+    recent: 'နောက်ဆုံး Transaction',
     cashIn: 'ဝင်ငွေ',
     cashOut: 'ထွက်ငွေ',
-    actionCenter: 'အမြန်လုပ်ဆောင်ရန်',
-    importantNow: 'သတိပေးချက်',
-    salesTrend: '၇ ရက်အရောင်း',
-    financeMix: 'ငွေစာရင်း',
-    topProducts: 'အရောင်းကောင်း',
-    lowStock: 'လက်ကျန်နည်း',
-    recentActivity: 'နောက်ဆုံးစာရင်း',
-    alerts: 'သတိပေးချက်များ',
-    noAlerts: 'အရေးကြီးသတိပေးချက် မရှိပါ။',
-    noProducts: 'ရောင်းထားသောပစ္စည်း မရှိသေးပါ။',
-    noTransactions: 'Transaction မရှိသေးပါ။',
-    noLowStock: 'စတော့အခြေအနေကောင်းသည်။',
-    stockOut: 'လက်ကျန်ကုန်',
-    lowStockItems: 'လက်ကျန်နည်း',
+    netProfit: 'အမြတ်',
     qty: 'အရေအတွက်',
-    refresh: 'ပြန်ဖတ်မည်',
+    left: 'ကျန်',
+    sale: 'အရောင်း',
+    purchase: 'အဝယ်',
+    expense: 'အသုံးစရိတ်',
+    noProducts: 'ရောင်းအားဒေတာ မရှိသေးပါ။',
+    noLowStock: 'လက်ကျန် အခြေအနေကောင်းသည်။',
+    noTransactions: 'Transaction မရှိသေးပါ။',
+    noChart: 'အရောင်းဒေတာ မရှိသေးပါ။',
+    refresh: 'Refresh',
     loading: 'Dashboard data ဖတ်နေသည်...',
     unableToRead: 'Dashboard data မဖတ်နိုင်ပါ။',
+    viewAll: 'အားလုံးကြည့်',
   },
   en: {
     dashboard: 'Dashboard',
-    today: 'Today',
-    week: '7 Days',
-    month: '30 Days',
-    all: 'All',
-    search: 'Search voucher / customer / product...',
-    newSale: 'New Sale',
-    purchase: 'Purchase',
-    addProduct: 'Add Product',
-    viewReports: 'View Reports',
-    revenue: 'Today Sales',
-    grossProfit: 'Gross Profit',
-    expense: 'Expenses',
-    netProfit: 'Today Profit',
-    cashBalance: 'Cash Balance',
-    inventoryValue: 'Inventory Value',
+    todaySales: 'Today Sales',
+    todayProfit: 'Today Profit',
     customerDebt: 'Customer Debt',
     supplierPayable: 'Supplier Payable',
     orders: 'Orders',
     products: 'Products',
     customers: 'Customers',
-    suppliers: 'Suppliers',
-    sales: 'Sales',
-    profit: 'Profit',
-    expenses: 'Expenses',
+    lowStockCount: 'Low Stock',
+    sales7d: '7-Day Sales',
+    finance: 'Finance',
+    topProducts: 'Top Products',
+    lowStock: 'Low Stock Items',
+    recent: 'Recent Transactions',
     cashIn: 'Cash In',
     cashOut: 'Cash Out',
-    actionCenter: 'Action Center',
-    importantNow: 'Important Now',
-    salesTrend: '7-Day Sales Trend',
-    financeMix: 'Cash Flow Summary',
-    topProducts: 'Top Selling Products',
-    lowStock: 'Low Stock Items',
-    recentActivity: 'Recent Activity',
-    alerts: 'Alerts',
-    noAlerts: 'No important alerts.',
-    noProducts: 'No products sold yet.',
-    noTransactions: 'No transactions yet.',
-    noLowStock: 'Stock is healthy.',
-    stockOut: 'Out of stock',
-    lowStockItems: 'Low stock',
+    netProfit: 'Profit',
     qty: 'Qty',
+    left: 'left',
+    sale: 'Sale',
+    purchase: 'Purchase',
+    expense: 'Expense',
+    noProducts: 'No product sales yet.',
+    noLowStock: 'Stock is healthy.',
+    noTransactions: 'No transactions yet.',
+    noChart: 'No sales data yet.',
     refresh: 'Refresh',
     loading: 'Loading dashboard data...',
     unableToRead: 'Unable to read dashboard data.',
+    viewAll: 'View all',
   },
   zh: {
     dashboard: '仪表盘',
-    today: '今天',
-    week: '7天',
-    month: '30天',
-    all: '全部',
-    search: '搜索凭证 / 客户 / 商品...',
-    newSale: '新销售',
-    purchase: '采购',
-    addProduct: '添加商品',
-    viewReports: '查看报表',
-    revenue: '今日销售',
-    grossProfit: '毛利',
-    expense: '费用',
-    netProfit: '今日利润',
-    cashBalance: '现金余额',
-    inventoryValue: '库存价值',
+    todaySales: '今日销售',
+    todayProfit: '今日利润',
     customerDebt: '客户欠款',
     supplierPayable: '供应商应付',
     orders: '订单',
     products: '商品',
     customers: '客户',
-    suppliers: '供应商',
-    sales: '销售',
-    profit: '利润',
-    expenses: '费用',
-    cashIn: '现金收入',
-    cashOut: '现金支出',
-    actionCenter: '快捷操作',
-    importantNow: '当前重点',
-    salesTrend: '7天销售趋势',
-    financeMix: '现金流摘要',
+    lowStockCount: '低库存',
+    sales7d: '7天销售',
+    finance: '财务摘要',
     topProducts: '热销商品',
     lowStock: '低库存商品',
-    recentActivity: '最近交易',
-    alerts: '提醒',
-    noAlerts: '暂无重要提醒。',
-    noProducts: '暂无销售商品。',
-    noTransactions: '暂无交易。',
-    noLowStock: '库存健康。',
-    stockOut: '缺货',
-    lowStockItems: '低库存',
+    recent: '最近交易',
+    cashIn: '收入',
+    cashOut: '支出',
+    netProfit: '利润',
     qty: '数量',
+    left: '剩余',
+    sale: '销售',
+    purchase: '采购',
+    expense: '费用',
+    noProducts: '暂无商品销售。',
+    noLowStock: '库存正常。',
+    noTransactions: '暂无交易。',
+    noChart: '暂无销售数据。',
     refresh: '刷新',
     loading: '正在加载仪表盘数据...',
     unableToRead: '无法读取仪表盘数据。',
+    viewAll: '查看全部',
   },
 };
 
-const tones = {
-  cyan: {
-    card: 'border-cyan-400/25 bg-cyan-400/10 text-cyan-200 shadow-cyan-950/40',
-    icon: 'bg-cyan-300 text-slate-950',
-    bar: 'from-cyan-400 to-blue-500',
-  },
-  emerald: {
-    card: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-emerald-950/40',
-    icon: 'bg-emerald-300 text-slate-950',
-    bar: 'from-emerald-400 to-teal-500',
-  },
-  amber: {
-    card: 'border-amber-400/25 bg-amber-400/10 text-amber-200 shadow-amber-950/40',
-    icon: 'bg-amber-300 text-slate-950',
-    bar: 'from-amber-300 to-orange-500',
-  },
-  rose: {
-    card: 'border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-rose-950/40',
-    icon: 'bg-rose-300 text-slate-950',
-    bar: 'from-rose-400 to-pink-500',
-  },
-  violet: {
-    card: 'border-violet-400/25 bg-violet-400/10 text-violet-200 shadow-violet-950/40',
-    icon: 'bg-violet-300 text-slate-950',
-    bar: 'from-violet-400 to-indigo-500',
-  },
-  blue: {
-    card: 'border-blue-400/25 bg-blue-400/10 text-blue-200 shadow-blue-950/40',
-    icon: 'bg-blue-300 text-slate-950',
-    bar: 'from-blue-400 to-cyan-500',
-  },
+const toneClasses = {
+  cyan: 'border-cyan-400/20 bg-cyan-400/10 text-cyan-200',
+  emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
+  amber: 'border-amber-400/20 bg-amber-400/10 text-amber-200',
+  rose: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
+  violet: 'border-violet-400/20 bg-violet-400/10 text-violet-200',
+  slate: 'border-white/10 bg-white/[0.04] text-slate-200',
 };
 
 async function safeReadCollection(collectionName, tenantId, maxRows) {
@@ -298,6 +204,27 @@ async function safeReadCollection(collectionName, tenantId, maxRows) {
   }
 }
 
+function Panel({ children, className = '' }) {
+  return <section className={`rounded-3xl border border-white/10 bg-slate-950/55 p-4 shadow-xl shadow-black/20 sm:p-5 ${className}`}>{children}</section>;
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4 p-3 pb-28 sm:p-6">
+      <div className="h-8 w-36 animate-pulse rounded-2xl bg-white/10" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[1, 2, 3, 4].map((item) => <div key={item} className="h-28 animate-pulse rounded-3xl bg-white/10" />)}
+      </div>
+      <div className="h-48 animate-pulse rounded-3xl bg-white/10" />
+      <div className="h-56 animate-pulse rounded-3xl bg-white/10" />
+    </div>
+  );
+}
+
+function EmptyState({ children }) {
+  return <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-center text-sm font-bold text-slate-500">{children}</div>;
+}
+
 export default function DashboardPage({ records: recordsFromApp = [] }) {
   const { profile, hasPermission } = useAuth();
   const { t, language } = useLanguage();
@@ -309,7 +236,6 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
-  const [dateRange, setDateRange] = useState('today');
 
   const text = TEXT[language] || TEXT.mm;
   const tx = (key) => t?.(`dashboard_${key}`, text[key] || TEXT.en[key] || key) || text[key] || TEXT.en[key] || key;
@@ -348,10 +274,8 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
   }, [tenantId]);
 
   useEffect(() => {
-    if (Array.isArray(recordsFromApp) && recordsFromApp.length > records.length) {
-      setRecords(recordsFromApp);
-    }
-  }, [recordsFromApp]);
+    if (Array.isArray(recordsFromApp) && recordsFromApp.length > records.length) setRecords(recordsFromApp);
+  }, [recordsFromApp, records.length]);
 
   if (profile && profile.role !== 'admin' && profile.role !== 'owner' && !hasPermission('view_reports')) {
     const permissions = profile.permissions || [];
@@ -361,26 +285,17 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     return <Navigate to="/entry" replace />;
   }
 
-  const filteredRecords = useMemo(() => {
+  const todayRecords = useMemo(() => {
     const today = getPastISO(0);
-    const weekStart = getPastISO(6);
-    const monthStart = getPastISO(29);
-    return records
-      .filter((record) => {
-        const iso = getRecordDateISO(record);
-        if (dateRange === 'today') return iso === today;
-        if (dateRange === 'week') return iso >= weekStart && iso <= today;
-        if (dateRange === 'month') return iso >= monthStart && iso <= today;
-        return true;
-      })
-      .sort((a, b) => getTimeValue(b) - getTimeValue(a));
-  }, [records, dateRange]);
+    return records.filter((record) => getRecordDateISO(record) === today).sort((a, b) => getTimeValue(b) - getTimeValue(a));
+  }, [records]);
 
   const productMap = useMemo(() => {
     const map = {};
     products.forEach((product) => {
       map[product.id] = product;
       if (product.name) map[product.name] = product;
+      if (product.productName) map[product.productName] = product;
     });
     return map;
   }, [products]);
@@ -393,17 +308,16 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
       netProfit: 0,
       cashIn: 0,
       cashOut: 0,
-      cashBalance: 0,
       customerDebt: 0,
       supplierPayable: 0,
       salesCount: 0,
       purchaseCount: 0,
       expenseCount: 0,
       topProducts: {},
-      recent: [],
+      recent: todayRecords.slice(0, 5),
     };
 
-    filteredRecords.forEach((record) => {
+    todayRecords.forEach((record) => {
       const type = getRecordType(record);
       const amount = getRecordAmount(record);
       const paid = getRecordPaid(record);
@@ -444,306 +358,167 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
     });
 
     result.netProfit = result.grossProfit - result.expenses;
-    result.cashBalance = result.cashIn - result.cashOut;
-    result.recent = filteredRecords.slice(0, 5);
     result.topProducts = Object.values(result.topProducts).sort((a, b) => b.revenue - a.revenue).slice(0, 4);
     return result;
-  }, [filteredRecords, productMap]);
+  }, [todayRecords, productMap]);
 
   const inventoryStats = useMemo(() => {
-    let inventoryValue = 0;
     const lowStock = products
       .map((product) => {
         const stock = getProductStock(product);
         const minStock = toNumber(product.minStock ?? product.minStockAlert ?? 5);
-        const cost = getProductCost(product);
-        inventoryValue += stock * cost;
-        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || 'General' };
+        return { id: product.id, name: getProductName(product), stock, minStock, category: product.category || '' };
       })
       .filter((product) => product.stock <= product.minStock)
       .sort((a, b) => a.stock - b.stock);
-    return { inventoryValue, lowStock, lowStockCount: lowStock.length, outOfStock: lowStock.filter((item) => item.stock <= 0).length };
+    return { lowStock, lowStockCount: lowStock.length };
   }, [products]);
 
   const chartData = useMemo(() => {
     const days = [];
     for (let i = 6; i >= 0; i -= 1) {
       const iso = getPastISO(i);
-      const day = new Date(iso).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'my-MM', { weekday: 'short' });
-      const dayRecords = records.filter((record) => getRecordDateISO(record) === iso);
+      const label = new Date(iso).toLocaleDateString(language === 'zh' ? 'zh-CN' : language === 'en' ? 'en-US' : 'my-MM', { weekday: 'short' });
       let sales = 0;
-      let profit = 0;
-      let expenses = 0;
-
-      dayRecords.forEach((record) => {
-        const type = getRecordType(record);
-        const amount = getRecordAmount(record);
-        if (type === 'sale') {
-          sales += amount;
-          let cost = 0;
-          getRecordItems(record).forEach((item) => {
-            const product = productMap[item.productId] || productMap[item.name] || {};
-            cost += toNumber(item.costPrice ?? item.cost ?? getProductCost(product)) * (toNumber(item.quantity ?? item.qty ?? 1) || 1);
-          });
-          profit += amount - cost;
-        }
-        if (type === 'expense') expenses += amount;
+      records.forEach((record) => {
+        if (getRecordDateISO(record) === iso && getRecordType(record) === 'sale') sales += getRecordAmount(record);
       });
-      days.push({ day, sales, profit, expenses });
+      days.push({ iso, label, sales });
     }
     return days;
-  }, [records, productMap, language]);
+  }, [records, language]);
 
-  const importantAlerts = useMemo(() => {
-    const alerts = [];
-    if (inventoryStats.outOfStock > 0) alerts.push({ tone: 'rose', title: tx('stockOut'), text: `${inventoryStats.outOfStock} ${tx('products')}`, icon: AlertTriangle });
-    if (inventoryStats.lowStockCount > 0) alerts.push({ tone: 'amber', title: tx('lowStockItems'), text: `${inventoryStats.lowStockCount} ${tx('products')}`, icon: Package });
-    if (analytics.customerDebt > 0) alerts.push({ tone: 'amber', title: tx('customerDebt'), text: money(analytics.customerDebt), icon: CreditCard });
-    if (analytics.supplierPayable > 0) alerts.push({ tone: 'rose', title: tx('supplierPayable'), text: money(analytics.supplierPayable), icon: Wallet });
-    if (alerts.length === 0) alerts.push({ tone: 'emerald', title: tx('noAlerts'), text: tx('noLowStock'), icon: ShieldCheck });
-    return alerts.slice(0, 4);
-  }, [analytics.customerDebt, analytics.supplierPayable, inventoryStats.lowStockCount, inventoryStats.outOfStock, language]);
+  const maxSales = Math.max(...chartData.map((day) => day.sales), 1);
 
-
-
-  const mobileChartSummary = useMemo(() => chartData.map((row) => ({
-    label: row.day,
-    sales: row.sales,
-    profit: row.profit,
-    expenses: row.expenses,
-  })), [chartData]);
-
-  const rangeOptions = [
-    { key: 'today', label: tx('today') },
-    { key: 'week', label: tx('week') },
-    { key: 'month', label: tx('month') },
-    { key: 'all', label: tx('all') },
+  const kpiCards = [
+    { label: tx('todaySales'), value: money(analytics.revenue), tone: 'cyan', icon: Wallet },
+    { label: tx('todayProfit'), value: money(analytics.netProfit), tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', icon: TrendingUp },
+    { label: tx('customerDebt'), value: money(analytics.customerDebt), tone: 'amber', icon: Users },
+    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), tone: 'rose', icon: CreditCard },
   ];
 
-  const quickActions = [
-    { label: tx('newSale'), to: '/entry', icon: ShoppingCart, tone: 'cyan' },
-    { label: tx('purchase'), to: '/entry', icon: ReceiptText, tone: 'emerald' },
-    { label: tx('addProduct'), to: '/inventory', icon: Package, tone: 'violet' },
-    { label: tx('viewReports'), to: '/reports', icon: BarChart3, tone: 'amber' },
+  const miniCards = [
+    { label: tx('orders'), value: analytics.salesCount + analytics.purchaseCount + analytics.expenseCount, tone: 'violet', icon: ShoppingCart },
+    { label: tx('products'), value: products.length, tone: 'cyan', icon: Package },
+    { label: tx('customers'), value: customers.length, tone: 'emerald', icon: Users },
+    { label: tx('lowStockCount'), value: inventoryStats.lowStockCount, tone: inventoryStats.lowStockCount > 0 ? 'amber' : 'emerald', icon: AlertTriangle },
   ];
 
-  const mainCards = [
-    { label: tx('revenue'), value: money(analytics.revenue), icon: DollarSign, tone: 'cyan', note: `${analytics.salesCount} ${tx('orders')}` },
-    { label: tx('netProfit'), value: money(analytics.netProfit), icon: analytics.netProfit >= 0 ? TrendingUp : TrendingDown, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose', note: `${tx('grossProfit')}: ${money(analytics.grossProfit)}` },
-    { label: tx('customerDebt'), value: money(analytics.customerDebt), icon: CreditCard, tone: analytics.customerDebt > 0 ? 'amber' : 'blue', note: tx('customers') },
-    { label: tx('supplierPayable'), value: money(analytics.supplierPayable), icon: Wallet, tone: analytics.supplierPayable > 0 ? 'rose' : 'violet', note: tx('suppliers') },
+  const financeRows = [
+    { label: tx('cashIn'), value: analytics.cashIn, tone: 'cyan' },
+    { label: tx('cashOut'), value: analytics.cashOut, tone: 'rose' },
+    { label: tx('netProfit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose' },
   ];
 
-  const CompactMetric = ({ label, value, tone = 'cyan' }) => (
-    <div className={`min-w-0 rounded-[1rem] border p-2.5 shadow-xl sm:rounded-[1.4rem] sm:p-4 ${tones[tone]?.card || tones.cyan.card}`}>
-      <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{label}</p>
-      <p className="mt-1 truncate text-base font-black text-white sm:mt-2 sm:text-xl">{value}</p>
-    </div>
-  );
+  const typeLabel = (type) => tx(type) || type || '-';
 
-  const Panel = ({ children, className = '' }) => (
-    <section className={`w-full min-w-0 max-w-full overflow-hidden rounded-[1rem] border border-white/10 bg-[#0c1222]/90 p-2.5 shadow-2xl shadow-black/30 ring-1 ring-white/5 backdrop-blur-xl sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>
-  );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#050713] px-4 py-10 text-white">
-        <div className="mx-auto max-w-7xl space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[1, 2, 3, 4].map((item) => <div key={item} className="h-36 animate-pulse rounded-[2rem] bg-slate-800/50" />)}
-          </div>
-          <p className="text-center text-sm font-black text-cyan-300">{tx('loading')}</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <LoadingSkeleton />;
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#050713] text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_12%_5%,rgba(34,211,238,0.22),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(168,85,247,0.18),transparent_28%),linear-gradient(180deg,#050713,#09111f_52%,#050713)]" />
-
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-2.5 overflow-x-hidden px-3 py-2.5 pb-40 sm:gap-5 sm:px-6 sm:pb-32 lg:px-8">
-        <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-          {mainCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div key={card.label} className={`relative min-w-0 overflow-hidden rounded-[1rem] border p-2 shadow-2xl sm:rounded-[1.7rem] sm:p-5 ${tones[card.tone]?.card || tones.cyan.card}`}>
-                <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/10 blur-3xl" />
-                <div className="relative flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="truncate text-[9px] font-black uppercase tracking-[0.08em] text-slate-400 sm:text-[11px] sm:tracking-[0.16em]">{card.label}</p>
-                    <p className="mt-1.5 break-words text-[13px] font-black leading-tight text-white sm:mt-3 sm:text-3xl">{card.value}</p>
-                    <p className="mt-1 truncate text-[9px] font-bold text-slate-400 sm:mt-2 sm:text-xs">{card.note}</p>
-                  </div>
-                  <div className={`hidden rounded-2xl p-3 sm:block ${tones[card.tone]?.icon || tones.cyan.icon}`}><Icon size={23} /></div>
-                </div>
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
-          <CompactMetric label={tx('orders')} value={analytics.salesCount} tone="cyan" />
-          <CompactMetric label={tx('products')} value={products.length} tone="violet" />
-          <CompactMetric label={tx('customers')} value={customers.length} tone="emerald" />
-          <CompactMetric label={tx('lowStockItems')} value={inventoryStats.lowStockCount} tone={inventoryStats.lowStockCount > 0 ? 'amber' : 'blue'} />
-        </section>
-
-        <section className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <Link key={action.label} to={action.to} className={`group min-w-0 rounded-[1rem] border p-2.5 shadow-xl transition active:scale-[0.98] sm:rounded-[1.5rem] sm:p-4 sm:hover:-translate-y-1 ${tones[action.tone]?.card || tones.cyan.card}`}>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className={`rounded-xl p-2 sm:rounded-2xl sm:p-2.5 ${tones[action.tone]?.icon || tones.cyan.icon}`}>
-                    <Icon size={18} />
-                  </div>
-                  <p className="min-w-0 flex-1 truncate text-xs font-black leading-snug text-white sm:text-sm">{action.label}</p>
-                  <ArrowRight className="hidden shrink-0 opacity-70 transition group-hover:translate-x-1 sm:block" size={18} />
-                </div>
-              </Link>
-            );
-          })}
-        </section>
-
-        {errorText && (
-          <div className="flex items-center justify-between gap-3 rounded-3xl border border-rose-400/25 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">
-            <span>{errorText}</span>
-            <button type="button" onClick={loadDashboard} className="rounded-2xl bg-rose-400/20 px-4 py-2 font-black">{tx('refresh')}</button>
-          </div>
-        )}
-
-        <section className="grid gap-3 lg:grid-cols-[auto_auto] lg:items-center lg:justify-between">
-          <div className="grid grid-cols-4 gap-1 rounded-[1.2rem] border border-white/10 bg-[#0c1222]/90 p-1">
-            {rangeOptions.map((option) => (
-              <button key={option.key} type="button" onClick={() => setDateRange(option.key)} className={`rounded-[1.05rem] px-2 py-2.5 text-[11px] font-black transition sm:px-3 sm:py-3 sm:text-xs ${dateRange === option.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={loadDashboard} className="hidden items-center gap-2 rounded-[1.4rem] border border-white/10 bg-white/5 px-4 py-3 text-xs font-black text-slate-300 transition hover:border-cyan-300/40 hover:text-cyan-200 lg:inline-flex">
+    <div className="min-h-screen overflow-x-hidden bg-slate-950 text-white">
+      <main className="mx-auto w-full max-w-7xl space-y-4 p-3 pb-32 sm:space-y-5 sm:p-6 lg:pb-8">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-black tracking-tight sm:text-2xl">{tx('dashboard')}</h1>
+          <button
+            type="button"
+            onClick={loadDashboard}
+            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-black text-slate-200 active:scale-95"
+          >
             <RefreshCw size={16} /> {tx('refresh')}
           </button>
+        </div>
+
+        {errorText && (
+          <div className="rounded-2xl border border-rose-400/25 bg-rose-500/10 p-3 text-sm font-bold text-rose-200">{errorText}</div>
+        )}
+
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {kpiCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className={`min-w-0 rounded-3xl border p-3 shadow-lg sm:p-4 ${toneClasses[card.tone] || toneClasses.slate}`}>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 sm:text-xs">{card.label}</p>
+                  <Icon className="shrink-0 text-current" size={18} />
+                </div>
+                <p className="break-words text-[19px] font-black leading-tight text-white sm:text-2xl">{card.value}</p>
+              </div>
+            );
+          })}
         </section>
 
-
-        <section className="grid min-w-0 gap-3 sm:gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-          <Panel>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-5 sm:gap-3">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300 sm:text-xs sm:tracking-[0.2em]">{tx('salesTrend')}</p>
-                <h2 className="mt-1 text-sm font-black leading-tight sm:text-2xl">{tx('sales')} / {tx('profit')} / {tx('expenses')}</h2>
+        <section className="grid grid-cols-4 gap-2 sm:gap-3">
+          {miniCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className={`rounded-2xl border p-2 text-center sm:p-3 ${toneClasses[card.tone] || toneClasses.slate}`}>
+                <Icon className="mx-auto mb-1 text-current" size={16} />
+                <p className="text-lg font-black leading-none text-white sm:text-2xl">{fmt(card.value)}</p>
+                <p className="mt-1 truncate text-[10px] font-black text-slate-400 sm:text-xs">{card.label}</p>
               </div>
-              <CalendarDays className="text-cyan-300" size={22} />
-            </div>
-            <div className="space-y-2 sm:hidden">
-              {mobileChartSummary.map((row) => {
-                const max = Math.max(...mobileChartSummary.map((item) => item.sales), 1);
-                const width = Math.max((row.sales / max) * 100, row.sales > 0 ? 8 : 0);
+            );
+          })}
+        </section>
+
+        <Panel>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-base font-black sm:text-xl">{tx('sales7d')}</h2>
+            <span className="text-xs font-black text-cyan-300">{money(chartData.reduce((sum, day) => sum + day.sales, 0))}</span>
+          </div>
+          {chartData.every((day) => day.sales === 0) ? (
+            <EmptyState>{tx('noChart')}</EmptyState>
+          ) : (
+            <div className="space-y-2">
+              {chartData.map((day) => {
+                const width = Math.max((day.sales / maxSales) * 100, day.sales > 0 ? 7 : 0);
                 return (
-                  <div key={row.label} className="rounded-[1rem] border border-white/10 bg-black/20 p-2.5">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-black text-slate-300">{row.label}</span>
-                      <span className="max-w-[8.5rem] truncate text-right text-xs font-black text-cyan-200">{money(row.sales)}</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-950/80">
+                  <div key={day.iso} className="grid grid-cols-[42px_1fr_82px] items-center gap-2 text-xs sm:grid-cols-[56px_1fr_110px]">
+                    <span className="font-black text-slate-400">{day.label}</span>
+                    <div className="h-3 overflow-hidden rounded-full bg-black/35">
                       <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
                     </div>
-                    <div className="mt-1.5 grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-500">
-                      <span className="truncate">{tx('profit')}: {money(row.profit)}</span>
-                      <span className="truncate text-right">{tx('expenses')}: {money(row.expenses)}</span>
-                    </div>
+                    <span className="truncate text-right font-black text-white">{money(day.sales)}</span>
                   </div>
                 );
               })}
             </div>
-            <div className="hidden h-80 sm:block">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
-                  <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis width={46} stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(34,211,238,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value, name) => [money(value), name]} />
-                  <Line type="monotone" dataKey="sales" name={tx('sales')} stroke="#22d3ee" strokeWidth={4} dot={false} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="profit" name={tx('profit')} stroke="#34d399" strokeWidth={3} dot={false} />
-                  <Line type="monotone" dataKey="expenses" name={tx('expenses')} stroke="#fb7185" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Panel>
+          )}
+        </Panel>
 
+        <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
           <Panel>
-            <h2 className="mb-3 text-sm font-black leading-tight sm:mb-5 sm:text-2xl">{tx('importantNow')}</h2>
-            <div className="space-y-3">
-              {importantAlerts.map((alert) => {
-                const Icon = alert.icon;
-                return (
-                  <div key={`${alert.title}-${alert.text}`} className={`flex items-center gap-2 rounded-[1.1rem] border p-3 sm:gap-3 sm:rounded-[1.4rem] sm:p-4 ${tones[alert.tone]?.card || tones.emerald.card}`}>
-                    <div className={`rounded-2xl p-3 ${tones[alert.tone]?.icon || tones.emerald.icon}`}><Icon size={22} /></div>
-                    <div className="min-w-0">
-                      <p className="font-black text-white">{alert.title}</p>
-                      <p className="truncate text-sm font-bold text-slate-400">{alert.text}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Panel>
-        </section>
-
-        <section className="grid min-w-0 gap-3 sm:gap-5 xl:grid-cols-[0.8fr_1.2fr]">
-          <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-black leading-tight sm:mb-5 sm:text-2xl"><BarChart3 className="text-violet-300" /> {tx('financeMix')}</h2>
-            <div className="grid grid-cols-2 gap-2 sm:hidden">
-              {[
-                { name: tx('cashIn'), value: analytics.cashIn, tone: 'cyan' },
-                { name: tx('cashOut'), value: analytics.cashOut, tone: 'rose' },
-                { name: tx('netProfit'), value: analytics.netProfit, tone: analytics.netProfit >= 0 ? 'emerald' : 'rose' },
-                { name: tx('customerDebt'), value: analytics.customerDebt, tone: 'amber' },
-              ].map((row) => (
-                <div key={row.name} className={`rounded-[1rem] border p-2.5 ${tones[row.tone]?.card || tones.cyan.card}`}>
-                  <p className="truncate text-[11px] font-black uppercase tracking-[0.12em] text-slate-400">{row.name}</p>
-                  <p className="mt-1 truncate text-sm font-black text-white">{money(row.value)}</p>
+            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('finance')}</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {financeRows.map((row) => (
+                <div key={row.label} className={`rounded-2xl border p-3 ${toneClasses[row.tone] || toneClasses.slate}`}>
+                  <p className="truncate text-[10px] font-black text-slate-400 sm:text-xs">{row.label}</p>
+                  <p className="mt-2 break-words text-sm font-black text-white sm:text-lg">{money(row.value)}</p>
                 </div>
               ))}
             </div>
-            <div className="hidden h-72 sm:block">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={[
-                  { name: tx('cashIn'), value: analytics.cashIn, color: '#22d3ee' },
-                  { name: tx('cashOut'), value: analytics.cashOut, color: '#fb7185' },
-                  { name: tx('netProfit'), value: analytics.netProfit, color: '#34d399' },
-                  { name: tx('customerDebt'), value: analytics.customerDebt, color: '#fbbf24' },
-                ]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(148,163,184,0.12)" strokeDasharray="4 8" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} interval={0} />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                  <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(167,139,250,.25)', borderRadius: 18, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
-                  <Bar dataKey="value" radius={[16, 16, 6, 6]}>
-                    {['#22d3ee', '#fb7185', '#34d399', '#fbbf24'].map((color) => <Cell key={color} fill={color} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
           </Panel>
 
           <Panel>
-            <h2 className="mb-3 text-sm font-black leading-tight sm:mb-5 sm:text-2xl">{tx('topProducts')}</h2>
+            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('topProducts')}</h2>
             {analytics.topProducts.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noProducts')}</div>
+              <EmptyState>{tx('noProducts')}</EmptyState>
             ) : (
-              <div className="space-y-3 sm:space-y-4">
+              <div className="space-y-3">
                 {analytics.topProducts.map((product, index) => {
                   const max = analytics.topProducts[0]?.revenue || 1;
                   const width = Math.max((product.revenue / max) * 100, 8);
                   return (
-                    <div key={product.name}>
-                      <div className="mb-2 min-w-0 space-y-1 text-xs font-black sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-2 sm:space-y-0">
-                        <span className="min-w-0 truncate">{index + 1}. {product.name}</span>
-                        <span className="block truncate text-xs text-cyan-300 sm:text-right sm:text-sm">{money(product.revenue)}</span>
+                    <div key={product.name} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-black text-white">{index + 1}. {product.name}</p>
+                          <p className="mt-1 text-xs font-bold text-slate-500">{tx('qty')}: {fmt(product.qty)}</p>
+                        </div>
+                        <p className="shrink-0 text-right text-sm font-black text-cyan-300">{money(product.revenue)}</p>
                       </div>
-                      <div className="mb-1 grid grid-cols-2 gap-2 text-[11px] font-bold text-slate-500 sm:text-xs"><span className="truncate">{tx('qty')}: {product.qty}</span><span className="truncate text-right">{tx('profit')}: {money(product.profit)}</span></div>
-                      <div className="h-2.5 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} /></div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/45">
+                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+                      </div>
                     </div>
                   );
                 })}
@@ -752,40 +527,55 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           </Panel>
         </section>
 
-        <section className="grid min-w-0 gap-3 sm:gap-5 xl:grid-cols-2">
+        <section className="grid gap-4 lg:grid-cols-2">
           <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-black leading-tight sm:mb-5 sm:text-2xl"><Package className="text-amber-300" /> {tx('lowStock')}</h2>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 className="text-base font-black sm:text-xl">{tx('lowStock')}</h2>
+              <span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs font-black text-amber-300">{inventoryStats.lowStockCount}</span>
+            </div>
             {inventoryStats.lowStock.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noLowStock')}</div>
+              <EmptyState>{tx('noLowStock')}</EmptyState>
             ) : (
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1 sm:max-h-80 sm:space-y-3">
+              <div className="space-y-2">
                 {inventoryStats.lowStock.slice(0, 5).map((product) => (
-                  <div key={product.id} className="flex items-center justify-between gap-2 rounded-[1.1rem] border border-white/10 bg-black/25 p-3 sm:gap-3 sm:rounded-[1.4rem] sm:p-4">
-                    <div className="min-w-0"><p className="truncate font-black">{product.name}</p><p className="text-xs font-bold text-slate-500">{product.category}</p></div>
-                    <span className={`rounded-2xl px-3 py-1 text-sm font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}>{product.stock}</span>
+                  <div key={product.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-white">{product.name}</p>
+                      <p className="truncate text-xs font-bold text-slate-500">{product.category || tx('products')}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-xl px-2 py-1 text-xs font-black ${product.stock <= 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                      {fmt(product.stock)} {tx('left')}
+                    </span>
                   </div>
                 ))}
+                {inventoryStats.lowStock.length > 5 && (
+                  <Link to="/inventory" className="inline-flex items-center gap-1 text-xs font-black text-cyan-300">{tx('viewAll')} <ArrowRight size={14} /></Link>
+                )}
               </div>
             )}
           </Panel>
 
           <Panel>
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-black leading-tight sm:mb-5 sm:text-2xl"><FileText className="text-blue-300" /> {tx('recentActivity')}</h2>
+            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('recent')}</h2>
             {analytics.recent.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-white/10 bg-black/20 p-8 text-center text-sm font-bold text-slate-500">{tx('noTransactions')}</div>
+              <EmptyState>{tx('noTransactions')}</EmptyState>
             ) : (
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1 sm:max-h-80 sm:space-y-3">
+              <div className="space-y-2">
                 {analytics.recent.map((record) => {
                   const type = getRecordType(record);
                   const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
+                  const date = getRecordDateISO(record).slice(5);
                   return (
-                    <Link key={record.id} to="/records" className={`block w-full min-w-0 max-w-full overflow-hidden rounded-[0.95rem] border p-2.5 transition active:scale-[0.99] hover:border-cyan-300/35 sm:rounded-[1.4rem] sm:p-4 ${tones[tone]?.card || tones.cyan.card}`}>
-                      <div className="min-w-0 space-y-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3 sm:space-y-0">
+                    <Link key={record.id} to="/records" className={`block rounded-2xl border p-3 active:scale-[0.99] ${toneClasses[tone] || toneClasses.slate}`}>
+                      <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-black text-white sm:text-base">{getRecordTypeLabel(type, tx)} • {record.voucherNo || record.invoiceNo || '-'}</p>
-                          <p className="truncate text-[10px] font-bold text-slate-500 sm:text-xs">{record.personName || record.customerName || record.supplierName || '-'}</p>
+                          <p className="truncate text-sm font-black text-white">{typeLabel(type)}</p>
+                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || record.voucherNo || record.invoiceNo || '-'}</p>
                         </div>
-                        <p className="truncate text-sm font-black text-cyan-100 sm:text-right sm:text-base">{money(getRecordAmount(record))}</p>
+                        <div className="shrink-0 text-right">
+                          <p className="max-w-[120px] truncate text-sm font-black text-white sm:max-w-none">{money(getRecordAmount(record))}</p>
+                          <p className="text-xs font-bold text-slate-500">{date}</p>
+                        </div>
                       </div>
                     </Link>
                   );

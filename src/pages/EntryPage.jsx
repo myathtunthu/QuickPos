@@ -136,6 +136,11 @@ export default function EntryPage({ products = [] }) {
   });
   const [promptModal, setPromptModal] = useState({ isOpen: false, name: '' });
   const submitLock = useRef(false);
+  const cartPanelRef = useRef(null);
+
+  const scrollToCart = useCallback(() => {
+    cartPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const {
     cart,
@@ -953,22 +958,22 @@ export default function EntryPage({ products = [] }) {
           <div className="absolute -bottom-32 left-1/4 w-[500px] h-[500px] rounded-full bg-violet-500/10 blur-[140px]" />
         </div>
 
-        <div className="relative z-10 p-3 sm:p-5 pb-28 max-w-[1600px] mx-auto space-y-4" style={{ overflowAnchor: 'none' }}>
-          <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 sm:p-5 shadow-2xl shadow-black/30">
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-3 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  <ShoppingCart size={26} />
+        <div className="relative z-10 p-2.5 sm:p-5 pb-44 sm:pb-28 max-w-[1600px] mx-auto space-y-3 sm:space-y-4" style={{ overflowAnchor: 'none' }}>
+          <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-3 sm:p-5 shadow-2xl shadow-black/30">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 p-2.5 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <ShoppingCart size={22} />
                 </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-black">
-                    <span className="text-white">{shopSettings.shopName || 'POS'}</span>{' '}
-                    <span className="text-cyan-400">{tt('posEntry', 'POS Entry')}</span>
+                <div className="min-w-0">
+                  <h1 className="text-lg sm:text-2xl font-black leading-tight truncate">
+                    <span className="text-white">{shopSettings.shopName || 'POS'}</span>
                   </h1>
+                  <p className="text-[11px] sm:text-xs text-cyan-300 font-bold">{tt('posEntry', 'POS Entry')}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:flex gap-2">
+              <div className="grid grid-cols-3 sm:flex gap-2">
                 {hasPermission('create_sale') && (
                   <button
                     type="button"
@@ -1008,7 +1013,7 @@ export default function EntryPage({ products = [] }) {
                     {tt('expense', 'Expense')}
                   </button>
                 )}
-                <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-2">
+                <div className="col-span-3 sm:col-span-1 flex items-center gap-1.5 bg-black/40 border border-cyan-500/20 rounded-2xl px-3 py-2">
                   <Calendar size={14} className="text-cyan-400" />
                   <input
                     type="date"
@@ -1067,22 +1072,22 @@ export default function EntryPage({ products = [] }) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+                <div className="rounded-2xl sm:rounded-3xl border border-cyan-500/20 bg-[#0d1120]/95 p-3 sm:p-4 shadow-xl">
                   <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('productsLabel', 'Products')}</p>
-                  <p className="text-2xl font-black text-cyan-400 mt-1">{summary.productCount}</p>
+                  <p className="text-xl sm:text-2xl font-black text-cyan-400 mt-1">{summary.productCount}</p>
                 </div>
-                <div className="rounded-3xl border border-violet-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                <div className="rounded-2xl sm:rounded-3xl border border-violet-500/20 bg-[#0d1120]/95 p-3 sm:p-4 shadow-xl">
                   <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('cartQty', 'Cart Qty')}</p>
-                  <p className="text-2xl font-black text-violet-400 mt-1">{summary.cartCount}</p>
+                  <p className="text-xl sm:text-2xl font-black text-violet-400 mt-1">{summary.cartCount}</p>
                 </div>
-                <div className="rounded-3xl border border-amber-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                <div className="rounded-2xl sm:rounded-3xl border border-amber-500/20 bg-[#0d1120]/95 p-3 sm:p-4 shadow-xl">
                   <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('lowStock', 'Low Stock')}</p>
-                  <p className="text-2xl font-black text-amber-400 mt-1">{summary.lowStockCount}</p>
+                  <p className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{summary.lowStockCount}</p>
                 </div>
-                <div className="rounded-3xl border border-emerald-500/20 bg-[#0d1120]/95 p-4 shadow-xl">
+                <div className="rounded-2xl sm:rounded-3xl border border-emerald-500/20 bg-[#0d1120]/95 p-3 sm:p-4 shadow-xl">
                   <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('totalLabel', 'Total')}</p>
-                  <p className="text-xl font-black text-emerald-400 mt-1">{formatMoney(summary.total)}</p>
+                  <p className="text-base sm:text-xl font-black text-emerald-400 mt-1 truncate">{formatMoney(summary.total)}</p>
                 </div>
               </div>
 
@@ -1224,8 +1229,8 @@ export default function EntryPage({ products = [] }) {
                     </div>
                   </div>
 
-                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-xl">
-                    <div className="flex items-center justify-between mb-4">
+                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-3 sm:p-4 shadow-xl">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
                       <div className="flex items-center gap-2">
                         <Boxes size={17} className="text-cyan-400" />
                         <h2 className="font-black text-sm text-slate-200">{tt('productsLabel', 'Products')}</h2>
@@ -1259,8 +1264,8 @@ export default function EntryPage({ products = [] }) {
                   </div>
                 </div>
 
-                <div className="space-y-4 xl:sticky xl:top-4">
-                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-4 shadow-2xl shadow-cyan-950/20">
+                <div ref={cartPanelRef} className="space-y-4 xl:sticky xl:top-4 scroll-mt-20">
+                  <div className="bg-[#0d1120]/95 border border-cyan-500/20 rounded-3xl p-3 sm:p-4 shadow-2xl shadow-cyan-950/20">
                     <div className="flex justify-between items-center mb-3">
                       <div className="flex items-center gap-2">
                         <ReceiptText size={18} className="text-cyan-400" />
@@ -1388,6 +1393,30 @@ export default function EntryPage({ products = [] }) {
           )}
 
         </div>
+
+        {entryTab !== 'Expense' && cart.length > 0 && (
+          <div className="fixed inset-x-2 bottom-20 z-40 xl:hidden rounded-3xl border border-cyan-500/30 bg-[#07101f]/95 backdrop-blur-xl shadow-2xl shadow-black/50 p-3 print:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={scrollToCart}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black">{tt('currentOrder', 'Current Order')}</p>
+                <p className="text-sm font-black text-white truncate">
+                  {summary.cartCount} {tt('items', 'items')} • {formatMoney(cartTotals.total)}
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={scrollToCart}
+                className="shrink-0 px-4 py-3 rounded-2xl bg-cyan-500 text-[#06111f] font-black text-xs active:scale-95 transition-transform"
+              >
+                {tt('checkout', 'Checkout')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <ReceiptModal

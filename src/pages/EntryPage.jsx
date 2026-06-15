@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   collection,
   doc,
@@ -152,21 +153,59 @@ export default function EntryPage({ products = [] }) {
     if (!overlayOpen) return undefined;
 
     const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyTouchAction = body.style.touchAction;
-    const previousHtmlOverflow = documentElement.style.overflow;
-    const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+    const scrollY = window.scrollY || documentElement.scrollTop || 0;
+    const previousBody = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      height: body.style.height,
+      touchAction: body.style.touchAction,
+      overscrollBehavior: body.style.overscrollBehavior,
+    };
+    const previousHtml = {
+      overflow: documentElement.style.overflow,
+      height: documentElement.style.height,
+      touchAction: documentElement.style.touchAction,
+      overscrollBehavior: documentElement.style.overscrollBehavior,
+    };
+    const preventMove = (event) => event.preventDefault();
 
     body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    body.style.height = '100%';
     body.style.touchAction = 'none';
+    body.style.overscrollBehavior = 'none';
     documentElement.style.overflow = 'hidden';
+    documentElement.style.height = '100%';
+    documentElement.style.touchAction = 'none';
     documentElement.style.overscrollBehavior = 'none';
+    document.addEventListener('touchmove', preventMove, { passive: false, capture: true });
+    document.addEventListener('wheel', preventMove, { passive: false, capture: true });
 
     return () => {
-      body.style.overflow = previousBodyOverflow;
-      body.style.touchAction = previousBodyTouchAction;
-      documentElement.style.overflow = previousHtmlOverflow;
-      documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+      document.removeEventListener('touchmove', preventMove, { capture: true });
+      document.removeEventListener('wheel', preventMove, { capture: true });
+      body.style.overflow = previousBody.overflow;
+      body.style.position = previousBody.position;
+      body.style.top = previousBody.top;
+      body.style.left = previousBody.left;
+      body.style.right = previousBody.right;
+      body.style.width = previousBody.width;
+      body.style.height = previousBody.height;
+      body.style.touchAction = previousBody.touchAction;
+      body.style.overscrollBehavior = previousBody.overscrollBehavior;
+      documentElement.style.overflow = previousHtml.overflow;
+      documentElement.style.height = previousHtml.height;
+      documentElement.style.touchAction = previousHtml.touchAction;
+      documentElement.style.overscrollBehavior = previousHtml.overscrollBehavior;
+      window.scrollTo(0, scrollY);
     };
   }, [overlayOpen]);
 
@@ -1546,8 +1585,8 @@ export default function EntryPage({ products = [] }) {
       </div>
 
 
-      {showShortcutHelp && (
-        <div className="fixed inset-0 z-[9998] overflow-hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-3 print:hidden" onWheel={(event) => event.preventDefault()} onTouchMove={(event) => event.preventDefault()}>
+      {showShortcutHelp && typeof document !== 'undefined' && createPortal((
+        <div className="fixed inset-0 z-[2147483646] overflow-hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-3 print:hidden" onWheel={(event) => event.preventDefault()} onTouchMove={(event) => event.preventDefault()}>
           <div className="w-full max-w-[420px] max-h-[calc(100svh-24px)] rounded-[26px] border border-cyan-500/20 bg-[#0d1120] shadow-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
               <div>
@@ -1571,7 +1610,7 @@ export default function EntryPage({ products = [] }) {
             </div>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       <ReceiptModal
         receiptModal={receiptModal}

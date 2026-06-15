@@ -39,16 +39,34 @@ export default function Toast() {
 
   const node = (
     <div
-      className="fixed left-0 top-0 z-[2147483647] grid h-[100svh] w-[100vw] place-items-center overflow-hidden bg-black/35 p-3 backdrop-blur-sm print:hidden"
-      style={{ overscrollBehavior: 'none', touchAction: 'none' }}
       onWheel={(event) => event.preventDefault()}
       onTouchMove={(event) => event.preventDefault()}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483647,
+        width: '100vw',
+        height: '100dvh',
+        overflow: 'hidden',
+        overscrollBehavior: 'none',
+        touchAction: 'none',
+        background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: '12px',
+      }}
+      className="print:hidden"
     >
       <div
         key={toast.id}
         role="status"
         aria-live="polite"
-        className={`pointer-events-auto w-full max-w-[360px] max-h-[calc(100svh-24px)] overflow-hidden rounded-[26px] border bg-[#0b1020]/95 p-3.5 text-white shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
+        onWheel={(event) => event.preventDefault()}
+        onTouchMove={(event) => event.preventDefault()}
+        className={`pointer-events-auto w-full max-w-[360px] overflow-hidden rounded-[26px] border bg-[#0b1020]/95 p-3.5 text-white shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
+        style={{ maxHeight: 'calc(100dvh - 28px)' }}
       >
         <div className="flex items-start gap-3">
           <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl border ${meta.iconWrap}`}>

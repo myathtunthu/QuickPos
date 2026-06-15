@@ -32,11 +32,11 @@ export default function Toast() {
 
   if (!toasts.length) return null;
 
-  const visibleToasts = toasts.slice(-3);
+  const visibleToasts = toasts.slice(-1);
 
   return (
-    <div className="fixed inset-0 z-[10000] pointer-events-none flex items-center justify-center p-4 print:hidden">
-      <div className="w-full max-w-sm space-y-3">
+    <div className="fixed inset-0 z-[10000] pointer-events-none flex items-center justify-center overflow-hidden p-3 print:hidden">
+      <div className="w-full max-w-[360px]">
         {visibleToasts.map((toast) => {
           const meta = toastMeta[toast.type] || toastMeta.info;
           const Icon = meta.icon;
@@ -46,10 +46,10 @@ export default function Toast() {
               key={toast.id}
               role="status"
               aria-live="polite"
-              className={`pointer-events-auto w-full rounded-3xl border bg-[#0b1020]/95 backdrop-blur-2xl p-4 text-white shadow-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
+              className={`pointer-events-auto w-full max-h-[calc(100svh-24px)] overflow-hidden rounded-[26px] border bg-[#0b1020]/95 backdrop-blur-2xl p-3.5 text-white shadow-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
             >
               <div className="flex items-start gap-3">
-                <div className={`shrink-0 grid h-11 w-11 place-items-center rounded-2xl border ${meta.iconWrap}`}>
+                <div className={`shrink-0 grid h-10 w-10 place-items-center rounded-2xl border ${meta.iconWrap}`}>
                   <Icon size={22} />
                 </div>
 
@@ -57,7 +57,7 @@ export default function Toast() {
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
                     {meta.title}
                   </p>
-                  <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-100">
+                  <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-100 line-clamp-4">
                     {toast.message}
                   </p>
                 </div>

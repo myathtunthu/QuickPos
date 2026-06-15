@@ -17,7 +17,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import {
+  Bar,
+  CartesianGrid,
   Cell,
+  ComposedChart,
   Line,
   LineChart,
   Pie,
@@ -262,6 +265,37 @@ const toneClasses = {
   violet: 'border-violet-400/20 bg-violet-400/10 text-violet-200',
   slate: 'border-white/10 bg-white/[0.04] text-slate-200',
 };
+
+
+const kpiGradientClasses = {
+  cyan: 'from-cyan-500/95 via-sky-500/85 to-blue-600/85 shadow-cyan-500/20',
+  emerald: 'from-emerald-400/95 via-teal-500/85 to-cyan-600/80 shadow-emerald-500/20',
+  amber: 'from-amber-400/95 via-orange-500/85 to-pink-600/80 shadow-amber-500/20',
+  rose: 'from-rose-500/95 via-fuchsia-600/85 to-purple-700/85 shadow-rose-500/20',
+  violet: 'from-violet-500/95 via-indigo-600/85 to-slate-900/90 shadow-violet-500/20',
+};
+
+const neonRingColors = ['#22d3ee', '#a855f7', '#f472b6', '#34d399', '#facc15'];
+
+function NeonPanel({ children, className = '' }) {
+  return (
+    <section className={`relative overflow-hidden rounded-[1.6rem] border border-cyan-300/10 bg-[#15123a]/80 p-4 shadow-2xl shadow-black/30 ring-1 ring-white/5 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,.16),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(217,70,239,.13),transparent_40%)] sm:p-5 ${className}`}>
+      <div className="relative z-10">{children}</div>
+    </section>
+  );
+}
+
+function NeonSectionTitle({ icon: Icon, title, action }) {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        {Icon && <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-200 ring-1 ring-cyan-300/20"><Icon size={19} /></span>}
+        <h2 className="truncate text-base font-black text-white sm:text-xl">{title}</h2>
+      </div>
+      {action}
+    </div>
+  );
+}
 
 async function safeReadCollection(collectionName, tenantId, maxRows) {
   if (!tenantId) return [];
@@ -524,35 +558,45 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
 
   if (loading) return <LoadingSkeleton />;
 
-  return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-950 text-white">
-      <main className="mx-auto w-full max-w-7xl space-y-4 p-3 pb-32 sm:space-y-5 sm:p-6 lg:pb-8">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-black tracking-tight sm:text-2xl">{tx('dashboard')}</h1>
-          <button
-            type="button"
-            onClick={() => loadDashboard({ force: true })}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 text-xs font-black text-slate-200 active:scale-95"
-          >
-            <RefreshCw size={16} /> {tx('refresh')}
-          </button>
-        </div>
+  const periodSalesTotal = chartData.reduce((sum, day) => sum + day.sales, 0);
+  const periodProfitTotal = chartData.reduce((sum, day) => sum + day.profit, 0);
+  const periodExpenseTotal = chartData.reduce((sum, day) => sum + day.expenses, 0);
+  const largestFinance = Math.max(...financeRows.map((row) => Math.abs(row.value)), 1);
 
-        <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-1.5">
-          {[
-            { key: 'today', label: tx('today') },
-            { key: '7d', label: tx('last7') },
-            { key: '30d', label: tx('last30') },
-          ].map((item) => (
+  return (
+    <div className="min-h-screen overflow-x-hidden bg-[#07071d] text-white">
+      <main className="mx-auto w-full max-w-7xl space-y-4 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(217,70,239,.18),transparent_35%),linear-gradient(180deg,#080a22_0%,#09091f_45%,#050612_100%)] p-3 pb-32 sm:space-y-5 sm:p-6 lg:pb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.6rem] border border-white/10 bg-white/[0.035] p-3 shadow-xl shadow-black/20 ring-1 ring-cyan-300/5 backdrop-blur-xl sm:p-4">
+          <div className="min-w-0">
+            <h1 className="text-xl font-black tracking-tight sm:text-2xl">{tx('dashboard')}</h1>
+            <p className="mt-0.5 text-xs font-bold text-slate-500">{range === 'today' ? tx('today') : range === '7d' ? tx('last7') : tx('last30')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="grid grid-cols-3 gap-1 rounded-2xl border border-white/10 bg-black/25 p-1">
+              {[
+                { key: 'today', label: tx('today') },
+                { key: '7d', label: tx('last7') },
+                { key: '30d', label: tx('last30') },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setRange(item.key)}
+                  className={`rounded-xl px-2.5 py-2 text-[11px] font-black transition active:scale-[0.98] sm:px-4 ${range === item.key ? 'bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/25' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
             <button
-              key={item.key}
               type="button"
-              onClick={() => setRange(item.key)}
-              className={`rounded-2xl px-3 py-2 text-xs font-black transition active:scale-[0.98] ${range === item.key ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+              onClick={() => loadDashboard({ force: true })}
+              className="grid h-11 w-11 place-items-center rounded-2xl border border-white/10 bg-white/5 text-cyan-200 shadow-lg shadow-black/20 active:scale-95"
+              aria-label={tx('refresh')}
             >
-              {item.label}
+              <RefreshCw size={17} />
             </button>
-          ))}
+          </div>
         </div>
 
         {errorText && (
@@ -563,12 +607,22 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           {kpiCards.map((card) => {
             const Icon = card.icon;
             return (
-              <Link key={card.label} to={card.to} className={`min-w-0 rounded-3xl border p-3 shadow-lg transition active:scale-[0.99] sm:p-4 ${toneClasses[card.tone] || toneClasses.slate}`}>
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-slate-400 sm:text-xs">{card.label}</p>
-                  <Icon className="shrink-0 text-current" size={18} />
+              <Link key={card.label} to={card.to} className={`group relative min-w-0 overflow-hidden rounded-[1.45rem] bg-gradient-to-br p-[1px] shadow-2xl transition active:scale-[0.99] ${kpiGradientClasses[card.tone] || kpiGradientClasses.violet}`}>
+                <div className="relative h-full rounded-[1.4rem] bg-slate-950/20 p-3 sm:p-4">
+                  <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/15 blur-2xl transition group-hover:bg-white/20" />
+                  <div className="relative z-10 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-white/70 sm:text-xs">{card.label}</p>
+                      <p className="mt-2 break-words text-xl font-black leading-tight text-white sm:text-3xl">{card.value}</p>
+                    </div>
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white/16 text-white ring-1 ring-white/20">
+                      <Icon size={20} />
+                    </span>
+                  </div>
+                  <div className="relative z-10 mt-4 h-1.5 overflow-hidden rounded-full bg-black/20">
+                    <div className="h-full w-2/3 rounded-full bg-white/60" />
+                  </div>
                 </div>
-                <p className="break-words text-[19px] font-black leading-tight text-white sm:text-2xl">{card.value}</p>
               </Link>
             );
           })}
@@ -578,118 +632,145 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
           {miniCards.map((card) => {
             const Icon = card.icon;
             return (
-              <Link key={card.label} to={card.to} className={`rounded-2xl border p-2 text-center transition active:scale-[0.99] sm:p-3 ${toneClasses[card.tone] || toneClasses.slate}`}>
-                <Icon className="mx-auto mb-1 text-current" size={16} />
+              <Link key={card.label} to={card.to} className="rounded-2xl border border-white/10 bg-[#17143a]/75 p-2 text-center shadow-lg shadow-black/20 ring-1 ring-white/5 transition active:scale-[0.99] sm:p-3">
+                <Icon className="mx-auto mb-1 text-cyan-200" size={17} />
                 <p className="text-lg font-black leading-none text-white sm:text-2xl">{fmt(card.value)}</p>
-                <p className="mt-1 truncate text-[10px] font-black text-slate-400 sm:text-xs">{card.label}</p>
+                <p className="mt-1 truncate text-[10px] font-black text-slate-500 sm:text-xs">{card.label}</p>
               </Link>
             );
           })}
         </section>
 
-        <Panel>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-base font-black sm:text-xl">{tx('salesProfitChart')}</h2>
-            <span className="text-xs font-black text-cyan-300">{money(chartData.reduce((sum, day) => sum + day.sales, 0))}</span>
-          </div>
-          {chartData.every((day) => day.sales === 0 && day.profit === 0 && day.expenses === 0) ? (
-            <EmptyState>{tx('noChart')}</EmptyState>
-          ) : (
-            <>
-              <div className="h-56 sm:h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
-                    <XAxis dataKey="label" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
-                    <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
-                    <Line type="monotone" dataKey="sales" name={tx('sale')} stroke="#22d3ee" strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
-                    <Line type="monotone" dataKey="profit" name={tx('netProfit')} stroke="#34d399" strokeWidth={3} dot={false} />
-                    <Line type="monotone" dataKey="expenses" name={tx('expense')} stroke="#fb7185" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+        <section className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
+          <NeonPanel>
+            <NeonSectionTitle
+              icon={Wallet}
+              title={tx('finance')}
+              action={<span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-black text-cyan-200">{money(periodSalesTotal)}</span>}
+            />
+            <div className="grid gap-4 sm:grid-cols-[180px_1fr] sm:items-center">
+              <div className="relative mx-auto h-48 w-full max-w-[220px]">
+                {pieData.length === 0 ? (
+                  <EmptyState>{tx('noPie')}</EmptyState>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={54} outerRadius={84} paddingAngle={5} stroke="rgba(15,23,42,.85)" strokeWidth={3}>
+                        {pieData.map((entry, index) => <Cell key={entry.name} fill={entry.color || neonRingColors[index % neonRingColors.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: '#080a22', border: '1px solid rgba(34,211,238,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{tx('netProfit')}</p>
+                    <p className={`mt-1 text-lg font-black ${analytics.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{money(analytics.netProfit)}</p>
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 space-y-2 sm:hidden">
-                {chartData.map((day) => {
-                  const width = Math.max((day.sales / maxSales) * 100, day.sales > 0 ? 7 : 0);
+
+              <div className="space-y-3">
+                {financeRows.map((row) => {
+                  const width = Math.max((Math.abs(row.value) / largestFinance) * 100, row.value ? 8 : 0);
                   return (
-                    <div key={day.iso} className="grid grid-cols-[42px_1fr_82px] items-center gap-2 text-xs">
-                      <span className="font-black text-slate-400">{day.label}</span>
-                      <div className="h-2.5 overflow-hidden rounded-full bg-black/35">
-                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+                    <div key={row.label} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">{row.label}</p>
+                        <p className="text-sm font-black text-white sm:text-base">{money(row.value)}</p>
                       </div>
-                      <span className="truncate text-right font-black text-white">{money(day.sales)}</span>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/45">
+                        <div className={`h-full rounded-full ${row.tone === 'rose' ? 'bg-gradient-to-r from-rose-500 to-pink-400' : row.tone === 'emerald' ? 'bg-gradient-to-r from-emerald-400 to-cyan-300' : 'bg-gradient-to-r from-cyan-400 to-blue-400'}`} style={{ width: `${width}%` }} />
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            </>
-          )}
-        </Panel>
+            </div>
+          </NeonPanel>
 
-        <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-          <Panel>
-            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('transactionMix')}</h2>
-            {pieData.length === 0 ? (
-              <EmptyState>{tx('noPie')}</EmptyState>
+          <NeonPanel>
+            <NeonSectionTitle
+              icon={TrendingUp}
+              title={tx('salesProfitChart')}
+              action={<span className={`rounded-full px-3 py-1 text-xs font-black ${periodProfitTotal >= 0 ? 'bg-emerald-400/10 text-emerald-200' : 'bg-rose-400/10 text-rose-200'}`}>{money(periodProfitTotal)}</span>}
+            />
+            {chartData.every((day) => day.sales === 0 && day.profit === 0 && day.expenses === 0) ? (
+              <EmptyState>{tx('noChart')}</EmptyState>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-[160px_1fr] sm:items-center">
-                <div className="h-44 sm:h-40">
+              <>
+                <div className="hidden h-[290px] sm:block">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={4}>
-                        {pieData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: '#020617', border: '1px solid rgba(148,163,184,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
-                    </PieChart>
+                    <ComposedChart data={chartData} margin={{ top: 14, right: 8, left: -20, bottom: 0 }}>
+                      <CartesianGrid vertical={false} stroke="rgba(148,163,184,.10)" />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Math.round(value / 1000)}k`} />
+                      <Tooltip contentStyle={{ background: '#080a22', border: '1px solid rgba(34,211,238,.25)', borderRadius: 16, color: '#fff', fontWeight: 800 }} formatter={(value) => money(value)} />
+                      <Bar dataKey="sales" name={tx('sale')} fill="#22d3ee" radius={[12, 12, 2, 2]} barSize={28} />
+                      <Line type="monotone" dataKey="profit" name={tx('netProfit')} stroke="#f472b6" strokeWidth={3} dot={{ r: 3, fill: '#f472b6' }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="expenses" name={tx('expense')} stroke="#facc15" strokeWidth={2.5} dot={false} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-1">
-                  {financeRows.map((row) => (
-                    <div key={row.label} className={`rounded-2xl border p-3 ${toneClasses[row.tone] || toneClasses.slate}`}>
-                      <p className="truncate text-[10px] font-black text-slate-400 sm:text-xs">{row.label}</p>
-                      <p className="mt-2 break-words text-sm font-black text-white sm:text-lg">{money(row.value)}</p>
-                    </div>
-                  ))}
+                <div className="space-y-2 sm:hidden">
+                  {chartData.map((day) => {
+                    const width = Math.max((day.sales / maxSales) * 100, day.sales > 0 ? 7 : 0);
+                    return (
+                      <div key={day.iso} className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                          <span className="font-black text-slate-400">{day.label}</span>
+                          <span className="font-black text-white">{money(day.sales)}</span>
+                        </div>
+                        <div className="h-2.5 overflow-hidden rounded-full bg-black/45">
+                          <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-blue-400 to-fuchsia-400" style={{ width: `${width}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              </>
             )}
-          </Panel>
+          </NeonPanel>
+        </section>
 
-          <Panel>
-            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('topProducts')}</h2>
+        <section className="grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+          <NeonPanel>
+            <NeonSectionTitle icon={Package} title={tx('topProducts')} />
             {analytics.topProducts.length === 0 ? (
               <EmptyState>{tx('noProducts')}</EmptyState>
             ) : (
-              <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
                 {analytics.topProducts.map((product, index) => {
                   const max = analytics.topProducts[0]?.revenue || 1;
                   const width = Math.max((product.revenue / max) * 100, 8);
                   return (
                     <div key={product.name} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-white">{index + 1}. {product.name}</p>
-                          <p className="mt-1 text-xs font-bold text-slate-500">{tx('qty')}: {fmt(product.qty)}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-fuchsia-400/15 text-sm font-black text-fuchsia-200">{index + 1}</span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-white">{product.name}</p>
+                            <p className="mt-0.5 text-xs font-bold text-slate-500">{tx('qty')}: {fmt(product.qty)}</p>
+                          </div>
                         </div>
                         <p className="shrink-0 text-right text-sm font-black text-cyan-300">{money(product.revenue)}</p>
                       </div>
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/45">
-                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-300" style={{ width: `${width}%` }} />
+                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-black/45">
+                        <div className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-400 to-cyan-300" style={{ width: `${width}%` }} />
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </Panel>
-        </section>
+          </NeonPanel>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <Panel>
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <h2 className="text-base font-black sm:text-xl">{tx('lowStock')}</h2>
-              <span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs font-black text-amber-300">{inventoryStats.lowStockCount}</span>
-            </div>
+          <NeonPanel>
+            <NeonSectionTitle
+              icon={AlertTriangle}
+              title={tx('lowStock')}
+              action={<span className="rounded-full bg-amber-400/10 px-2 py-1 text-xs font-black text-amber-300">{inventoryStats.lowStockCount}</span>}
+            />
             {inventoryStats.lowStock.length === 0 ? (
               <EmptyState>{tx('noLowStock')}</EmptyState>
             ) : (
@@ -710,38 +791,42 @@ export default function DashboardPage({ records: recordsFromApp = [] }) {
                 )}
               </div>
             )}
-          </Panel>
-
-          <Panel>
-            <h2 className="mb-4 text-base font-black sm:text-xl">{tx('recent')}</h2>
-            {analytics.recent.length === 0 ? (
-              <EmptyState>{tx('noTransactions')}</EmptyState>
-            ) : (
-              <div className="space-y-2">
-                {analytics.recent.map((record) => {
-                  const type = getRecordType(record);
-                  const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
-                  const date = getRecordDateISO(record).slice(5);
-                  return (
-                    <Link key={record.id} to="/records" className={`block rounded-2xl border p-3 active:scale-[0.99] ${toneClasses[tone] || toneClasses.slate}`}>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-black text-white">{typeLabel(type)}</p>
-                          <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || record.voucherNo || record.invoiceNo || '-'}</p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="max-w-[120px] truncate text-sm font-black text-white sm:max-w-none">{money(getRecordAmount(record))}</p>
-                          <p className="text-xs font-bold text-slate-500">{date}</p>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </Panel>
+          </NeonPanel>
         </section>
+
+        <NeonPanel>
+          <NeonSectionTitle icon={FileText} title={tx('recent')} />
+          {analytics.recent.length === 0 ? (
+            <EmptyState>{tx('noTransactions')}</EmptyState>
+          ) : (
+            <div className="grid gap-2 lg:grid-cols-2">
+              {analytics.recent.map((record) => {
+                const type = getRecordType(record);
+                const date = getRecordDateISO(record).slice(5);
+                const tone = type === 'sale' ? 'cyan' : type === 'purchase' ? 'emerald' : 'rose';
+                return (
+                  <Link key={record.id} to="/records" className="block rounded-2xl border border-white/10 bg-black/20 p-3 transition hover:border-cyan-300/25 active:scale-[0.99]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${tone === 'cyan' ? 'bg-cyan-300' : tone === 'emerald' ? 'bg-emerald-300' : 'bg-rose-300'}`} />
+                          <p className="truncate text-sm font-black text-white">{typeLabel(type)}</p>
+                        </div>
+                        <p className="mt-1 truncate text-xs font-bold text-slate-500">{record.personName || record.customerName || record.supplierName || record.voucherNo || record.invoiceNo || '-'}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="max-w-[130px] truncate text-sm font-black text-white sm:max-w-none">{money(getRecordAmount(record))}</p>
+                        <p className="text-xs font-bold text-slate-500">{date}</p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </NeonPanel>
       </main>
     </div>
   );
+
 }

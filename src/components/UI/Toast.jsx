@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useToastStore } from '../../store/toastStore';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
@@ -30,51 +31,47 @@ const toastMeta = {
 export default function Toast() {
   const { toasts, removeToast } = useToastStore();
 
-  if (!toasts.length) return null;
+  if (!toasts.length || typeof document === 'undefined') return null;
 
-  const visibleToasts = toasts.slice(-1);
+  const toast = toasts[toasts.length - 1];
+  const meta = toastMeta[toast.type] || toastMeta.info;
+  const Icon = meta.icon;
 
-  return (
-    <div className="fixed inset-0 z-[10000] pointer-events-none flex items-center justify-center overflow-hidden p-3 print:hidden">
-      <div className="w-full max-w-[360px]">
-        {visibleToasts.map((toast) => {
-          const meta = toastMeta[toast.type] || toastMeta.info;
-          const Icon = meta.icon;
+  const node = (
+    <div
+      className="fixed left-0 top-0 z-[2147483647] grid h-[100svh] w-[100vw] place-items-center overflow-hidden bg-black/35 p-3 backdrop-blur-sm print:hidden"
+      style={{ overscrollBehavior: 'none', touchAction: 'none' }}
+      onWheel={(event) => event.preventDefault()}
+      onTouchMove={(event) => event.preventDefault()}
+    >
+      <div
+        key={toast.id}
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-auto w-full max-w-[360px] max-h-[calc(100svh-24px)] overflow-hidden rounded-[26px] border bg-[#0b1020]/95 p-3.5 text-white shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl border ${meta.iconWrap}`}>
+            <Icon size={22} />
+          </div>
 
-          return (
-            <div
-              key={toast.id}
-              role="status"
-              aria-live="polite"
-              className={`pointer-events-auto w-full max-h-[calc(100svh-24px)] overflow-hidden rounded-[26px] border bg-[#0b1020]/95 backdrop-blur-2xl p-3.5 text-white shadow-2xl animate-in zoom-in-95 fade-in duration-200 ${meta.ring}`}
-            >
-              <div className="flex items-start gap-3">
-                <div className={`shrink-0 grid h-10 w-10 place-items-center rounded-2xl border ${meta.iconWrap}`}>
-                  <Icon size={22} />
-                </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">{meta.title}</p>
+            <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-100 line-clamp-4">{toast.message}</p>
+          </div>
 
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    {meta.title}
-                  </p>
-                  <p className="mt-1 break-words text-sm font-bold leading-5 text-slate-100 line-clamp-4">
-                    {toast.message}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => removeToast(toast.id)}
-                  className="shrink-0 rounded-2xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:text-white active:scale-95"
-                  aria-label="Close notification"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+          <button
+            type="button"
+            onClick={() => removeToast(toast.id)}
+            className="shrink-0 rounded-2xl border border-white/10 bg-white/5 p-2 text-slate-400 transition hover:text-white active:scale-95"
+            aria-label="Close notification"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(node, document.body);
 }

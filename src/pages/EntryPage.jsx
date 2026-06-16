@@ -145,7 +145,7 @@ export default function EntryPage({ products = [] }) {
     cartPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  const overlayOpen = showScanner || showShortcutHelp || receiptModal.show || confirmDialog.isOpen || promptModal.isOpen;
+  const overlayOpen = showShortcutHelp || receiptModal.show || confirmDialog.isOpen || promptModal.isOpen;
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
@@ -1586,35 +1586,8 @@ export default function EntryPage({ products = [] }) {
 
 
       {showShortcutHelp && typeof document !== 'undefined' && createPortal((
-        <div
-          className="print:hidden"
-          onClick={() => setShowShortcutHelp(false)}
-          onWheel={(event) => event.preventDefault()}
-          onTouchMove={(event) => event.preventDefault()}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 2147483646,
-            width: '100vw',
-            height: '100dvh',
-            overflow: 'hidden',
-            overscrollBehavior: 'none',
-            touchAction: 'none',
-            background: 'rgba(0,0,0,0.78)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 'max(10px, env(safe-area-inset-top)) 12px max(92px, env(safe-area-inset-bottom))',
-          }}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            onWheel={(event) => event.preventDefault()}
-            onTouchMove={(event) => event.preventDefault()}
-            className="w-full max-w-[420px] overflow-hidden rounded-[26px] border border-cyan-500/20 bg-[#0d1120] shadow-2xl"
-            style={{ maxHeight: 'calc(100dvh - 132px)', transform: 'translateZ(0)' }}
-          >
+        <div className="fixed inset-0 z-[2147483646] overflow-hidden bg-black/75 backdrop-blur-md flex items-center justify-center p-3 print:hidden" onWheel={(event) => event.preventDefault()} onTouchMove={(event) => event.preventDefault()}>
+          <div className="w-full max-w-[420px] max-h-[calc(100svh-24px)] rounded-[26px] border border-cyan-500/20 bg-[#0d1120] shadow-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
               <div>
                 <p className="text-xs text-cyan-400 font-black uppercase tracking-widest">{tt('posGuide', 'POS Guide')}</p>

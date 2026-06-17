@@ -1,66 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth, secondaryAuth } from '../firebase/config';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDoc, updateDoc, getDocs, query, where, writeBatch, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, signOut } from 'firebase/auth'; // 🌟 Auth functions
-
-const EXPIRY_SHORTCUTS = [
-  { value: '', label: 'Shortcut' },
-  { value: '3d', label: '3 Days' },
-  { value: '7d', label: '7 Days' },
-  { value: '1m', label: '1 Month' },
-  { value: '3m', label: '3 Months' },
-  { value: '6m', label: '6 Months' },
-  { value: '1y', label: '1 Year' },
-];
-
-const addDuration = (baseDate, shortcut) => {
-  const d = baseDate ? new Date(baseDate) : new Date();
-  const now = new Date();
-  const target = Number.isNaN(d.getTime()) || d < now ? now : d;
-  const next = new Date(target);
-  if (shortcut === '3d') next.setDate(next.getDate() + 3);
-  if (shortcut === '7d') next.setDate(next.getDate() + 7);
-  if (shortcut === '1m') next.setMonth(next.getMonth() + 1);
-  if (shortcut === '3m') next.setMonth(next.getMonth() + 3);
-  if (shortcut === '6m') next.setMonth(next.getMonth() + 6);
-  if (shortcut === '1y') next.setFullYear(next.getFullYear() + 1);
-  return next.toISOString().split('T')[0];
-};
-
-const daysUntil = (dateValue) => {
-  if (!dateValue) return null;
-  const end = new Date(`${dateValue}T23:59:59`);
-  if (Number.isNaN(end.getTime())) return null;
-  return Math.ceil((end - new Date()) / (24 * 60 * 60 * 1000));
-};
-
-const getTenantHealth = (tenant) => {
-  if (tenant.status === 'blocked') return { label: 'Blocked', tone: 'purple', text: 'text-purple-400', border: 'border-purple-500/20', bg: 'bg-purple-500/10' };
-  const days = daysUntil(tenant.expiryDate);
-  if (days === null) return { label: 'Trial', tone: 'amber', text: 'text-amber-400', border: 'border-amber-500/20', bg: 'bg-amber-500/10' };
-  if (days < 0) return { label: 'Expired', tone: 'rose', text: 'text-rose-400', border: 'border-rose-500/20', bg: 'bg-rose-500/10' };
-  if (days <= 7) return { label: `Expiring ${days}d`, tone: 'orange', text: 'text-orange-400', border: 'border-orange-500/20', bg: 'bg-orange-500/10' };
-  return { label: 'Healthy', tone: 'emerald', text: 'text-emerald-400', border: 'border-emerald-500/10', bg: 'bg-emerald-500/10' };
-};
-
-const getPaymentStatus = (tenant) => {
-  const raw = (tenant.paymentStatus || tenant.invoiceStatus || tenant.billingStatus || '').toLowerCase();
-  if (raw.includes('paid')) return 'paid';
-  if (raw.includes('partial')) return 'partial';
-  if (raw.includes('overdue')) return 'overdue';
-  if (raw.includes('unpaid')) return 'unpaid';
-  const days = daysUntil(tenant.expiryDate);
-  if (days !== null && days < 0) return 'overdue';
-  return 'paid';
-};
-
-const paymentStyle = {
-  paid: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  partial: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  unpaid: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-  overdue: 'bg-red-500/10 text-red-400 border-red-500/20',
-};
-
 import { 
   ShieldAlert, Plus, Store, Trash2, Search, Edit3, Save, X, 
   Download, Eye, Users, Clock, Activity, UserCheck, UserX, 
@@ -68,6 +9,18 @@ import {
   BarChart3, TrendingUp, RefreshCw, ToggleRight, Bell, 
   HardDrive, Database, DollarSign, FileText, Cloud
 } from 'lucide-react';
+
+
+const toExpiryTimestamp = (dateValue) => {
+  if (!dateValue) return null;
+  const date = new Date(`${dateValue}T23:59:59.999`);
+  return Number.isNaN(date.getTime()) ? null : Timestamp.fromDate(date);
+};
+
+const buildExpiryPatch = (expiryDate) => {
+  const expiryAt = toExpiryTimestamp(expiryDate);
+  return expiryAt ? { expiryDate, expiryAt } : { expiryDate };
+};
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -105,8 +58,6 @@ export default function SuperAdminPage() {
   const [storageData, setStorageData] = useState({});
   const [showInvoice, setShowInvoice] = useState(false);
   const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
-  const [logSearch, setLogSearch] = useState('');
-  const [loginHistory, setLoginHistory] = useState([]);
 
   // ==================== AUTHENTICATION CHECK ====================
   useEffect(() => {
@@ -185,21 +136,6 @@ export default function SuperAdminPage() {
     return () => unsub();
   }, [isAuthenticated]);
 
-  // ==================== LOGIN ACTIVITY HISTORY ====================
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const unsub = onSnapshot(query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(80)), (snap) => {
-      const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLoginHistory(logs.filter(l => (l.type || '').toLowerCase().includes('login') || String(l.action || '').toLowerCase().includes('login')).slice(0, 20));
-      setActivityLog(prev => {
-        const merged = [...logs, ...prev];
-        const seen = new Set();
-        return merged.filter(l => { const key = l.id || `${l.timestamp}-${l.action}`; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 200);
-      });
-    }, () => {});
-    return () => unsub();
-  }, [isAuthenticated]);
-
   // ==================== FILTER ====================
   useEffect(() => {
     let f = [...tenants];
@@ -207,7 +143,6 @@ export default function SuperAdminPage() {
     if (statusFilter === 'active') f = f.filter(u => !u.expiryDate || new Date(u.expiryDate) >= now);
     if (statusFilter === 'expired') f = f.filter(u => u.expiryDate && new Date(u.expiryDate) < now);
     if (statusFilter === 'trial') f = f.filter(u => !u.expiryDate);
-    if (statusFilter === 'expiring') f = f.filter(u => { const d = daysUntil(u.expiryDate); return d !== null && d >= 0 && d <= 7; });
     if (statusFilter === 'blocked') f = f.filter(u => u.status === 'blocked');
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -267,7 +202,7 @@ export default function SuperAdminPage() {
         role: 'admin', 
         permissions: [], 
         tenantId: tid, 
-        expiryDate: form.expiryDate, 
+        ...buildExpiryPatch(form.expiryDate), 
         passwordRaw: form.password, // Super Admin auto-login အတွက်
         createdAt: Date.now(), 
         status: 'active' 
@@ -310,32 +245,17 @@ export default function SuperAdminPage() {
   };
 
   // ==================== UPDATE EXPIRY ====================
-  const updateExpiry = async (uid, nd) => { if(nd){ await setDoc(doc(db,'pos_users',uid),{expiryDate:nd},{merge:true}); addLog('📅 Expiry Updated'); } };
-
-  const applyNewTenantExpiryShortcut = (shortcut) => {
-    if (!shortcut) return;
-    setForm(prev => ({ ...prev, expiryDate: addDuration(new Date(), shortcut) }));
-  };
-
-  const extendTenantExpiry = async (tenant, shortcut) => {
-    if (!shortcut) return;
-    const newDate = addDuration(tenant.expiryDate || new Date(), shortcut);
-    await updateExpiry(tenant.id, newDate);
-    addLog(`📅 Extended: ${tenant.username || tenant.email} → ${newDate}`);
-  };
-
-  const updatePaymentStatus = async (tenant, status) => {
-    await setDoc(doc(db, 'pos_users', tenant.id), { paymentStatus: status, paymentUpdatedAt: Date.now() }, { merge: true });
-    addLog(`💳 Payment Status: ${tenant.username || tenant.email} → ${status}`);
-  };
+  const updateExpiry = async (uid, nd) => { if(nd){ await setDoc(doc(db,'pos_users',uid),buildExpiryPatch(nd),{merge:true}); addLog('📅 Expiry Updated'); } };
 
   // ==================== DELETE TENANT ====================
   const deleteTenant = async (uid, un) => { if(window.confirm(`ဖျက်ရန်သေချာပါသလား? [${un}]`)){ await deleteDoc(doc(db,'pos_users',uid)); addLog(`🗑️ Deleted: ${un}`); } };
 
   // ==================== BULK EXPIRY UPDATE ====================
   const bulkUpdateExpiry = async () => {
-    const newDate = bulkDays && /[dmy]$/.test(String(bulkDays)) ? addDuration(new Date(), bulkDays) : (() => { const days = parseInt(bulkDays) || 30; const now = new Date(); now.setDate(now.getDate() + days); return now.toISOString().split('T')[0]; })();
-    for (const id of selectedIds) { await setDoc(doc(db, 'pos_users', id), { expiryDate: newDate }, { merge: true }); }
+    const days = parseInt(bulkDays) || 30;
+    const now = new Date(); now.setDate(now.getDate() + days);
+    const newDate = now.toISOString().split('T')[0];
+    for (const id of selectedIds) { await setDoc(doc(db, 'pos_users', id), buildExpiryPatch(newDate), { merge: true }); }
     addLog(`📅 Bulk Update: ${selectedIds.length} admins +${days} days`);
     setSelectedIds([]); alert(`✅ ${selectedIds.length} Admins သက်တမ်းတိုးပြီး`);
   };
@@ -395,7 +315,7 @@ export default function SuperAdminPage() {
       await setDoc(doc(db, 'pos_users', uc.user.uid), { 
         email: newEmail.trim(), username: newEmail.trim(), role: 'admin', 
         permissions: user.permissions || [], tenantId: tid, 
-        expiryDate: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], 
+        ...buildExpiryPatch(new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]), 
         passwordRaw: newPassword, // Clone လုပ်လျှင်လည်း မှတ်ထားမည်
         createdAt: Date.now(), status: 'active' 
       });
@@ -514,33 +434,6 @@ export default function SuperAdminPage() {
             {[{label:'Total',value:stats.total,icon:Users,color:'text-cyan-400'},{label:'Active',value:stats.active,icon:UserCheck,color:'text-emerald-400'},{label:'Expired',value:stats.expired,icon:UserX,color:'text-rose-400'},{label:'Trial',value:stats.trial,icon:Clock,color:'text-amber-400'},{label:'Blocked',value:stats.blocked,icon:ToggleRight,color:'text-purple-400'}].map(s=>{const I=s.icon;return <div key={s.label} className="bg-black/30 rounded-2xl p-4 text-center"><I size={24} className={`mx-auto mb-2 ${s.color}`}/><p className="text-2xl font-black">{s.value}</p><p className="text-xs text-slate-500">{s.label}</p></div>;})}
           </div>
 
-          {/* Tenant Health + Billing + Login Activity */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/5">
-            <div className="bg-black/25 rounded-2xl p-4 border border-white/5">
-              <p className="text-xs text-slate-500 mb-3 font-bold uppercase">Tenant Health</p>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Healthy</span><span className="text-emerald-400 font-black">{tenants.filter(t=>getTenantHealth(t).label==='Healthy').length}</span></div>
-                <div className="flex justify-between"><span>Expiring ≤ 7d</span><span className="text-orange-400 font-black">{tenants.filter(t=>{const d=daysUntil(t.expiryDate);return d!==null&&d>=0&&d<=7;}).length}</span></div>
-                <div className="flex justify-between"><span>Expired</span><span className="text-rose-400 font-black">{stats.expired}</span></div>
-              </div>
-            </div>
-            <div className="bg-black/25 rounded-2xl p-4 border border-white/5">
-              <p className="text-xs text-slate-500 mb-3 font-bold uppercase">Payment / Invoice</p>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Paid</span><span className="text-emerald-400 font-black">{tenants.filter(t=>getPaymentStatus(t)==='paid').length}</span></div>
-                <div className="flex justify-between"><span>Partial</span><span className="text-amber-400 font-black">{tenants.filter(t=>getPaymentStatus(t)==='partial').length}</span></div>
-                <div className="flex justify-between"><span>Unpaid/Overdue</span><span className="text-rose-400 font-black">{tenants.filter(t=>['unpaid','overdue'].includes(getPaymentStatus(t))).length}</span></div>
-              </div>
-            </div>
-            <div className="bg-black/25 rounded-2xl p-4 border border-white/5">
-              <p className="text-xs text-slate-500 mb-3 font-bold uppercase">Login Activity</p>
-              <div className="space-y-2 text-xs text-slate-400 max-h-24 overflow-y-auto pr-1">
-                {loginHistory.length === 0 && <p className="text-slate-600">No login records</p>}
-                {loginHistory.slice(0, 4).map(l => <div key={l.id} className="flex justify-between gap-2"><span className="truncate">{l.action}</span><span className="text-slate-500 shrink-0">{new Date(l.timestamp).toLocaleDateString()}</span></div>)}
-              </div>
-            </div>
-          </div>
-
           {/* System Overview + Revenue */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/5">
             <div>
@@ -590,15 +483,9 @@ export default function SuperAdminPage() {
         )}
 
         {showLog && (
-          <div className="bg-gray-900 border-2 border-purple-500/20 rounded-3xl p-6 max-h-80 overflow-y-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h3 className="text-lg font-black text-purple-400">📋 Full Audit Log</h3>
-              <input value={logSearch} onChange={e=>setLogSearch(e.target.value)} placeholder="Search log..." className="bg-black/50 border border-purple-500/20 rounded-xl px-4 py-2 text-sm text-white"/>
-            </div>
-            <div className="space-y-2 text-sm">
-              {activityLog.filter(l=>!logSearch.trim() || String(l.action||'').toLowerCase().includes(logSearch.toLowerCase())).length===0&&<p className="text-slate-500">No activity</p>}
-              {activityLog.filter(l=>!logSearch.trim() || String(l.action||'').toLowerCase().includes(logSearch.toLowerCase())).map(l=><div key={l.id} className="flex justify-between gap-3 text-slate-400"><span className="truncate">{l.action}</span><span className="text-xs shrink-0">{new Date(l.timestamp).toLocaleString()}</span></div>)}
-            </div>
+          <div className="bg-gray-900 border-2 border-purple-500/20 rounded-3xl p-6 max-h-64 overflow-y-auto">
+            <h3 className="text-lg font-black text-purple-400 mb-4">📋 Full Audit Log</h3>
+            <div className="space-y-2 text-sm">{activityLog.length===0&&<p className="text-slate-500">No activity</p>}{activityLog.map(l=><div key={l.id} className="flex justify-between text-slate-400"><span>{l.action}</span><span className="text-xs">{new Date(l.timestamp).toLocaleString()}</span></div>)}</div>
           </div>
         )}
 
@@ -618,12 +505,7 @@ export default function SuperAdminPage() {
               <input required value={form.shopName} onChange={e=>setForm({...form,shopName:e.target.value})} placeholder="Shop Name" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
               <input required type="email" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="Admin Email" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
               <input required value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
-              <div className="grid grid-cols-2 gap-2">
-                <input required type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400"/>
-                <select defaultValue="" onChange={e=>{applyNewTenantExpiryShortcut(e.target.value); e.target.value='';}} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400">
-                  {EXPIRY_SHORTCUTS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
+              <input required type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400"/>
             </div>
             <div className="flex gap-3"><button type="submit" className="px-6 py-3 bg-cyan-600 rounded-xl font-bold">Create</button><button type="button" onClick={()=>setAdding(false)} className="px-6 py-3 bg-slate-700 rounded-xl">Cancel</button></div>
           </form>
@@ -661,13 +543,11 @@ export default function SuperAdminPage() {
         {/* ==================== SEARCH + FILTER + BULK ==================== */}
         <div className="flex gap-3 flex-wrap items-center mt-6">
           <div className="relative flex-1 min-w-[200px]"><Search size={18} className="absolute left-4 top-3 text-slate-500"/><input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search admin..." className="w-full bg-gray-900 border border-white/10 rounded-xl pl-12 pr-4 py-3"/></div>
-          <div className="flex gap-2">{['all','active','expiring','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
+          <div className="flex gap-2">{['all','active','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
           {selectedIds.length > 0 && (
             <div className="flex gap-2 items-center">
-              <select value={bulkDays} onChange={e=>setBulkDays(e.target.value)} className="bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-sm text-cyan-400">
-                <option value="3d">3 Days</option><option value="7d">7 Days</option><option value="1m">1 Month</option><option value="3m">3 Months</option><option value="6m">6 Months</option><option value="1y">1 Year</option><option value="30">Custom 30d</option>
-              </select>
-              <button onClick={bulkUpdateExpiry} className="px-4 py-2 bg-cyan-600 rounded-xl text-sm font-bold">Extend ({selectedIds.length})</button>
+              <input type="number" value={bulkDays} onChange={e=>setBulkDays(e.target.value)} className="w-20 bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-sm text-cyan-400"/>
+              <button onClick={bulkUpdateExpiry} className="px-4 py-2 bg-cyan-600 rounded-xl text-sm font-bold">+{bulkDays} Days ({selectedIds.length})</button>
             </div>
           )}
         </div>
@@ -679,15 +559,12 @@ export default function SuperAdminPage() {
             const isExpired=t.expiryDate&&new Date(t.expiryDate)<new Date();
             const isBlocked=t.status==='blocked';
             const storage = storageData[t.tenantId] || { records: 0, size: 0 };
-            const health = getTenantHealth(t);
-            const pStatus = getPaymentStatus(t);
-            const lastLogin = t.lastLoginAt || t.lastLogin || t.loginAt || t.updatedAt;
             return (
-              <div key={t.id} className={`bg-gray-900 p-5 rounded-2xl border-2 ${health.border}`}>
+              <div key={t.id} className={`bg-gray-900 p-5 rounded-2xl border-2 ${isExpired?'border-rose-500/20':isBlocked?'border-purple-500/20':'border-emerald-500/10'}`}>
                 <div className="flex flex-col sm:flex-row justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>toggleSelect(t.id)} className="mt-2 accent-cyan-500 w-5 h-5"/>
-                    <div className={`p-3 rounded-xl ${health.bg} ${health.text}`}><Store size={28}/></div>
+                    <div className={`p-3 rounded-xl ${isExpired?'bg-rose-500/10 text-rose-500':isBlocked?'bg-purple-500/10 text-purple-500':'bg-emerald-500/10 text-emerald-500'}`}><Store size={28}/></div>
                     <div>
                       <p className="font-black text-xl">{t.username||t.email}</p>
                       <p className="text-xs text-slate-500 mt-1">Tenant ID: {t.tenantId}</p>
@@ -698,10 +575,8 @@ export default function SuperAdminPage() {
                       </p>
 
                       <div className="flex gap-2 mt-2 flex-wrap">
-                        <span className={`text-xs font-bold ${health.text}`}>● {health.label}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${paymentStyle[pStatus] || paymentStyle.paid}`}>💳 {pStatus.toUpperCase()}</span>
+                        <span className={`text-xs font-bold ${isExpired?'text-rose-400':isBlocked?'text-purple-400':'text-emerald-400'}`}>{isExpired?'⚠️ Expired':isBlocked?'🚫 Blocked':'✓ Active'}</span>
                         <span className="text-xs text-slate-500">| 📦 {storage.records} recs (~{storage.size}KB)</span>
-                        {lastLogin && <span className="text-xs text-slate-500">| Last login: {new Date(lastLogin).toLocaleDateString()}</span>}
                       </div>
                       <div className="flex gap-2 mt-3 flex-wrap">
                         <button onClick={()=>loadTenantAnalytics(t)} className="text-xs px-3 py-1.5 bg-cyan-600/20 text-cyan-400 rounded-lg hover:bg-cyan-600/40"><Eye size={12} className="inline mr-1"/> Analytics</button>
@@ -720,15 +595,7 @@ export default function SuperAdminPage() {
                     </div>
                   ):(
                     <div className="flex gap-2 items-center flex-wrap mt-4 sm:mt-0">
-                      <div className="flex gap-2 flex-wrap">
-                        <input type="date" defaultValue={t.expiryDate} onBlur={e=>updateExpiry(t.id,e.target.value)} className={`bg-black border rounded-lg px-3 py-2 text-sm ${isExpired?'border-rose-500/30 text-rose-300':'border-emerald-500/30 text-emerald-300'}`}/>
-                        <select defaultValue="" onChange={e=>{extendTenantExpiry(t,e.target.value); e.target.value='';}} className="bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-xs text-cyan-300">
-                          {EXPIRY_SHORTCUTS.map(o=><option key={o.value} value={o.value}>{o.value?'+'+o.label:o.label}</option>)}
-                        </select>
-                        <select value={pStatus} onChange={e=>updatePaymentStatus(t,e.target.value)} className={`border rounded-lg px-3 py-2 text-xs bg-black ${paymentStyle[pStatus] || paymentStyle.paid}`}>
-                          <option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option><option value="overdue">Overdue</option>
-                        </select>
-                      </div>
+                      <input type="date" defaultValue={t.expiryDate} onBlur={e=>updateExpiry(t.id,e.target.value)} className={`bg-black border rounded-lg px-3 py-2 text-sm ${isExpired?'border-rose-500/30 text-rose-300':'border-emerald-500/30 text-emerald-300'}`}/>
                       <button onClick={()=>startEdit(t)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg" title="Edit"><Edit3 size={16}/></button>
                       <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg" title="Force Reset Password"><RotateCcw size={16}/></button>
                       <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>

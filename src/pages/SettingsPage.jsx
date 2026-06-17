@@ -9,6 +9,7 @@ import { Settings, Cloud, Download, Upload, Lock, Save, HelpCircle, MessageCircl
 // 🌟 UI & Utilities 
 import { showToast } from '../components/UI/Toast';
 import ConfirmDialog from '../components/UI/ConfirmDialog';
+import BackupSettings from '../components/Settings/BackupSettings';
 import logger from '../utils/logger';
 
 // 🌟 Security Utility
@@ -313,20 +314,10 @@ export default function SettingsPage() {
           <button onClick={saveBalance} className="w-full py-4 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/40 text-purple-300 rounded-xl font-black mt-2 flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={18}/> Save Balance</button>
         </div>
 
-        {/* Data Management */}
-        <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4">
-          <h4 className="text-lg font-black text-emerald-400 mb-4 border-b border-white/10 pb-2">Data Management</h4>
-          <button onClick={backupToTelegram} className="w-full py-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-blue-300 flex items-center justify-center gap-2 hover:bg-blue-600/30 transition-colors font-bold active:scale-95"><Cloud size={18}/> Backup to Telegram</button>
-          
-          <div className="flex gap-4">
-            <button onClick={exportAllCSV} className="w-full py-3 bg-emerald-600/20 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-center justify-center gap-2 hover:bg-emerald-600/30 transition-colors font-bold active:scale-95"><Download size={18}/> Export CSV</button>
-            
-            {/* 🌟 Import CSV နေရာမှန် */}
-            <button onClick={() => fileRef.current?.click()} className="w-full py-3 bg-amber-600/20 border border-amber-500/30 rounded-xl text-amber-300 flex items-center justify-center gap-2 hover:bg-amber-600/30 transition-colors font-bold active:scale-95"><Upload size={18}/> Import CSV</button>
-            <input type="file" accept=".csv" ref={fileRef} onChange={handleImportCSV} className="hidden"/>
-          </div>
-
-          <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="w-full py-3 bg-cyan-600/20 border border-cyan-500/30 rounded-xl text-cyan-300 flex items-center justify-center gap-2 hover:bg-cyan-600/30 transition-colors font-bold text-sm active:scale-95"><MessageCircle size={18}/> @BotFather သို့ Telegram Bot ဖန်တီးရန်</a>
+        {/* Production Backup / Restore */}
+        <div className="bg-[#0d1120] border-2 border-white/5 rounded-3xl p-6 sm:p-8 shadow-lg space-y-4 md:col-span-2">
+          <h4 className="text-lg font-black text-emerald-400 mb-4 border-b border-white/10 pb-2">Production Backup / Restore</h4>
+          <BackupSettings tenantId={profile?.tenantId} />
         </div>
 
       </div>

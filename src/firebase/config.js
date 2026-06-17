@@ -7,6 +7,7 @@ import {
 } from 'firebase/firestore';
 import {
   browserLocalPersistence,
+  inMemoryPersistence,
   getAuth,
   setPersistence,
 } from 'firebase/auth';
@@ -67,8 +68,8 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.warn('[Firebase Auth] Unable to enable local persistence.', error);
 });
 
-setPersistence(secondaryAuth, browserLocalPersistence).catch((error) => {
-  console.warn('[Firebase Auth] Unable to enable secondary local persistence.', error);
+setPersistence(secondaryAuth, inMemoryPersistence).catch((error) => {
+  console.warn('[Firebase Auth] Unable to enable secondary in-memory persistence.', error);
 });
 
 enableMultiTabIndexedDbPersistence(db).catch((error) => {

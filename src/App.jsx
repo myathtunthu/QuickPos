@@ -30,22 +30,6 @@ const LoadingScreen = () => (
   </div>
 );
 
-const NotFoundPage = () => (
-  <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-6 text-center text-white">
-    <div className="max-w-md rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl">
-      <p className="text-sm font-black uppercase tracking-[0.25em] text-cyan-200">404</p>
-      <h1 className="mt-3 text-2xl font-black">Page not found</h1>
-      <p className="mt-2 text-sm font-semibold text-slate-400">The page you opened does not exist.</p>
-      <a
-        href="/dashboard"
-        className="mt-6 inline-flex rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-950/30"
-      >
-        Back to Dashboard
-      </a>
-    </div>
-  </div>
-);
-
 const ProtectedRoute = ({ children }) => {
   const { user, profile, loading } = useAuth();
 
@@ -61,8 +45,7 @@ const AdminOnlyRoute = ({ children }) => {
   if (loading) return <LoadingScreen />;
   if (!user || !profile) return <Navigate to="/login" replace />;
 
-  const role = String(profile?.role || '').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'owner' || role === 'superadmin';
+  const isAdmin = profile.role === 'admin' || profile.role === 'owner';
 
   if (!isAdmin) return <Navigate to="/entry" replace />;
 
@@ -74,8 +57,7 @@ const PermissionRoute = ({ permission, children, fallback = '/entry' }) => {
 
   if (loading) return <LoadingScreen />;
   if (!user || !profile) return <Navigate to="/login" replace />;
-  const role = String(profile?.role || '').toLowerCase();
-  if (role !== 'superadmin' && !hasPermission(permission)) return <Navigate to={fallback} replace />;
+  if (!hasPermission(permission)) return <Navigate to={fallback} replace />;
 
   return children;
 };
@@ -213,7 +195,7 @@ function AppContent() {
           />
 
           <Route
-            path="settings"
+            path="/settings"
             element={
               <AdminOnlyRoute>
                 <SettingsPage />
@@ -241,7 +223,7 @@ function AppContent() {
 
         </Route>
 
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="*" element={<Navigate to="/entry" replace />} />
       </Routes>
     </BrowserRouter>
   );

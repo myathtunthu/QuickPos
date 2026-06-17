@@ -38,6 +38,42 @@ const isPrivilegedAdminRole = (role) => ADMIN_ROLES.has(normalizeRole(role));
 
 const isSuperAdminRole = (role) => SUPER_ADMIN_ROLES.has(normalizeRole(role));
 
+
+const normalizeExpiryDate = (value) => {
+  if (!value) return null;
+
+  if (typeof value?.toDate === 'function') {
+    return value.toDate();
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  if (typeof value === 'string') {
+    const clean = value.trim();
+    if (!clean) return null;
+    const date = clean.length <= 10 ? new Date(`${clean}T23:59:59.999`) : new Date(clean);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  return null;
+};
+
+const isExpiredProfile = (profile = {}) => {
+  if (isSuperAdminRole(profile.role)) return false;
+
+  const expiry = normalizeExpiryDate(profile.expiryAt || profile.expiryDate);
+  if (!expiry) return false;
+
+  return expiry.getTime() < Date.now();
+};
+
 const isActiveProfile = (profile = {}) => {
   if (profile.active === false || profile.disabled === true) return false;
   if (typeof profile.status === 'string' && normalizeRole(profile.status) !== 'active') return false;
@@ -99,12 +135,13 @@ export function AuthProvider({ children }) {
 
         const isSuperAdmin = isSuperAdminRole(userProfile.role);
 
-        if (!isActiveProfile(userProfile) || !userProfile.role || (!isSuperAdmin && !userProfile.tenantId)) {
+        if (!isActiveProfile(userProfile) || isExpiredProfile(userProfile) || !userProfile.role || (!isSuperAdmin && !userProfile.tenantId)) {
           logger.warn('Login blocked: invalid or inactive profile', {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             role: userProfile.role,
             hasTenantId: Boolean(userProfile.tenantId),
+            expired: isExpiredProfile(userProfile),
           });
           await signOut(auth);
           clearAuthState();

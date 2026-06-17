@@ -27,12 +27,6 @@ service cloud.firestore {
       return userDocExists() && (myRole() == 'superadmin' || myRole() == 'super_admin');
     }
 
-    function tenantNotExpired() {
-      return isSuperAdmin()
-        || !('expiryAt' in myUser())
-        || myUser().expiryAt > request.time;
-    }
-
     function isActive() {
       return userDocExists()
         && (
@@ -41,8 +35,7 @@ service cloud.firestore {
           || myUser().active == true
           || !('status' in myUser())
         )
-        && myUser().status != 'blocked'
-        && tenantNotExpired();
+        && myUser().status != 'blocked';
     }
 
     function isAdmin() {
@@ -216,16 +209,25 @@ service cloud.firestore {
     }
 
     match /audit_logs/{docId} {
-      allow read: if isSuperAdmin()
-        || (isAdmin() && resource.data.tenantId == myTenantId());
-      allow create: if isActive()
-        && request.resource.data.tenantId == myTenantId();
+      allow read: if isSuperAdmin() || isAdmin();
+      allow create: if isActive();
       allow update, delete: if false;
     }
 
     match /tenant_compliance_reviews/{docId} {
       allow read, create, update: if isSuperAdmin();
       allow delete: if false;
+    }
+
+
+    match /tenant_backups/{docId} {
+      allow read: if isSuperAdmin() || (isAdmin() && resource.data.tenantId == myTenantId());
+      allow create, update, delete: if false;
+    }
+
+    match /tenant_restore_jobs/{docId} {
+      allow read: if isSuperAdmin() || (isAdmin() && resource.data.tenantId == myTenantId());
+      allow create, update, delete: if false;
     }
 
     match /admin_sessions/{docId} {

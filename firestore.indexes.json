@@ -65,7 +65,7 @@
       ]
     },
     {
-      "collectionGroup": "pos_records",
+      "collectionGroup": "tenant_backups",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -74,62 +74,6 @@
         },
         {
           "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "pos_records",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "pos_drafts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "audit_logs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "pos_expenses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tenantId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "timestamp",
           "order": "DESCENDING"
         }
       ]

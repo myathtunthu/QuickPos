@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle,
   DatabaseBackup,
   Download,
   FileJson,
@@ -79,20 +78,13 @@ const formatBytes = (bytes = 0) => {
   return `${(size / 1024 / 1024).toFixed(2)} MB`;
 };
 
-const safeFilePart = (value, fallback = 'Shop') => {
-  const cleaned = String(value || '')
-    .trim()
-    .replace(/[\/:*?"<>|]+/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  return cleaned || fallback;
-};
-
-const makeBackupFilename = (shopName) => {
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  return `${safeFilePart(shopName, 'Shop')}-backup-${stamp}.json`;
-};
+const sanitizeFilenamePart = (value = '') => String(value || '')
+  .trim()
+  .replace(/[\/:*?"<>|]+/g, '-')
+  .replace(/\s+/g, '-')
+  .replace(/-+/g, '-')
+  .replace(/^-|-$/g, '')
+  .slice(0, 60);
 
 const validateBackup = (payload, tenantId) => {
   if (!payload || payload.app !== 'QuickPos' || payload.type !== 'tenant-browser-backup') {
@@ -107,7 +99,7 @@ const validateBackup = (payload, tenantId) => {
   return true;
 };
 
-export default function BackupSettings({ tenantId, shopName }) {
+export default function BackupSettings({ tenantId, shopName = '' }) {
   const { t } = useLanguage();
   const fileInputRef = useRef(null);
   const [loadingAction, setLoadingAction] = useState(null);
@@ -142,7 +134,9 @@ export default function BackupSettings({ tenantId, shopName }) {
       };
 
       const jsonText = JSON.stringify(payload);
-      const filename = makeBackupFilename(shopName);
+      const safeShopName = sanitizeFilenamePart(shopName) || 'Shop';
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const filename = `${safeShopName}-backup-${timestamp}.json`;
       downloadJson(filename, payload);
       setLastBackup({ filename, totalDocuments, sizeBytes: new Blob([jsonText]).size, createdAt: payload.createdAt });
       showToast(t('backupCreated', 'Backup downloaded successfully.'), 'success');
@@ -223,7 +217,7 @@ export default function BackupSettings({ tenantId, shopName }) {
           <div>
             <p className="font-black text-white">{t('browserBackupTitle', 'Browser Backup')}</p>
             <p className="mt-1 text-xs leading-6 text-slate-400">
-              {t('browserBackupDesc', 'Download this shop data as a JSON backup file.')}
+              {t('browserBackupDesc', 'Download this tenant data as a JSON file. This works without Cloud Functions.')}
             </p>
           </div>
         </div>
@@ -280,13 +274,7 @@ export default function BackupSettings({ tenantId, shopName }) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-xs leading-6 text-amber-100/80">
-        <div className="mb-1 flex items-center gap-2 font-semibold text-amber-100">
-          <AlertTriangle size={16} />
-          <span>{t('backupSafetyNote', 'Safety note')}</span>
-        </div>
-        <p>{t('backupSafetyDesc', 'Keep the downloaded JSON file private. Restore should be used only after confirming the selected file belongs to this shop.')}</p>
-      </div>
+
     </div>
   );
 }

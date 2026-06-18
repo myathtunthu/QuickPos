@@ -10,7 +10,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanFailure }) {
     try {
       const scanner = new Html5QrcodeScanner(
         "qr-reader",
-        { fps: 10, qrbox: { width: 250, height: 100 } },
+        { fps: 10, qrbox: { width: 250, height: 100 }, rememberLastUsedCamera: true },
         false
       );
       scannerRef.current = scanner;
@@ -32,7 +32,8 @@ export default function BarcodeScanner({ onScanSuccess, onScanFailure }) {
       logger.error('Error initializing Barcode Scanner:', initErr);
     }
 
-    return () => {
+    useEffect(()=>{document.body.style.overflow="hidden";return()=>{document.body.style.overflow="auto";};},[]);
+  return () => {
       if (scannerRef.current) {
         // 🌟 Replaced console.error with logger.error
         scannerRef.current.clear().catch(err => {
@@ -42,6 +43,7 @@ export default function BarcodeScanner({ onScanSuccess, onScanFailure }) {
     };
   }, [onScanSuccess, onScanFailure]);
 
+  useEffect(()=>{document.body.style.overflow="hidden";return()=>{document.body.style.overflow="auto";};},[]);
   return (
     <div className="w-full overflow-hidden rounded-lg border border-gray-700 bg-black">
       <div id="qr-reader" className="w-full"></div>

@@ -79,6 +79,21 @@ const formatBytes = (bytes = 0) => {
   return `${(size / 1024 / 1024).toFixed(2)} MB`;
 };
 
+const safeFilePart = (value, fallback = 'Shop') => {
+  const cleaned = String(value || '')
+    .trim()
+    .replace(/[\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || fallback;
+};
+
+const makeBackupFilename = (shopName) => {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  return `${safeFilePart(shopName, 'Shop')}-backup-${stamp}.json`;
+};
+
 const validateBackup = (payload, tenantId) => {
   if (!payload || payload.app !== 'QuickPos' || payload.type !== 'tenant-browser-backup') {
     throw new Error('Invalid QuickPos backup file.');
@@ -92,7 +107,7 @@ const validateBackup = (payload, tenantId) => {
   return true;
 };
 
-export default function BackupSettings({ tenantId }) {
+export default function BackupSettings({ tenantId, shopName }) {
   const { t } = useLanguage();
   const fileInputRef = useRef(null);
   const [loadingAction, setLoadingAction] = useState(null);
@@ -127,7 +142,7 @@ export default function BackupSettings({ tenantId }) {
       };
 
       const jsonText = JSON.stringify(payload);
-      const filename = `quickpos-backup-${tenantId}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      const filename = makeBackupFilename(shopName);
       downloadJson(filename, payload);
       setLastBackup({ filename, totalDocuments, sizeBytes: new Blob([jsonText]).size, createdAt: payload.createdAt });
       showToast(t('backupCreated', 'Backup downloaded successfully.'), 'success');
@@ -208,7 +223,7 @@ export default function BackupSettings({ tenantId }) {
           <div>
             <p className="font-black text-white">{t('browserBackupTitle', 'Browser Backup')}</p>
             <p className="mt-1 text-xs leading-6 text-slate-400">
-              {t('browserBackupDesc', 'Download this tenant data as a JSON file. This works without Cloud Functions.')}
+              {t('browserBackupDesc', 'Download this shop data as a JSON backup file.')}
             </p>
           </div>
         </div>

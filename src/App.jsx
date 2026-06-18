@@ -22,6 +22,15 @@ import CustomersPage from './pages/CustomersPage';
 import SuppliersPage from './pages/SuppliersPage';
 import DraftsPage from './pages/DraftsPage';
 
+const NotFoundPage = () => (
+  <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-6 text-white">
+    <div className="max-w-md rounded-3xl border border-white/10 bg-slate-950/90 p-8 text-center shadow-2xl">
+      <h1 className="text-3xl font-black text-cyan-200">404</h1>
+      <p className="mt-3 text-sm font-bold text-slate-300">Page not found</p>
+    </div>
+  </div>
+);
+
 import Layout from './components/UI/Layout';
 
 const LoadingScreen = () => (
@@ -45,7 +54,8 @@ const AdminOnlyRoute = ({ children }) => {
   if (loading) return <LoadingScreen />;
   if (!user || !profile) return <Navigate to="/login" replace />;
 
-  const isAdmin = profile.role === 'admin' || profile.role === 'owner';
+  const role = String(profile?.role || '').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'owner' || role === 'superadmin' || role === 'super_admin';
 
   if (!isAdmin) return <Navigate to="/entry" replace />;
 
@@ -195,7 +205,7 @@ function AppContent() {
           />
 
           <Route
-            path="/settings"
+            path="settings"
             element={
               <AdminOnlyRoute>
                 <SettingsPage />
@@ -223,7 +233,7 @@ function AppContent() {
 
         </Route>
 
-        <Route path="*" element={<Navigate to="/entry" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

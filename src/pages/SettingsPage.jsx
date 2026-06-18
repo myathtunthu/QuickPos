@@ -3,6 +3,8 @@ import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 
 import { collection, doc, getDoc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import {
   Download,
+  Crop,
+  CheckCircle,
   Image as ImageIcon,
   Lock,
   MapPin,
@@ -12,6 +14,7 @@ import {
   Settings,
   Store,
   Upload,
+  X,
   Wallet,
 } from 'lucide-react';
 import BackupSettings from '../components/Settings/BackupSettings';
@@ -25,7 +28,7 @@ import logger from '../utils/logger';
 const SECRET_SALT = 'QPOS_SECURE_99';
 const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
 
-const compressLogoFile = (file) => new Promise((resolve, reject) => {
+const readImageFile = (file) => new Promise((resolve, reject) => {
   if (!file?.type?.startsWith('image/')) {
     reject(new Error('Please select an image file.'));
     return;
@@ -33,25 +36,38 @@ const compressLogoFile = (file) => new Promise((resolve, reject) => {
 
   const reader = new FileReader();
   reader.onerror = () => reject(new Error('Unable to read image file.'));
-  reader.onload = () => {
-    const image = new Image();
-    image.onerror = () => reject(new Error('Unable to load image.'));
-    image.onload = () => {
-      const maxSize = 512;
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-      const width = Math.max(1, Math.round(image.width * scale));
-      const height = Math.max(1, Math.round(image.height * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(image, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/webp', 0.82));
-    };
-    image.src = reader.result;
-  };
+  reader.onload = () => resolve(reader.result);
   reader.readAsDataURL(file);
+});
+
+const cropLogoToSquare = ({ source, zoom = 1, offsetX = 0, offsetY = 0 }) => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onerror = () => reject(new Error('Unable to load image.'));
+  image.onload = () => {
+    const outputSize = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = outputSize;
+    canvas.height = outputSize;
+    const ctx = canvas.getContext('2d');
+
+    const baseScale = Math.max(outputSize / image.width, outputSize / image.height);
+    const scale = baseScale * Math.max(1, Number(zoom) || 1);
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+    const maxOffsetX = Math.max(0, (drawWidth - outputSize) / 2);
+    const maxOffsetY = Math.max(0, (drawHeight - outputSize) / 2);
+    const safeOffsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, Number(offsetX) || 0));
+    const safeOffsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, Number(offsetY) || 0));
+    const dx = (outputSize - drawWidth) / 2 + safeOffsetX;
+    const dy = (outputSize - drawHeight) / 2 + safeOffsetY;
+
+    ctx.clearRect(0, 0, outputSize, outputSize);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, outputSize, outputSize);
+    ctx.drawImage(image, dx, dy, drawWidth, drawHeight);
+    resolve(canvas.toDataURL('image/webp', 0.86));
+  };
+  image.src = source;
 });
 
 export default function SettingsPage() {
@@ -76,6 +92,7 @@ export default function SettingsPage() {
 
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [logoLoading, setLogoLoading] = useState(false);
+  const [logoCrop, setLogoCrop] = useState({ open: false, source: '', zoom: 1, offsetX: 0, offsetY: 0 });
   const fileRef = useRef(null);
   const logoInputRef = useRef(null);
 
@@ -113,15 +130,32 @@ export default function SettingsPage() {
 
     setLogoLoading(true);
     try {
-      const compressedLogo = await compressLogoFile(file);
-      setShopLogo(compressedLogo);
-      showToast(t('logoReady', 'Logo ready. Save settings to apply.'), 'success');
+      const source = await readImageFile(file);
+      setLogoCrop({ open: true, source, zoom: 1, offsetX: 0, offsetY: 0 });
     } catch (error) {
       logger.error('Logo upload failed:', error);
       showToast(error?.message || t('logoUploadFailed', 'Logo upload failed.'), 'error');
     } finally {
       setLogoLoading(false);
       if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
+
+  const cancelLogoCrop = () => setLogoCrop({ open: false, source: '', zoom: 1, offsetX: 0, offsetY: 0 });
+
+  const applyLogoCrop = async () => {
+    if (!logoCrop.source) return;
+    setLogoLoading(true);
+    try {
+      const croppedLogo = await cropLogoToSquare(logoCrop);
+      setShopLogo(croppedLogo);
+      cancelLogoCrop();
+      showToast(t('logoReady', 'Logo ready. Save settings to apply.'), 'success');
+    } catch (error) {
+      logger.error('Logo crop failed:', error);
+      showToast(error?.message || t('logoUploadFailed', 'Logo upload failed.'), 'error');
+    } finally {
+      setLogoLoading(false);
     }
   };
 
@@ -303,6 +337,62 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 pb-28 text-white sm:p-6">
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} />
+      {logoCrop.open ? (
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-cyan-400/25 bg-slate-950 p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="flex items-center gap-2 text-lg font-black text-white"><Crop size={20} /> {t('cropLogo', 'Crop Logo')}</h4>
+                <p className="mt-1 text-xs font-semibold text-slate-400">{t('cropLogoHint', 'Move and zoom the image before saving.')}</p>
+              </div>
+              <button type="button" onClick={cancelLogoCrop} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10"><X size={18} /></button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[1fr_180px]">
+              <div className="relative mx-auto aspect-square w-full max-w-[320px] overflow-hidden rounded-3xl border border-white/10 bg-black">
+                <img
+                  src={logoCrop.source}
+                  alt="Logo crop preview"
+                  className="absolute left-1/2 top-1/2 max-w-none select-none"
+                  style={{
+                    width: `${Number(logoCrop.zoom || 1) * 100}%`,
+                    height: 'auto',
+                    transform: `translate(calc(-50% + ${logoCrop.offsetX}px), calc(-50% + ${logoCrop.offsetY}px))`,
+                  }}
+                  draggable={false}
+                />
+                <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-cyan-300/50" />
+              </div>
+
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-black text-slate-400">{t('zoom', 'Zoom')}</span>
+                  <input type="range" min="1" max="3" step="0.05" value={logoCrop.zoom} onChange={(e) => setLogoCrop((prev) => ({ ...prev, zoom: Number(e.target.value) }))} className="w-full" />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-black text-slate-400">{t('moveHorizontal', 'Move Horizontal')}</span>
+                  <input type="range" min="-160" max="160" step="1" value={logoCrop.offsetX} onChange={(e) => setLogoCrop((prev) => ({ ...prev, offsetX: Number(e.target.value) }))} className="w-full" />
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-xs font-black text-slate-400">{t('moveVertical', 'Move Vertical')}</span>
+                  <input type="range" min="-160" max="160" step="1" value={logoCrop.offsetY} onChange={(e) => setLogoCrop((prev) => ({ ...prev, offsetY: Number(e.target.value) }))} className="w-full" />
+                </label>
+                <button type="button" onClick={() => setLogoCrop((prev) => ({ ...prev, zoom: 1, offsetX: 0, offsetY: 0 }))} className="w-full rounded-2xl border border-white/10 px-4 py-3 text-sm font-black text-slate-200 hover:bg-white/10">
+                  {t('resetCrop', 'Reset')}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={cancelLogoCrop} className="rounded-2xl border border-white/10 px-4 py-3 font-black text-slate-200 hover:bg-white/10">{t('cancel', 'Cancel')}</button>
+              <button type="button" onClick={applyLogoCrop} disabled={logoLoading} className="rounded-2xl bg-cyan-600 px-4 py-3 font-black text-white hover:bg-cyan-500 disabled:opacity-60">
+                {logoLoading ? t('processing', 'Processing...') : t('saveLogo', 'Save Logo')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
 
       <div className="flex items-center justify-between rounded-3xl border-2 border-cyan-500/15 bg-[#0d1120] p-6 shadow-xl sm:p-8">
         <div className="flex items-center gap-4">
@@ -439,9 +529,42 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        <div className="space-y-5 rounded-3xl border-2 border-white/5 bg-[#0d1120] p-6 shadow-lg sm:p-8 md:col-span-2">
+          <h4 className="mb-4 flex items-center gap-2 border-b border-white/10 pb-2 text-lg font-black text-amber-300">
+            <CheckCircle size={20} /> {t('settingsGuide', 'Settings Guide')}
+          </h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/5 p-4">
+              <p className="font-black text-cyan-100">{t('businessSetupGuide', 'Business Setup')}</p>
+              <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-5 text-slate-300">
+                <li>{t('businessSetupGuide1', 'Add shop name, phone, address and currency.')}</li>
+                <li>{t('businessSetupGuide2', 'Upload the logo, crop it, then save settings.')}</li>
+                <li>{t('businessSetupGuide3', 'Receipt preview uses this profile automatically.')}</li>
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/5 p-4">
+              <p className="font-black text-emerald-100">{t('backupGuide', 'Backup Guide')}</p>
+              <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-5 text-slate-300">
+                <li>{t('backupGuide1', 'Use Backup Now to download a JSON backup.')}</li>
+                <li>{t('backupGuide2', 'File name uses shop name and current date.')}</li>
+                <li>{t('backupGuide3', 'Keep backup files private and restore only to the same shop.')}</li>
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-blue-400/15 bg-blue-500/5 p-4">
+              <p className="font-black text-blue-100">{t('telegramBackupGuide', 'Telegram Backup Guide')}</p>
+              <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs leading-5 text-slate-300">
+                <li>{t('telegramGuide1', 'Create a bot from @BotFather and copy the token.')}</li>
+                <li>{t('telegramGuide2', 'Create a Telegram channel/group and add the bot as admin.')}</li>
+                <li>{t('telegramGuide3', 'Get the chat ID and save it in Telegram Settings.')}</li>
+                <li>{t('telegramGuide4', 'Use backend/Cloud Function later for automatic backup sending.')}</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-4 rounded-3xl border-2 border-white/5 bg-[#0d1120] p-6 shadow-lg sm:p-8 md:col-span-2">
           <h4 className="mb-4 border-b border-white/10 pb-2 text-lg font-black text-cyan-400">{t('backupRestore', 'Backup / Restore')}</h4>
-          <BackupSettings tenantId={profile?.tenantId} />
+          <BackupSettings tenantId={profile?.tenantId} shopName={shopName} />
         </div>
       </div>
     </div>

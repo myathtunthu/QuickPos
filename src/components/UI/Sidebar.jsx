@@ -22,7 +22,7 @@ export default function Sidebar({ collapsed = false, onCloseMobile }) {
 
   const account = userData || profile || {};
   const role = String(account?.role || '').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'owner' || role === 'superadmin';
+  const isAdmin = role === 'admin' || role === 'owner' || role === 'superadmin' || role === 'super_admin';
 
   const handleLogout = async () => {
     try {
@@ -48,7 +48,7 @@ export default function Sidebar({ collapsed = false, onCloseMobile }) {
 
   const visibleItems = navItems.filter((item) => {
     if (item.adminOnly && !isAdmin) return false;
-    if (item.perm && role !== 'superadmin' && !hasPermission(item.perm)) return false;
+    if (item.perm && !hasPermission(item.perm)) return false;
     return true;
   });
 

@@ -21,8 +21,7 @@ export default function Sidebar({ collapsed = false, onCloseMobile }) {
   const { t } = useLanguage();
 
   const account = userData || profile || {};
-  const role = String(account?.role || '').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'owner' || role === 'superadmin' || role === 'super_admin';
+  const isAdmin = ['admin', 'owner', 'superadmin', 'super_admin'].includes(String(account?.role || '').toLowerCase());
 
   const handleLogout = async () => {
     try {

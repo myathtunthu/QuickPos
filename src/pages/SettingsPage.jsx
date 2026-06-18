@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
 import {
   Download,
-  Crop,
-  CheckCircle,
   Image as ImageIcon,
   Lock,
   MapPin,
@@ -14,7 +13,6 @@ import {
   Settings,
   Store,
   Upload,
-  X,
   Wallet,
 } from 'lucide-react';
 import BackupSettings from '../components/Settings/BackupSettings';
@@ -28,7 +26,8 @@ import logger from '../utils/logger';
 const SECRET_SALT = 'QPOS_SECURE_99';
 const encodeAuth = (pwd) => btoa(encodeURIComponent(pwd + SECRET_SALT)).split('').reverse().join('');
 
-const readImageFile = (file) => new Promise((resolve, reject) => {
+
+const readLogoImageFile = (file) => new Promise((resolve, reject) => {
   if (!file?.type?.startsWith('image/')) {
     reject(new Error('Please select an image file.'));
     return;
@@ -36,39 +35,67 @@ const readImageFile = (file) => new Promise((resolve, reject) => {
 
   const reader = new FileReader();
   reader.onerror = () => reject(new Error('Unable to read image file.'));
-  reader.onload = () => resolve(reader.result);
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Unable to load image.'));
+    image.onload = () => resolve({
+      dataUrl: reader.result,
+      width: image.naturalWidth || image.width,
+      height: image.naturalHeight || image.height,
+      name: file.name || 'logo',
+    });
+    image.src = reader.result;
+  };
   reader.readAsDataURL(file);
 });
 
-const cropLogoToSquare = ({ source, zoom = 1, offsetX = 0, offsetY = 0 }) => new Promise((resolve, reject) => {
+const loadImageFromDataUrl = (dataUrl) => new Promise((resolve, reject) => {
   const image = new Image();
-  image.onerror = () => reject(new Error('Unable to load image.'));
-  image.onload = () => {
-    const outputSize = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = outputSize;
-    canvas.height = outputSize;
-    const ctx = canvas.getContext('2d');
-
-    const baseScale = Math.max(outputSize / image.width, outputSize / image.height);
-    const scale = baseScale * Math.max(1, Number(zoom) || 1);
-    const drawWidth = image.width * scale;
-    const drawHeight = image.height * scale;
-    const maxOffsetX = Math.max(0, (drawWidth - outputSize) / 2);
-    const maxOffsetY = Math.max(0, (drawHeight - outputSize) / 2);
-    const safeOffsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, Number(offsetX) || 0));
-    const safeOffsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, Number(offsetY) || 0));
-    const dx = (outputSize - drawWidth) / 2 + safeOffsetX;
-    const dy = (outputSize - drawHeight) / 2 + safeOffsetY;
-
-    ctx.clearRect(0, 0, outputSize, outputSize);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, outputSize, outputSize);
-    ctx.drawImage(image, dx, dy, drawWidth, drawHeight);
-    resolve(canvas.toDataURL('image/webp', 0.86));
-  };
-  image.src = source;
+  image.onerror = () => reject(new Error('Unable to load crop image.'));
+  image.onload = () => resolve(image);
+  image.src = dataUrl;
 });
+
+const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, removeLightBackground) => {
+  const image = await loadImageFromDataUrl(dataUrl);
+  const cropSize = 300;
+  const outputSize = 512;
+  const scale = Math.min(cropSize / width, cropSize / height) * Number(zoom || 1);
+  const displayWidth = width * scale;
+  const displayHeight = height * scale;
+  const imageLeft = ((cropSize - displayWidth) / 2) + Number(offset?.x || 0);
+  const imageTop = ((cropSize - displayHeight) / 2) + Number(offset?.y || 0);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = outputSize;
+  canvas.height = outputSize;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, outputSize, outputSize);
+  const outputScale = outputSize / cropSize;
+  ctx.save();
+  ctx.translate(imageLeft * outputScale, imageTop * outputScale);
+  ctx.scale(scale * outputScale, scale * outputScale);
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
+
+  if (removeLightBackground) {
+    const imageData = ctx.getImageData(0, 0, outputSize, outputSize);
+    const pixels = imageData.data;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const red = pixels[i];
+      const green = pixels[i + 1];
+      const blue = pixels[i + 2];
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      if (max > 238 && max - min < 18) {
+        pixels[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  return canvas.toDataURL('image/png');
+};
 
 export default function SettingsPage() {
   const { profile, logout } = useAuth();
@@ -92,9 +119,13 @@ export default function SettingsPage() {
 
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [logoLoading, setLogoLoading] = useState(false);
-  const [logoCrop, setLogoCrop] = useState({ open: false, source: '', zoom: 1, offsetX: 0, offsetY: 0 });
+  const [logoCrop, setLogoCrop] = useState(null);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [removeLightBackground, setRemoveLightBackground] = useState(false);
   const fileRef = useRef(null);
   const logoInputRef = useRef(null);
+  const cropDragRef = useRef(null);
 
   useEffect(() => {
     if (!profile?.tenantId) return;
@@ -124,14 +155,29 @@ export default function SettingsPage() {
     fetchSettings();
   }, [profile?.tenantId, t]);
 
+  useEffect(() => {
+    if (!logoCrop || typeof document === 'undefined') return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const previousTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.touchAction = previousTouchAction;
+    };
+  }, [logoCrop]);
+
   const handleLogoUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setLogoLoading(true);
     try {
-      const source = await readImageFile(file);
-      setLogoCrop({ open: true, source, zoom: 1, offsetX: 0, offsetY: 0 });
+      const imageInfo = await readLogoImageFile(file);
+      setLogoCrop(imageInfo);
+      setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
+      setRemoveLightBackground(false);
     } catch (error) {
       logger.error('Logo upload failed:', error);
       showToast(error?.message || t('logoUploadFailed', 'Logo upload failed.'), 'error');
@@ -141,15 +187,46 @@ export default function SettingsPage() {
     }
   };
 
-  const cancelLogoCrop = () => setLogoCrop({ open: false, source: '', zoom: 1, offsetX: 0, offsetY: 0 });
+  const closeLogoCrop = () => {
+    setLogoCrop(null);
+    setCropOffset({ x: 0, y: 0 });
+    setCropZoom(1);
+    setRemoveLightBackground(false);
+  };
+
+  const handleCropPointerDown = (event) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    cropDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: cropOffset.x,
+      originY: cropOffset.y,
+    };
+  };
+
+  const handleCropPointerMove = (event) => {
+    const drag = cropDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setCropOffset({
+      x: drag.originX + (event.clientX - drag.startX),
+      y: drag.originY + (event.clientY - drag.startY),
+    });
+  };
+
+  const handleCropPointerUp = (event) => {
+    if (cropDragRef.current?.pointerId === event.pointerId) cropDragRef.current = null;
+  };
 
   const applyLogoCrop = async () => {
-    if (!logoCrop.source) return;
+    if (!logoCrop) return;
     setLogoLoading(true);
     try {
-      const croppedLogo = await cropLogoToSquare(logoCrop);
+      const croppedLogo = await cropLogoToPng(logoCrop, cropZoom, cropOffset, removeLightBackground);
       setShopLogo(croppedLogo);
-      cancelLogoCrop();
+      closeLogoCrop();
       showToast(t('logoReady', 'Logo ready. Save settings to apply.'), 'success');
     } catch (error) {
       logger.error('Logo crop failed:', error);
@@ -157,6 +234,103 @@ export default function SettingsPage() {
     } finally {
       setLogoLoading(false);
     }
+  };
+
+  const renderLogoCropModal = () => {
+    if (!logoCrop || typeof document === 'undefined') return null;
+
+    const cropSize = 300;
+    const baseScale = Math.min(cropSize / logoCrop.width, cropSize / logoCrop.height);
+    const scale = baseScale * cropZoom;
+    const displayWidth = logoCrop.width * scale;
+    const displayHeight = logoCrop.height * scale;
+    const imageLeft = ((cropSize - displayWidth) / 2) + cropOffset.x;
+    const imageTop = ((cropSize - displayHeight) / 2) + cropOffset.y;
+
+    const modal = (
+      <div
+        className="fixed inset-0 z-[2147483647] grid place-items-center bg-black/70 p-3 backdrop-blur-xl print:hidden"
+        onWheel={(event) => event.preventDefault()}
+        onTouchMove={(event) => event.preventDefault()}
+      >
+        <div className="w-full max-w-[390px] overflow-hidden rounded-[28px] border border-cyan-400/30 bg-[#090f1d] shadow-2xl shadow-cyan-950/40">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">{t('logoCropTitle', 'Crop Logo')}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{t('logoCropHelp', 'Drag the photo and keep only the logo inside the box.')}</p>
+            </div>
+            <button type="button" onClick={closeLogoCrop} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black text-slate-300 active:scale-95">
+              ✕
+            </button>
+          </div>
+
+          <div className="p-4">
+            <div
+              className="relative mx-auto h-[300px] w-[300px] touch-none overflow-hidden rounded-3xl border-2 border-cyan-300 bg-[linear-gradient(45deg,#182235_25%,transparent_25%),linear-gradient(-45deg,#182235_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#182235_75%),linear-gradient(-45deg,transparent_75%,#182235_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0] shadow-inner"
+              onPointerDown={handleCropPointerDown}
+              onPointerMove={handleCropPointerMove}
+              onPointerUp={handleCropPointerUp}
+              onPointerCancel={handleCropPointerUp}
+            >
+              <img
+                src={logoCrop.dataUrl}
+                alt="Crop logo"
+                draggable="false"
+                className="absolute max-w-none select-none"
+                style={{
+                  left: `${imageLeft}px`,
+                  top: `${imageTop}px`,
+                  width: `${displayWidth}px`,
+                  height: `${displayHeight}px`,
+                }}
+              />
+              <div className="pointer-events-none absolute inset-0 rounded-3xl ring-4 ring-cyan-300/75" />
+              <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-white/20" />
+              <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-white/20" />
+              <div className="pointer-events-none absolute left-0 top-1/3 h-px w-full bg-white/20" />
+              <div className="pointer-events-none absolute left-0 top-2/3 h-px w-full bg-white/20" />
+            </div>
+
+            <label className="mt-4 block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">{t('zoom', 'Zoom')}</span>
+              <input
+                type="range"
+                min="1"
+                max="4"
+                step="0.01"
+                value={cropZoom}
+                onChange={(event) => setCropZoom(Number(event.target.value))}
+                className="w-full accent-cyan-300"
+              />
+            </label>
+
+            <label className="mt-4 flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={removeLightBackground}
+                onChange={(event) => setRemoveLightBackground(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-cyan-300"
+              />
+              <span>
+                <span className="block font-black text-white">{t('removeWhiteBg', 'Remove white/light background')}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-400">{t('removeWhiteBgHelp', 'Useful for JPG logos with white background. The saved logo will be PNG.')}</span>
+              </span>
+            </label>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button type="button" onClick={closeLogoCrop} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-black text-slate-200 active:scale-95">
+                {t('cancel', 'Cancel')}
+              </button>
+              <button type="button" onClick={applyLogoCrop} disabled={logoLoading} className="rounded-2xl bg-cyan-400 px-4 py-3 font-black text-slate-950 active:scale-95 disabled:opacity-60">
+                {logoLoading ? t('processing', 'Processing...') : t('applyCrop', 'Apply Crop')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return createPortal(modal, document.body);
   };
 
   const saveSettings = async () => {
@@ -337,62 +511,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 pb-28 text-white sm:p-6">
       <ConfirmDialog {...confirmDialog} onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} />
-      {logoCrop.open ? (
-        <div className="fixed inset-0 z-[9999] grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-cyan-400/25 bg-slate-950 p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h4 className="flex items-center gap-2 text-lg font-black text-white"><Crop size={20} /> {t('cropLogo', 'Crop Logo')}</h4>
-                <p className="mt-1 text-xs font-semibold text-slate-400">{t('cropLogoHint', 'Move and zoom the image before saving.')}</p>
-              </div>
-              <button type="button" onClick={cancelLogoCrop} className="rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10"><X size={18} /></button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-[1fr_180px]">
-              <div className="relative mx-auto aspect-square w-full max-w-[320px] overflow-hidden rounded-3xl border border-white/10 bg-black">
-                <img
-                  src={logoCrop.source}
-                  alt="Logo crop preview"
-                  className="absolute left-1/2 top-1/2 max-w-none select-none"
-                  style={{
-                    width: `${Number(logoCrop.zoom || 1) * 100}%`,
-                    height: 'auto',
-                    transform: `translate(calc(-50% + ${logoCrop.offsetX}px), calc(-50% + ${logoCrop.offsetY}px))`,
-                  }}
-                  draggable={false}
-                />
-                <div className="pointer-events-none absolute inset-0 rounded-3xl ring-2 ring-cyan-300/50" />
-              </div>
-
-              <div className="space-y-4">
-                <label className="block">
-                  <span className="mb-2 block text-xs font-black text-slate-400">{t('zoom', 'Zoom')}</span>
-                  <input type="range" min="1" max="3" step="0.05" value={logoCrop.zoom} onChange={(e) => setLogoCrop((prev) => ({ ...prev, zoom: Number(e.target.value) }))} className="w-full" />
-                </label>
-                <label className="block">
-                  <span className="mb-2 block text-xs font-black text-slate-400">{t('moveHorizontal', 'Move Horizontal')}</span>
-                  <input type="range" min="-160" max="160" step="1" value={logoCrop.offsetX} onChange={(e) => setLogoCrop((prev) => ({ ...prev, offsetX: Number(e.target.value) }))} className="w-full" />
-                </label>
-                <label className="block">
-                  <span className="mb-2 block text-xs font-black text-slate-400">{t('moveVertical', 'Move Vertical')}</span>
-                  <input type="range" min="-160" max="160" step="1" value={logoCrop.offsetY} onChange={(e) => setLogoCrop((prev) => ({ ...prev, offsetY: Number(e.target.value) }))} className="w-full" />
-                </label>
-                <button type="button" onClick={() => setLogoCrop((prev) => ({ ...prev, zoom: 1, offsetX: 0, offsetY: 0 }))} className="w-full rounded-2xl border border-white/10 px-4 py-3 text-sm font-black text-slate-200 hover:bg-white/10">
-                  {t('resetCrop', 'Reset')}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button type="button" onClick={cancelLogoCrop} className="rounded-2xl border border-white/10 px-4 py-3 font-black text-slate-200 hover:bg-white/10">{t('cancel', 'Cancel')}</button>
-              <button type="button" onClick={applyLogoCrop} disabled={logoLoading} className="rounded-2xl bg-cyan-600 px-4 py-3 font-black text-white hover:bg-cyan-500 disabled:opacity-60">
-                {logoLoading ? t('processing', 'Processing...') : t('saveLogo', 'Save Logo')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
+      {renderLogoCropModal()}
 
       <div className="flex items-center justify-between rounded-3xl border-2 border-cyan-500/15 bg-[#0d1120] p-6 shadow-xl sm:p-8">
         <div className="flex items-center gap-4">
@@ -527,39 +646,6 @@ export default function SettingsPage() {
           <button onClick={() => fileRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500/15 py-4 font-black text-amber-200 transition hover:bg-amber-500/25 active:scale-95">
             <Upload size={18} /> {t('importCsv', 'Import CSV')}
           </button>
-        </div>
-
-        <div className="space-y-5 rounded-3xl border-2 border-white/5 bg-[#0d1120] p-6 shadow-lg sm:p-8 md:col-span-2">
-          <h4 className="mb-4 flex items-center gap-2 border-b border-white/10 pb-2 text-lg font-black text-amber-300">
-            <CheckCircle size={20} /> {t('settingsGuide', 'Settings Guide')}
-          </h4>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-cyan-400/15 bg-cyan-500/5 p-4">
-              <p className="font-black text-cyan-100">{t('businessSetupGuide', 'Business Setup')}</p>
-              <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-5 text-slate-300">
-                <li>{t('businessSetupGuide1', 'Add shop name, phone, address and currency.')}</li>
-                <li>{t('businessSetupGuide2', 'Upload the logo, crop it, then save settings.')}</li>
-                <li>{t('businessSetupGuide3', 'Receipt preview uses this profile automatically.')}</li>
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/5 p-4">
-              <p className="font-black text-emerald-100">{t('backupGuide', 'Backup Guide')}</p>
-              <ul className="mt-3 list-disc space-y-2 pl-4 text-xs leading-5 text-slate-300">
-                <li>{t('backupGuide1', 'Use Backup Now to download a JSON backup.')}</li>
-                <li>{t('backupGuide2', 'File name uses shop name and current date.')}</li>
-                <li>{t('backupGuide3', 'Keep backup files private and restore only to the same shop.')}</li>
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-blue-400/15 bg-blue-500/5 p-4">
-              <p className="font-black text-blue-100">{t('telegramBackupGuide', 'Telegram Backup Guide')}</p>
-              <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs leading-5 text-slate-300">
-                <li>{t('telegramGuide1', 'Create a bot from @BotFather and copy the token.')}</li>
-                <li>{t('telegramGuide2', 'Create a Telegram channel/group and add the bot as admin.')}</li>
-                <li>{t('telegramGuide3', 'Get the chat ID and save it in Telegram Settings.')}</li>
-                <li>{t('telegramGuide4', 'Use backend/Cloud Function later for automatic backup sending.')}</li>
-              </ol>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-4 rounded-3xl border-2 border-white/5 bg-[#0d1120] p-6 shadow-lg sm:p-8 md:col-span-2">

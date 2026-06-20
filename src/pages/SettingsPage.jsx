@@ -56,54 +56,110 @@ const loadImageFromDataUrl = (dataUrl) => new Promise((resolve, reject) => {
   image.src = dataUrl;
 });
 
-const clampNumber = (value, min, max) => Math.min(Math.max(Number(value) || 0, min), max);
-
-const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, cropBox, removeLightBackground) => {
+const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, removeLightBackground) => {
   const image = await loadImageFromDataUrl(dataUrl);
-  const stageSize = 320;
-  const safeBox = {
-    x: clampNumber(cropBox?.x ?? 60, 0, stageSize - 40),
-    y: clampNumber(cropBox?.y ?? 60, 0, stageSize - 40),
-    w: clampNumber(cropBox?.w ?? 200, 40, stageSize),
-    h: clampNumber(cropBox?.h ?? 200, 40, stageSize),
-  };
-  safeBox.w = Math.min(safeBox.w, stageSize - safeBox.x);
-  safeBox.h = Math.min(safeBox.h, stageSize - safeBox.y);
-
-  const baseScale = Math.min(stageSize / width, stageSize / height);
-  const scale = baseScale * Number(zoom || 1);
+  const cropSize = 300;
+  const outputSize = 512;
+  const scale = Math.min(cropSize / width, cropSize / height) * Number(zoom || 1);
   const displayWidth = width * scale;
   const displayHeight = height * scale;
-  const imageLeft = ((stageSize - displayWidth) / 2) + Number(offset?.x || 0);
-  const imageTop = ((stageSize - displayHeight) / 2) + Number(offset?.y || 0);
+  const imageLeft = ((cropSize - displayWidth) / 2) + Number(offset?.x || 0);
+  const imageTop = ((cropSize - displayHeight) / 2) + Number(offset?.y || 0);
 
-  const sourceX = clampNumber((safeBox.x - imageLeft) / scale, 0, width);
-  const sourceY = clampNumber((safeBox.y - imageTop) / scale, 0, height);
-  const sourceW = clampNumber(safeBox.w / scale, 1, width - sourceX);
-  const sourceH = clampNumber(safeBox.h / scale, 1, height - sourceY);
-
-  const maxOutput = 512;
-  const ratio = Math.min(maxOutput / sourceW, maxOutput / sourceH, 1);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(sourceW * ratio));
-  canvas.height = Math.max(1, Math.round(sourceH * ratio));
+  canvas.width = outputSize;
+  canvas.height = outputSize;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, outputSize, outputSize);
+  const outputScale = outputSize / cropSize;
+  ctx.save();
+  ctx.translate(imageLeft * outputScale, imageTop * outputScale);
+  ctx.scale(scale * outputScale, scale * outputScale);
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
 
   if (removeLightBackground) {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, outputSize, outputSize);
     const pixels = imageData.data;
+
+    const colorDistance = (r1, g1, b1, r2, g2, b2) => {
+      const dr = r1 - r2;
+      const dg = g1 - g2;
+      const db = b1 - b2;
+      return Math.sqrt((dr * dr) + (dg * dg) + (db * db));
+    };
+
+    const sampleEdgeBackground = () => {
+      const samples = [];
+      const step = Math.max(1, Math.floor(outputSize / 24));
+
+      for (let x = 0; x < outputSize; x += step) {
+        samples.push([x, 0], [x, outputSize - 1]);
+      }
+
+      for (let y = 0; y < outputSize; y += step) {
+        samples.push([0, y], [outputSize - 1, y]);
+      }
+
+      let totalR = 0;
+      let totalG = 0;
+      let totalB = 0;
+      let count = 0;
+
+      samples.forEach(([x, y]) => {
+        const idx = ((y * outputSize) + x) * 4;
+        const alpha = pixels[idx + 3];
+        if (alpha < 20) return;
+
+        const red = pixels[idx];
+        const green = pixels[idx + 1];
+        const blue = pixels[idx + 2];
+        const max = Math.max(red, green, blue);
+        const min = Math.min(red, green, blue);
+        const saturation = max - min;
+
+        if (max > 185 && saturation < 55) {
+          totalR += red;
+          totalG += green;
+          totalB += blue;
+          count += 1;
+        }
+      });
+
+      if (!count) return { r: 255, g: 255, b: 255 };
+      return {
+        r: Math.round(totalR / count),
+        g: Math.round(totalG / count),
+        b: Math.round(totalB / count),
+      };
+    };
+
+    const bg = sampleEdgeBackground();
+
     for (let i = 0; i < pixels.length; i += 4) {
       const red = pixels[i];
       const green = pixels[i + 1];
       const blue = pixels[i + 2];
+      const alpha = pixels[i + 3];
+
+      if (alpha < 10) continue;
+
       const max = Math.max(red, green, blue);
       const min = Math.min(red, green, blue);
-      if (max > 238 && max - min < 18) {
-        pixels[i + 3] = 0;
+      const saturation = max - min;
+      const brightness = (red + green + blue) / 3;
+      const nearDetectedBg = colorDistance(red, green, blue, bg.r, bg.g, bg.b) < 52;
+      const nearWhite = max > 222 && saturation < 38;
+      const lightLowSaturation = brightness > 212 && saturation < 48;
+      const veryLightGray = red > 205 && green > 205 && blue > 205 && saturation < 62;
+
+      if (nearDetectedBg || nearWhite || lightLowSaturation || veryLightGray) {
+        const fade = Math.max(0, Math.min(1, (brightness - 190) / 55));
+        pixels[i + 3] = Math.round(alpha * (1 - fade));
+        if (pixels[i + 3] < 70) pixels[i + 3] = 0;
       }
     }
+
     ctx.putImageData(imageData, 0, 0);
   }
 
@@ -135,7 +191,6 @@ export default function SettingsPage() {
   const [logoCrop, setLogoCrop] = useState(null);
   const [cropZoom, setCropZoom] = useState(1);
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
-  const [cropBox, setCropBox] = useState({ x: 60, y: 60, w: 200, h: 200 });
   const [removeLightBackground, setRemoveLightBackground] = useState(false);
   const fileRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -191,7 +246,6 @@ export default function SettingsPage() {
       setLogoCrop(imageInfo);
       setCropZoom(1);
       setCropOffset({ x: 0, y: 0 });
-      setCropBox({ x: 60, y: 60, w: 200, h: 200 });
       setRemoveLightBackground(false);
     } catch (error) {
       logger.error('Logo upload failed:', error);
@@ -205,17 +259,14 @@ export default function SettingsPage() {
   const closeLogoCrop = () => {
     setLogoCrop(null);
     setCropOffset({ x: 0, y: 0 });
-    setCropBox({ x: 60, y: 60, w: 200, h: 200 });
     setCropZoom(1);
     setRemoveLightBackground(false);
   };
 
-  const handleImagePanPointerDown = (event) => {
-    if (event.target?.dataset?.role !== 'crop-stage') return;
+  const handleCropPointerDown = (event) => {
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     cropDragRef.current = {
-      mode: 'image-pan',
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -224,60 +275,14 @@ export default function SettingsPage() {
     };
   };
 
-  const handleCropBoxPointerDown = (event, mode = 'move') => {
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    cropDragRef.current = {
-      mode,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originBox: { ...cropBox },
-    };
-  };
-
   const handleCropPointerMove = (event) => {
     const drag = cropDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    const stageSize = 320;
-
-    if (drag.mode === 'image-pan') {
-      setCropOffset({
-        x: drag.originX + dx,
-        y: drag.originY + dy,
-      });
-      return;
-    }
-
-    const minSize = 48;
-    const original = drag.originBox;
-    let next = { ...original };
-
-    if (drag.mode === 'move') {
-      next.x = clampNumber(original.x + dx, 0, stageSize - original.w);
-      next.y = clampNumber(original.y + dy, 0, stageSize - original.h);
-    }
-
-    if (drag.mode.includes('e')) next.w = clampNumber(original.w + dx, minSize, stageSize - original.x);
-    if (drag.mode.includes('s')) next.h = clampNumber(original.h + dy, minSize, stageSize - original.y);
-    if (drag.mode.includes('w')) {
-      const newX = clampNumber(original.x + dx, 0, original.x + original.w - minSize);
-      next.w = original.w + (original.x - newX);
-      next.x = newX;
-    }
-    if (drag.mode.includes('n')) {
-      const newY = clampNumber(original.y + dy, 0, original.y + original.h - minSize);
-      next.h = original.h + (original.y - newY);
-      next.y = newY;
-    }
-
-    next.w = clampNumber(next.w, minSize, stageSize - next.x);
-    next.h = clampNumber(next.h, minSize, stageSize - next.y);
-    setCropBox(next);
+    setCropOffset({
+      x: drag.originX + (event.clientX - drag.startX),
+      y: drag.originY + (event.clientY - drag.startY),
+    });
   };
 
   const handleCropPointerUp = (event) => {
@@ -288,7 +293,7 @@ export default function SettingsPage() {
     if (!logoCrop) return;
     setLogoLoading(true);
     try {
-      const croppedLogo = await cropLogoToPng(logoCrop, cropZoom, cropOffset, cropBox, removeLightBackground);
+      const croppedLogo = await cropLogoToPng(logoCrop, cropZoom, cropOffset, removeLightBackground);
       setShopLogo(croppedLogo);
       closeLogoCrop();
       showToast(t('logoReady', 'Logo ready. Save settings to apply.'), 'success');
@@ -303,7 +308,7 @@ export default function SettingsPage() {
   const renderLogoCropModal = () => {
     if (!logoCrop || typeof document === 'undefined') return null;
 
-    const cropSize = 320;
+    const cropSize = 300;
     const baseScale = Math.min(cropSize / logoCrop.width, cropSize / logoCrop.height);
     const scale = baseScale * cropZoom;
     const displayWidth = logoCrop.width * scale;
@@ -321,7 +326,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">{t('logoCropTitle', 'Crop Logo')}</p>
-              <p className="mt-1 text-xs font-semibold text-slate-400">{t('logoCropHelp', 'Drag or resize the crop box. Drag the background to move the image. Save as PNG.')}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">{t('logoCropHelp', 'Drag the photo and keep only the logo inside the box.')}</p>
             </div>
             <button type="button" onClick={closeLogoCrop} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-black text-slate-300 active:scale-95">
               ✕
@@ -330,9 +335,8 @@ export default function SettingsPage() {
 
           <div className="p-4">
             <div
-              data-role="crop-stage"
-              className="relative mx-auto h-[320px] w-[320px] touch-none overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(45deg,#182235_25%,transparent_25%),linear-gradient(-45deg,#182235_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#182235_75%),linear-gradient(-45deg,transparent_75%,#182235_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0] shadow-inner"
-              onPointerDown={handleImagePanPointerDown}
+              className="relative mx-auto h-[300px] w-[300px] touch-none overflow-hidden rounded-3xl border-2 border-cyan-300 bg-[linear-gradient(45deg,#182235_25%,transparent_25%),linear-gradient(-45deg,#182235_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#182235_75%),linear-gradient(-45deg,transparent_75%,#182235_75%)] bg-[length:24px_24px] bg-[position:0_0,0_12px,12px_-12px,-12px_0] shadow-inner"
+              onPointerDown={handleCropPointerDown}
               onPointerMove={handleCropPointerMove}
               onPointerUp={handleCropPointerUp}
               onPointerCancel={handleCropPointerUp}
@@ -341,7 +345,7 @@ export default function SettingsPage() {
                 src={logoCrop.dataUrl}
                 alt="Crop logo"
                 draggable="false"
-                className="pointer-events-none absolute max-w-none select-none"
+                className="absolute max-w-none select-none"
                 style={{
                   left: `${imageLeft}px`,
                   top: `${imageTop}px`,
@@ -349,21 +353,11 @@ export default function SettingsPage() {
                   height: `${displayHeight}px`,
                 }}
               />
-              <div className="pointer-events-none absolute inset-0 bg-black/35" />
-              <div
-                className="absolute border-2 border-cyan-300 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]"
-                style={{ left: `${cropBox.x}px`, top: `${cropBox.y}px`, width: `${cropBox.w}px`, height: `${cropBox.h}px` }}
-                onPointerDown={(event) => handleCropBoxPointerDown(event, 'move')}
-              >
-                <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-cyan-100/45" />
-                <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-cyan-100/45" />
-                <div className="pointer-events-none absolute left-0 top-1/3 h-px w-full bg-cyan-100/45" />
-                <div className="pointer-events-none absolute left-0 top-2/3 h-px w-full bg-cyan-100/45" />
-                <button type="button" aria-label="Resize crop from top left" onPointerDown={(event) => handleCropBoxPointerDown(event, 'nw')} className="absolute -left-3 -top-3 h-6 w-6 rounded-full border-2 border-cyan-100 bg-cyan-400 shadow-lg" />
-                <button type="button" aria-label="Resize crop from top right" onPointerDown={(event) => handleCropBoxPointerDown(event, 'ne')} className="absolute -right-3 -top-3 h-6 w-6 rounded-full border-2 border-cyan-100 bg-cyan-400 shadow-lg" />
-                <button type="button" aria-label="Resize crop from bottom left" onPointerDown={(event) => handleCropBoxPointerDown(event, 'sw')} className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full border-2 border-cyan-100 bg-cyan-400 shadow-lg" />
-                <button type="button" aria-label="Resize crop from bottom right" onPointerDown={(event) => handleCropBoxPointerDown(event, 'se')} className="absolute -bottom-3 -right-3 h-6 w-6 rounded-full border-2 border-cyan-100 bg-cyan-400 shadow-lg" />
-              </div>
+              <div className="pointer-events-none absolute inset-0 rounded-3xl ring-4 ring-cyan-300/75" />
+              <div className="pointer-events-none absolute left-1/3 top-0 h-full w-px bg-white/20" />
+              <div className="pointer-events-none absolute left-2/3 top-0 h-full w-px bg-white/20" />
+              <div className="pointer-events-none absolute left-0 top-1/3 h-px w-full bg-white/20" />
+              <div className="pointer-events-none absolute left-0 top-2/3 h-px w-full bg-white/20" />
             </div>
 
             <label className="mt-4 block">

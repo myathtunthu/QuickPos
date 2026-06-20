@@ -589,6 +589,39 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          <div className="mt-6 rounded-3xl border border-cyan-400/20 bg-black/35 p-5">
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300">{t('receiptPreview', 'Receipt Preview')}</p>
+                <h5 className="mt-1 text-lg font-black text-white">{shopName?.trim() || t('shopName', 'Shop Name')}</h5>
+              </div>
+              {shopLogo ? (
+                <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-white/10 bg-white p-2">
+                  <img src={shopLogo} alt="Receipt logo preview" className="h-full w-full object-contain" />
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-2 text-center text-sm leading-6 text-slate-300">
+              <p className="text-base font-black text-white">{shopName?.trim() || t('shopName', 'Shop Name')}</p>
+              {shopPhone?.trim() ? <p>{t('shopPhone', 'Phone')}: {shopPhone.trim()}</p> : null}
+              {shopAddress?.trim() ? <p className="whitespace-pre-line">{shopAddress.trim()}</p> : null}
+              <div className="my-3 border-t border-dashed border-white/20" />
+              <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-400">
+                <span>{t('item', 'Item')}</span>
+                <span>{t('qty', 'Qty')}</span>
+                <span>{t('amount', 'Amount')}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/[0.04] px-3 py-2 text-xs">
+                <span>{t('sampleItem', 'Sample Item')}</span>
+                <span>1</span>
+                <span>1,000 {currency || 'Ks'}</span>
+              </div>
+              <div className="my-3 border-t border-dashed border-white/20" />
+              <p className="text-right text-base font-black text-cyan-200">{t('total', 'Total')}: 1,000 {currency || 'Ks'}</p>
+              {receiptFooter?.trim() ? <p className="pt-2 text-xs font-bold text-slate-400 whitespace-pre-line">{receiptFooter.trim()}</p> : null}
+            </div>
+          </div>
+
           <button onClick={saveSettings} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 py-4 font-black text-white transition-colors hover:bg-cyan-500 active:scale-95">
             <Save size={18} /> {t('saveSettings', 'Save Settings')}
           </button>

@@ -22,6 +22,56 @@ const buildExpiryPatch = (expiryDate) => {
   return expiryAt ? { expiryDate, expiryAt } : { expiryDate };
 };
 
+const EXPIRY_SHORTCUTS = [
+  { value: '', label: 'Shortcut' },
+  { value: '3d', label: '3 Days' },
+  { value: '7d', label: '7 Days' },
+  { value: '1m', label: '1 Month' },
+  { value: '3m', label: '3 Months' },
+  { value: '6m', label: '6 Months' },
+  { value: '1y', label: '1 Year' },
+];
+
+const toDateInputValue = (date) => {
+  const tzSafe = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return tzSafe.toISOString().split('T')[0];
+};
+
+const getShortcutExpiryDate = (shortcut) => {
+  const date = new Date();
+  switch (shortcut) {
+    case '3d':
+      date.setDate(date.getDate() + 3);
+      break;
+    case '7d':
+      date.setDate(date.getDate() + 7);
+      break;
+    case '1m':
+      date.setMonth(date.getMonth() + 1);
+      break;
+    case '3m':
+      date.setMonth(date.getMonth() + 3);
+      break;
+    case '6m':
+      date.setMonth(date.getMonth() + 6);
+      break;
+    case '1y':
+      date.setFullYear(date.getFullYear() + 1);
+      break;
+    default:
+      return '';
+  }
+  return toDateInputValue(date);
+};
+
+const getShortcutDays = (shortcut) => {
+  const today = new Date();
+  const expiry = getShortcutExpiryDate(shortcut);
+  if (!expiry) return 30;
+  const expiryDate = new Date(`${expiry}T23:59:59.999`);
+  return Math.max(1, Math.ceil((expiryDate - today) / (24 * 60 * 60 * 1000)));
+};
+
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
@@ -46,7 +96,7 @@ export default function SuperAdminPage() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
   const [tenantAnalytics, setTenantAnalytics] = useState(null);
-  const [bulkDays, setBulkDays] = useState('30');
+  const [bulkDays, setBulkDays] = useState('1m');
   const [selectedIds, setSelectedIds] = useState([]);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
@@ -252,11 +302,11 @@ export default function SuperAdminPage() {
 
   // ==================== BULK EXPIRY UPDATE ====================
   const bulkUpdateExpiry = async () => {
-    const days = parseInt(bulkDays) || 30;
-    const now = new Date(); now.setDate(now.getDate() + days);
-    const newDate = now.toISOString().split('T')[0];
+    const newDate = getShortcutExpiryDate(bulkDays);
+    if (!newDate) return alert('သက်တမ်း shortcut ရွေးပါ');
+    const days = getShortcutDays(bulkDays);
     for (const id of selectedIds) { await setDoc(doc(db, 'pos_users', id), buildExpiryPatch(newDate), { merge: true }); }
-    addLog(`📅 Bulk Update: ${selectedIds.length} admins +${days} days`);
+    addLog(`📅 Bulk Update: ${selectedIds.length} admins +${days} days (${newDate})`);
     setSelectedIds([]); alert(`✅ ${selectedIds.length} Admins သက်တမ်းတိုးပြီး`);
   };
 
@@ -505,7 +555,20 @@ export default function SuperAdminPage() {
               <input required value={form.shopName} onChange={e=>setForm({...form,shopName:e.target.value})} placeholder="Shop Name" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
               <input required type="email" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} placeholder="Admin Email" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
               <input required value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password" className="bg-black/50 border border-cyan-500/20 rounded-xl p-3"/>
-              <input required type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400"/>
+              <div className="grid grid-cols-1 gap-2">
+                <input required type="date" value={form.expiryDate} onChange={e=>setForm({...form,expiryDate:e.target.value})} className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-400"/>
+                <select
+                  value=""
+                  onChange={(e)=>{
+                    const nextDate = getShortcutExpiryDate(e.target.value);
+                    if (nextDate) setForm({...form, expiryDate: nextDate});
+                  }}
+                  className="bg-black/50 border border-cyan-500/20 rounded-xl p-3 text-cyan-300"
+                  aria-label="Expiry shortcut"
+                >
+                  {EXPIRY_SHORTCUTS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
             </div>
             <div className="flex gap-3"><button type="submit" className="px-6 py-3 bg-cyan-600 rounded-xl font-bold">Create</button><button type="button" onClick={()=>setAdding(false)} className="px-6 py-3 bg-slate-700 rounded-xl">Cancel</button></div>
           </form>
@@ -546,8 +609,10 @@ export default function SuperAdminPage() {
           <div className="flex gap-2">{['all','active','expired','trial','blocked'].map(f=><button key={f} onClick={()=>setStatusFilter(f)} className={`px-4 py-2 rounded-xl text-xs font-bold uppercase ${statusFilter===f?'bg-cyan-600 text-white':'bg-gray-900 text-slate-500 border border-white/5'}`}>{f}</button>)}</div>
           {selectedIds.length > 0 && (
             <div className="flex gap-2 items-center">
-              <input type="number" value={bulkDays} onChange={e=>setBulkDays(e.target.value)} className="w-20 bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-sm text-cyan-400"/>
-              <button onClick={bulkUpdateExpiry} className="px-4 py-2 bg-cyan-600 rounded-xl text-sm font-bold">+{bulkDays} Days ({selectedIds.length})</button>
+              <select value={bulkDays} onChange={e=>setBulkDays(e.target.value)} className="bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-sm text-cyan-400">
+                {EXPIRY_SHORTCUTS.filter(opt => opt.value).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+              <button onClick={bulkUpdateExpiry} className="px-4 py-2 bg-cyan-600 rounded-xl text-sm font-bold">Renew ({selectedIds.length})</button>
             </div>
           )}
         </div>
@@ -596,6 +661,17 @@ export default function SuperAdminPage() {
                   ):(
                     <div className="flex gap-2 items-center flex-wrap mt-4 sm:mt-0">
                       <input type="date" defaultValue={t.expiryDate} onBlur={e=>updateExpiry(t.id,e.target.value)} className={`bg-black border rounded-lg px-3 py-2 text-sm ${isExpired?'border-rose-500/30 text-rose-300':'border-emerald-500/30 text-emerald-300'}`}/>
+                      <select
+                        value=""
+                        onChange={(e)=>{
+                          const nextDate = getShortcutExpiryDate(e.target.value);
+                          if (nextDate) updateExpiry(t.id, nextDate);
+                        }}
+                        className="bg-black border border-cyan-500/20 rounded-lg px-3 py-2 text-sm text-cyan-300"
+                        aria-label="Renew shortcut"
+                      >
+                        {EXPIRY_SHORTCUTS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                      </select>
                       <button onClick={()=>startEdit(t)} className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg" title="Edit"><Edit3 size={16}/></button>
                       <button onClick={()=>forcePasswordReset(t)} className="p-2 bg-amber-600/20 text-amber-400 rounded-lg" title="Force Reset Password"><RotateCcw size={16}/></button>
                       <button onClick={()=>toggleStatus(t.id, t.status||'active')} className={`p-2 rounded-lg text-xs font-bold ${isBlocked?'bg-emerald-600/20 text-emerald-400':'bg-rose-600/20 text-rose-400'}`}>{isBlocked?'Unblock':'Block'}</button>

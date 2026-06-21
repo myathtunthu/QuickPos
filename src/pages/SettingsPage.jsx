@@ -92,7 +92,9 @@ const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, cropBox, 
   ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
 
   if (removeLightBackground) {
-    const imageData = ctx.getImageData(0, 0, outputSizeize, outputSizeize);
+    const outputWidth = canvas.width;
+    const outputHeight = canvas.height;
+    const imageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
     const pixels = imageData.data;
 
     const colorDistance = (r1, g1, b1, r2, g2, b2) => {
@@ -104,14 +106,14 @@ const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, cropBox, 
 
     const sampleEdgeBackground = () => {
       const samples = [];
-      const step = Math.max(1, Math.floor(outputSizeize / 24));
+      const step = Math.max(1, Math.floor(Math.max(outputWidth, outputHeight) / 24));
 
-      for (let x = 0; x < outputSizeize; x += step) {
-        samples.push([x, 0], [x, outputSizeize - 1]);
+      for (let x = 0; x < outputWidth; x += step) {
+        samples.push([x, 0], [x, outputHeight - 1]);
       }
 
-      for (let y = 0; y < outputSizeize; y += step) {
-        samples.push([0, y], [outputSizeize - 1, y]);
+      for (let y = 0; y < outputHeight; y += step) {
+        samples.push([0, y], [outputWidth - 1, y]);
       }
 
       let totalR = 0;
@@ -120,7 +122,7 @@ const cropLogoToPng = async ({ dataUrl, width, height }, zoom, offset, cropBox, 
       let count = 0;
 
       samples.forEach(([x, y]) => {
-        const idx = ((y * outputSizeize) + x) * 4;
+        const idx = ((y * outputWidth) + x) * 4;
         const alpha = pixels[idx + 3];
         if (alpha < 20) return;
 

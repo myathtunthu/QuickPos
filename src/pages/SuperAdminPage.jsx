@@ -81,6 +81,10 @@ export default function SuperAdminPage() {
   const [storageData, setStorageData] = useState({});
   const [showInvoice, setShowInvoice] = useState(false);
   const [selectedInvoiceTenant, setSelectedInvoiceTenant] = useState(null);
+  const [pendingSuperAdmin, setPendingSuperAdmin] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
 
   // ==================== AUTHENTICATION CHECK ====================
   useEffect(() => {
@@ -89,7 +93,12 @@ export default function SuperAdminPage() {
         try {
           const snap = await getDoc(doc(db, 'pos_users', user.uid));
           if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
-            setIsAuthenticated(true);
+            if (hasRecent2FA()) {
+              setIsAuthenticated(true);
+            } else {
+              setPendingSuperAdmin(user);
+              setIsAuthenticated(false);
+            }
           } else { setIsAuthenticated(false); }
         } catch (e) { setIsAuthenticated(false); }
       } else { setIsAuthenticated(false); }
@@ -106,8 +115,10 @@ export default function SuperAdminPage() {
       const userCred = await signInWithEmailAndPassword(auth, email, password);
       const snap = await getDoc(doc(db, 'pos_users', userCred.user.uid));
       if (snap.exists() && (snap.data().role === 'superadmin' || snap.data().role === 'super_admin')) {
-        setIsAuthenticated(true);
-        addLog('🔓 Master Panel Accessed', 'login');
+        setPendingSuperAdmin(userCred.user);
+        setTwoFactorCode('');
+        setTwoFactorError('');
+        setIsAuthenticated(false);
       } else {
         alert("Permission Denied: ဤအကောင့်သည် Super Admin မဟုတ်ပါ။");
         await signOut(auth);
@@ -116,8 +127,65 @@ export default function SuperAdminPage() {
     setLoading(false);
   };
 
+  // ==================== SUPER ADMIN 2FA ====================
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    setTwoFactorLoading(true);
+    setTwoFactorError('');
+
+    try {
+      const staticCode = import.meta.env.VITE_SUPER_ADMIN_2FA_CODE;
+      const totpSecret = import.meta.env.VITE_SUPER_ADMIN_TOTP_SECRET;
+
+      if (!staticCode && !totpSecret) {
+        setTwoFactorError('2FA is not configured. Add VITE_SUPER_ADMIN_TOTP_SECRET or VITE_SUPER_ADMIN_2FA_CODE in Vercel Environment Variables.');
+        setTwoFactorLoading(false);
+        return;
+      }
+
+      const normalized = normalizeCode(twoFactorCode);
+      const validStatic = staticCode && normalized === normalizeCode(staticCode);
+      const validTotp = totpSecret ? await verifyTotpCode(totpSecret, normalized) : false;
+
+      if (!validStatic && !validTotp) {
+        setTwoFactorError('Invalid 2FA code.');
+        setTwoFactorLoading(false);
+        return;
+      }
+
+      mark2FAVerified();
+      setIsAuthenticated(true);
+      setPendingSuperAdmin(null);
+      setTwoFactorCode('');
+      addLog('🔐 Super Admin 2FA Verified', 'security');
+    } catch (err) {
+      setTwoFactorError(err?.message || '2FA verification failed.');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const cancel2FA = async () => {
+    clear2FAVerification();
+    setPendingSuperAdmin(null);
+    setTwoFactorCode('');
+    setTwoFactorError('');
+    setIsAuthenticated(false);
+    await signOut(auth).catch(() => {});
+  };
+
+  const requireFresh2FA = (actionName = 'sensitive action') => {
+    if (hasRecent2FA()) return true;
+    clear2FAVerification();
+    setIsAuthenticated(false);
+    setPendingSuperAdmin(auth.currentUser);
+    setTwoFactorError(`2FA expired. Verify again before ${actionName}.`);
+    return false;
+  };
+
   // ==================== CHANGE MASTER PASSWORD ====================
   const handleChangeMasterPassword = async (np) => {
+    if (!requireFresh2FA('change master password')) return;
     if (!np || np.length < 6) { alert('အနည်းဆုံး ၆ လုံး'); return; }
     try {
       await updatePassword(auth.currentUser, np);
@@ -129,8 +197,18 @@ export default function SuperAdminPage() {
   };
 
   // ==================== ACTIVITY LOG (FULL AUDIT) ====================
-  const addLog = (action, type = 'action') => {
-    const log = { action, type, timestamp: new Date().toISOString(), id: Date.now(), ip: 'System' };
+  const addLog = (action, type = 'action', meta = {}) => {
+    const log = {
+      action,
+      type,
+      ...meta,
+      timestamp: new Date().toISOString(),
+      id: Date.now(),
+      actorUid: auth.currentUser?.uid || null,
+      actorEmail: auth.currentUser?.email || email || null,
+      userAgent: navigator.userAgent,
+      ip: 'client'
+    };
     setActivityLog(prev => [log, ...prev].slice(0, 200));
     setDoc(doc(db, 'audit_logs', String(log.id)), log).catch(() => {});
   };
@@ -213,6 +291,7 @@ export default function SuperAdminPage() {
   // ==================== CREATE TENANT ====================
   const handleCreateTenant = async (e) => {
     e.preventDefault();
+    if (!requireFresh2FA('create tenant')) return;
     if (!form.shopName || !form.username || !form.password || !form.expiryDate) return alert("အားလုံးဖြည့်ပါ");
     try {
       const tid = `tnt_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,5)}`;
@@ -259,6 +338,7 @@ export default function SuperAdminPage() {
 
   // ==================== FORCE PASSWORD RESET ====================
   const forcePasswordReset = async (user) => {
+    if (!requireFresh2FA('force password reset')) return;
     const newPwd = prompt(`Enter new password for ${user.username}:`);
     if (!newPwd || newPwd.length < 6) return alert('အနည်းဆုံး ၆ လုံး');
     // Save as raw password too so we can still impersonate
@@ -268,13 +348,14 @@ export default function SuperAdminPage() {
   };
 
   // ==================== UPDATE EXPIRY ====================
-  const updateExpiry = async (uid, nd) => { if(nd){ await setDoc(doc(db,'pos_users',uid),buildExpiryPatch(nd),{merge:true}); addLog('📅 Expiry Updated'); } };
+  const updateExpiry = async (uid, nd) => { if (!requireFresh2FA('update expiry')) return; if(nd){ await setDoc(doc(db,'pos_users',uid),buildExpiryPatch(nd),{merge:true}); addLog('📅 Expiry Updated'); } };
 
   // ==================== DELETE TENANT ====================
-  const deleteTenant = async (uid, un) => { if(window.confirm(`ဖျက်ရန်သေချာပါသလား? [${un}]`)){ await deleteDoc(doc(db,'pos_users',uid)); addLog(`🗑️ Deleted: ${un}`); } };
+  const deleteTenant = async (uid, un) => { if (!requireFresh2FA('delete tenant')) return; if(window.confirm(`ဖျက်ရန်သေချာပါသလား? [${un}]`)){ await deleteDoc(doc(db,'pos_users',uid)); addLog(`🗑️ Deleted: ${un}`); } };
 
   // ==================== BULK EXPIRY UPDATE ====================
   const bulkUpdateExpiry = async () => {
+    if (!requireFresh2FA('bulk expiry update')) return;
     const days = parseInt(bulkDays) || 30;
     const now = new Date(); now.setDate(now.getDate() + days);
     const newDate = now.toISOString().split('T')[0];
@@ -328,6 +409,7 @@ export default function SuperAdminPage() {
 
   // ==================== CLONE TENANT ====================
   const cloneTenant = async (user) => {
+    if (!requireFresh2FA('clone tenant')) return;
     const newEmail = prompt(`Enter new email for clone of ${user.username}:`);
     if (!newEmail || !newEmail.includes('@')) return alert('Valid email required');
     const newPassword = prompt('Enter password for new admin:');
@@ -406,6 +488,38 @@ export default function SuperAdminPage() {
   if (loading) return <div className="min-h-screen bg-[#080c14] flex items-center justify-center"><div className="w-12 h-12 border-4 border-rose-400 border-t-transparent rounded-full animate-spin"/></div>;
 
   // ==================== LOGIN SCREEN ====================
+  if (!isAuthenticated && pendingSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
+        <form onSubmit={handleVerify2FA} className="bg-cyan-950/20 border-2 border-cyan-500/30 p-8 sm:p-10 rounded-3xl w-full max-w-md text-center shadow-[0_0_50px_rgba(34,211,238,0.12)] animate-in fade-in">
+          <ShieldAlert size={64} className="mx-auto text-cyan-400 mb-6"/>
+          <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-widest">2FA Verification</h2>
+          <p className="text-cyan-300 font-bold mb-6">Enter your 6-digit authenticator code.</p>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={twoFactorCode}
+            onChange={(e)=>setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+            className="w-full bg-black/50 border border-cyan-500/30 text-white text-center tracking-[0.5em] px-5 py-4 rounded-xl outline-none focus:border-cyan-400 text-2xl font-black"
+            required
+          />
+          {twoFactorError && <p className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200">{twoFactorError}</p>}
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button type="button" onClick={cancel2FA} className="py-3 rounded-xl border border-white/10 bg-white/5 text-slate-200 font-black hover:bg-white/10">Cancel</button>
+            <button type="submit" disabled={twoFactorLoading} className="py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 text-white font-black rounded-xl transition-all shadow-lg shadow-cyan-500/20 active:scale-95">
+              {twoFactorLoading ? 'Verifying...' : 'Verify'}
+            </button>
+          </div>
+          <p className="mt-5 text-xs text-slate-500">
+            Configure VITE_SUPER_ADMIN_TOTP_SECRET in Vercel for Google Authenticator, or VITE_SUPER_ADMIN_2FA_CODE for a fixed emergency code.
+          </p>
+        </form>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#080c14] flex items-center justify-center p-4">
@@ -427,6 +541,15 @@ export default function SuperAdminPage() {
   return (
     <div className="min-h-screen bg-[#080c14] p-4 sm:p-8 text-white">
       <div className="max-w-6xl mx-auto space-y-6">
+        <div className="rounded-3xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="mt-0.5 flex-shrink-0 text-cyan-300" size={20}/>
+            <div>
+              <p className="font-black">Super Admin Security Active</p>
+              <p className="mt-1 text-cyan-100/80">2FA is required on login and before sensitive actions. Actions are written to audit_logs.</p>
+            </div>
+          </div>
+        </div>
         
         {/* ==================== HEADER + STATS + SYSTEM OVERVIEW ==================== */}
         <div className="bg-gray-900 border-2 border-rose-500/20 rounded-3xl p-6 shadow-2xl">
